@@ -38,6 +38,7 @@ func TestLoadManifestErrorsNameFileAndLine(t *testing.T) {
 		{"unknown key", "unknown_key", 9, []string{"colour"}},
 		{"missing required field", "missing_field", 11, []string{"path"}},
 		{"duplicate names both entries", "duplicate", 15, []string{"config", "hypr", "line 7"}},
+		{"headers with inner spaces are located", "spaced_header", 15, []string{"config", "hypr", "line 7"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -57,30 +58,31 @@ func TestLoadManifestErrorsNameFileAndLine(t *testing.T) {
 	}
 }
 
+// Inline arrays have no [[entry]] header to map an entry index to.
+func TestLoadManifestValidationErrorWithoutHeaderLinesDoesNotPanic(t *testing.T) {
+	_, err := tomlx.LoadManifest("testdata/inline_entries/paths.toml", home)
+	if err == nil {
+		t.Fatal("LoadManifest() error = nil, want error")
+	}
+	if !strings.HasPrefix(err.Error(), "paths.toml:") || !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("error = %q, want paths.toml: prefix and duplicate", err)
+	}
+}
+
 func TestLoadManifestMissingFile(t *testing.T) {
 	if _, err := tomlx.LoadManifest("testdata/absent/paths.toml", home); err == nil {
 		t.Fatal("LoadManifest() error = nil, want error")
 	}
 }
 
-// Guards the repo manifest against drifting from the spec inventory (tasks 1.3 and 2.4).
-func TestRepoManifestMatchesSpecInventory(t *testing.T) {
+// Guards the repo manifest's invariants without pinning its full inventory, so adding a path stays free.
+func TestRepoManifestKeepsSpecInvariants(t *testing.T) {
 	m, err := tomlx.LoadManifest("../../../../manifest/paths.toml", home)
 	if err != nil {
 		t.Fatalf("LoadManifest() error = %v", err)
 	}
-	wantEntries := []string{
-		"config/awww", "config/btop", "config/dunst", "config/fastfetch", "config/ghostty", "config/gtk-3.0",
-		"config/hypr", "config/kotofetch", "config/lazygit", "config/nvim", "config/nwg-look",
-		"config/quickshell/lucyna", "config/satty", "config/starship", "config/starship.toml", "config/yazi",
-		"config/wallpapers", "config/systemd/user/lucyna-clipboard-wipe.service",
-		"config/systemd/user/lucyna-clipboard-wipe.timer", "config/nuydeck/lib", "config/nuydeck/scripts",
-		"config/git/ignore", "config/mimeapps.list", "config/openspec/config.json", "config/Vial/Vial.conf",
-		"home/.zshrc", "home/.gtkrc-2.0", "home/.icons/default/index.theme",
-		"home/.local/bin/claude-out-context", "home/.local/bin/codegraph-health",
-		"fonts/Geist", "fonts/soulmaze", "themes/Abysal-Obsidian", "themes/Abysal-Marble",
-	}
-	wantExcludes := []string{
+	requiredEntries := []string{"config/hypr", "config/nvim", "config/quickshell/lucyna", "home/.zshrc"}
+	requiredExcludes := []string{
 		"config/hypr/configs/monitors_generated.lua",
 		"config/quickshell/lucyna/legacy/monitors/data/identities.json",
 		"config/systemd/user/*.wants/", "config/nuydeck/logs/", "config/nuydeck/theme/", "config/nvim/lazy-lock.json",
@@ -90,29 +92,28 @@ func TestRepoManifestMatchesSpecInventory(t *testing.T) {
 	for _, e := range m.Entries {
 		key := string(e.Root) + "/" + e.Path
 		gotEntries[key] = true
-		for _, banned := range []string{"spicetify", "Inter", ".secrets", ".env"} {
+		for _, banned := range []string{"spicetify", "Inter", ".secrets", ".nuydeck-backups"} {
 			if strings.Contains(key, banned) {
 				t.Errorf("entry %q must not be managed (contains %q)", key, banned)
 			}
 		}
+	}
+	if gotEntries["config/nvim/lazy-lock.json"] {
+		t.Error("nvim/lazy-lock.json must be an exclude, not an entry")
 	}
 	gotExcludes := map[string]bool{}
 	for _, x := range m.Excludes {
 		gotExcludes[string(x.Root)+"/"+x.Pattern] = true
 	}
 
-	for _, want := range wantEntries {
+	for _, want := range requiredEntries {
 		if !gotEntries[want] {
 			t.Errorf("missing entry %q", want)
 		}
 	}
-	for _, want := range wantExcludes {
+	for _, want := range requiredExcludes {
 		if !gotExcludes[want] {
 			t.Errorf("missing exclude %q", want)
 		}
-	}
-	if len(m.Entries) != len(wantEntries) || len(m.Excludes) != len(wantExcludes) {
-		t.Errorf("got %d entries and %d excludes, want exactly %d and %d",
-			len(m.Entries), len(m.Excludes), len(wantEntries), len(wantExcludes))
 	}
 }

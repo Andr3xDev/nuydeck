@@ -14,7 +14,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 )
 
-var entryHeader = regexp.MustCompile(`^\s*\[\[entry\]\]`)
+var entryHeader = regexp.MustCompile(`^\s*\[\[\s*entry\s*\]\]`)
 
 // LoadManifest reads and validates the manifest; home expands the leading ~ of root destinations.
 // Errors are prefixed with the file's base name and the offending line when known.
@@ -58,10 +58,14 @@ func LoadManifest(path, home string) (domain.Manifest, error) {
 		}
 		lines := entryHeaderLines(data)
 		msg := err.Error()
-		if entryErr.Prior >= 0 {
+		if entryErr.Prior >= 0 && entryErr.Prior < len(lines) {
 			msg += fmt.Sprintf(" (first declared at line %d)", lines[entryErr.Prior])
 		}
-		return domain.Manifest{}, fail(lines[entryErr.Index], msg)
+		line := 0
+		if entryErr.Index < len(lines) {
+			line = lines[entryErr.Index]
+		}
+		return domain.Manifest{}, fail(line, msg)
 	}
 	return m, nil
 }

@@ -1,0 +1,5 @@
+version = 1
+entry = [{ root = "config", path = "hypr" }, { root = "config", path = "hypr" }]
+
+[roots]
+config = "~/.config"
