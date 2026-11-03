@@ -1,0 +1,17 @@
+version = 1
+
+[roots]
+config = "~/.config"
+home   = "~"
+
+[[entry]]
+root = "config"
+path = "hypr"
+
+[[entry]]
+root = "home"
+path = ".zshrc"
+
+[[exclude]]
+root = "config"
+pattern = "nvim/lazy-lock.json"
