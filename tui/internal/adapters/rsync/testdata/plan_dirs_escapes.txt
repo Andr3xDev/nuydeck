@@ -1,0 +1,7 @@
+*deleting   old/
+>f+++++++++ back\slash
+>f+++++++++ nl\#012name
+cd+++++++++ newdir/
+>f+++++++++ newdir/a
+.d..t...... olddir/
+>f+++++++++ olddir/b

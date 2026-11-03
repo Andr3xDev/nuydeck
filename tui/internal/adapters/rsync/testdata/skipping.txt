@@ -1,0 +1,2 @@
+skipping non-regular file "fifo"
+>f+++++++++ a.txt
