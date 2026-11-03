@@ -1,2 +1,5 @@
 # update script
 config/update_dots.sh
+
+# tui build output
+tui/bin/
