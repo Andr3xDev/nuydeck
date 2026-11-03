@@ -36,6 +36,9 @@ func TestFiltersFor(t *testing.T) {
 		{"entry equal to the pattern is excluded whole", entry("config", "nvim/lazy-lock.json"), spec, nil, true},
 		{"trailing slash pattern excludes the equal dir entry", entry("config", "nuydeck/theme"), spec, nil, true},
 		{"entry inside an excluded dir is excluded whole", entry("config", "nuydeck/logs/old"), spec, nil, true},
+		{"glob segment excludes the matching entry whole", entry("config", "systemd/user/default.target.wants"), spec, nil, true},
+		{"entry inside a glob-matched dir is excluded whole", entry("config", "systemd/user/default.target.wants/x"), spec, nil, true},
+		{"glob does not span segments", entry("config", "systemd/user/a/b.wants"), spec, nil, false},
 		{"several patterns keep manifest order", entry("config", "hypr"), []domain.Exclude{
 			{Root: "config", Pattern: "hypr/b.lua"}, {Root: "config", Pattern: "hypr/a.lua"}},
 			[]string{"/b.lua", "/a.lua"}, false},
@@ -47,7 +50,7 @@ func TestFiltersFor(t *testing.T) {
 			if whole != tt.wantWhole {
 				t.Errorf("wholeEntryExcluded = %v, want %v", whole, tt.wantWhole)
 			}
-			if !slices.Equal(got.Excludes, tt.wantRules) && !(len(got.Excludes) == 0 && len(tt.wantRules) == 0) {
+			if !slices.Equal(got.Excludes, tt.wantRules) {
 				t.Errorf("rules = %q, want %q", got.Excludes, tt.wantRules)
 			}
 		})

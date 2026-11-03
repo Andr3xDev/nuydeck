@@ -27,6 +27,7 @@ func TestClassifyLink(t *testing.T) {
 		{"points at an entry itself", "hypr", "../nvim", domain.NoLinkWarning},
 		{"resolves to an unmanaged sibling", "hypr", "../btop/btop.conf", domain.WarnLeavesManagedSet},
 		{"resolves to unmanaged file at root", "hypr/theme", "../../foo", domain.WarnLeavesManagedSet},
+		{"resolves to the root itself", "hypr", "..", domain.WarnLeavesManagedSet},
 		{"climbs above the root", "hypr/theme", "../../../.ssh/config", domain.WarnLeavesManagedSet},
 		{"unclean relative target is cleaned first", "hypr", "./theme/../colors.conf", domain.NoLinkWarning},
 	}
