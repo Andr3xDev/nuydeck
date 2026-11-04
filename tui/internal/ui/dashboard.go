@@ -43,6 +43,7 @@ type Dashboard struct {
 	spinner    spinner.Model
 	results    map[domain.Entry]app.DriftResult
 	lastBackup *domain.Backup
+	cursor     int
 	gen        int
 	running    bool
 	cancel     context.CancelFunc
@@ -115,6 +116,9 @@ func (d *Dashboard) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			d.running = false
 		}
 		return d, nil
+	case applyDoneMsg:
+		d.recordSync(msg.result)
+		return d, d.start()
 	case spinner.TickMsg:
 		if !d.running {
 			return d, nil
@@ -126,6 +130,10 @@ func (d *Dashboard) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		switch {
 		case key.Matches(msg, d.keys.Refresh):
 			return d, d.start()
+		case key.Matches(msg, d.keys.Up):
+			d.cursor = max(d.cursor-1, 0)
+		case key.Matches(msg, d.keys.Down):
+			d.cursor = max(min(d.cursor+1, len(d.entries)-1), 0)
 		case key.Matches(msg, d.keys.Pull):
 			return d, requestSync(domain.Pull)
 		case key.Matches(msg, d.keys.Push):
@@ -135,21 +143,42 @@ func (d *Dashboard) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	return d, nil
 }
 
+// recordSync adopts the last-sync stamp of a really applied sync; a dry-run
+// only reports StepWouldApply, so it never changes the shown stamp.
+func (d *Dashboard) recordSync(res app.ApplyResult) {
+	for _, o := range res.Outcomes {
+		if st, ok := o.Step.(domain.SaveStateStep); ok && o.Result.Status == domain.StepOK {
+			d.state.lastSync = st.State.LastSync
+		}
+	}
+}
+
+func (d *Dashboard) cancelWork() {
+	if d.cancel != nil {
+		d.cancel()
+	}
+}
+
 func requestSync(dir domain.Direction) tea.Cmd {
 	return func() tea.Msg { return startSyncMsg{direction: dir} }
 }
 
 func (d *Dashboard) View(width, height int) string {
-	var b strings.Builder
-	b.WriteString(d.statusLines())
-	b.WriteString("\n")
+	lines := append(strings.Split(d.statusLines(), "\n"), "")
 	if len(d.entries) == 0 {
-		b.WriteString(d.muted("No managed entries."))
+		lines = append(lines, d.muted("No managed entries."))
 	}
-	for _, e := range d.entries {
-		fmt.Fprintf(&b, "%-40s %s\n", fmt.Sprintf("%s:%s", e.Root, e.Path), d.entryStatus(e.Entry))
+	visible := max(height-2*panelPadY-len(lines), 1)
+	start := max(min(d.cursor-visible/2, len(d.entries)-visible), 0)
+	for i := start; i < min(start+visible, len(d.entries)); i++ {
+		e := d.entries[i]
+		cursor := "  "
+		if i == d.cursor {
+			cursor = "> "
+		}
+		lines = append(lines, fmt.Sprintf("%s%-40s %s", cursor, fmt.Sprintf("%s:%s", e.Root, e.Path), d.entryStatus(e.Entry)))
 	}
-	return lipgloss.NewStyle().Width(width).Height(height).Padding(1, 2).Render(b.String())
+	return renderPanel(width, height, strings.Join(lines, "\n"))
 }
 
 func (d *Dashboard) statusLines() string {
@@ -208,6 +237,5 @@ func (m ManifestError) Update(tea.Msg) (Screen, tea.Cmd) { return m, nil }
 
 func (m ManifestError) View(width, height int) string {
 	title := lipgloss.NewStyle().Bold(true).Foreground(m.palette.Error).Render("Invalid manifest")
-	return lipgloss.NewStyle().Width(width).Height(height).Padding(1, 2).
-		Render(title + "\n\n" + m.err.Error() + "\n\nFix manifest/paths.toml and restart.")
+	return renderPanel(width, height, title+"\n\n"+m.err.Error()+"\n\nFix manifest/paths.toml and restart.")
 }

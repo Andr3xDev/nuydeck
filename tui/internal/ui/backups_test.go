@@ -17,6 +17,7 @@ type fakeBackups struct {
 	list    []domain.Backup
 	deleted []string
 	listed  int
+	dryRun  bool
 }
 
 func (f *fakeBackups) ListBackups(context.Context) ([]domain.Backup, error) {
@@ -33,7 +34,38 @@ func (f *fakeBackups) DeleteBackup(_ context.Context, dir string, confirmed bool
 		return domain.StepResult{}, false
 	}
 	f.deleted = append(f.deleted, dir)
+	if f.dryRun {
+		return domain.StepResult{Status: domain.StepWouldApply, Detail: "would delete " + dir}, true
+	}
 	return domain.StepResult{}, true
+}
+
+func TestBackupsDryRunDeleteShowsWouldDelete(t *testing.T) {
+	f := &fakeBackups{list: []domain.Backup{sampleBackup("/b/1")}, dryRun: true}
+	b := loadedBackups(f)
+
+	b.Update(keyPress('d'))
+	_, cmd := b.Update(keyPress('y'))
+	b.Update(cmd())
+	if !strings.Contains(ansi.Strip(b.View(100, 20)), "would delete /b/1") {
+		t.Errorf("dry-run delete must show the would-delete detail:\n%s", ansi.Strip(b.View(100, 20)))
+	}
+}
+
+func TestBackupsRefuseIncompleteAndUnreadableRestore(t *testing.T) {
+	for _, mark := range []func(*domain.Backup){
+		func(bk *domain.Backup) { bk.Incomplete = true },
+		func(bk *domain.Backup) { bk.Unreadable = true },
+	} {
+		bad := sampleBackup("/b/1")
+		mark(&bad)
+		b := loadedBackups(&fakeBackups{list: []domain.Backup{bad}})
+
+		_, cmd := b.Update(keyPress(tea.KeyEnter))
+		if cmd != nil || b.err == nil {
+			t.Errorf("restore of %s backup must be refused: cmd=%v err=%v", flag(bad), cmd != nil, b.err)
+		}
+	}
 }
 
 func loadedBackups(f *fakeBackups) *Backups {

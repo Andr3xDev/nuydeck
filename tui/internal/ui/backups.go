@@ -27,7 +27,11 @@ type backupsMsg struct {
 	err     error
 }
 
-type deleteDoneMsg struct{ err error }
+// deleteDoneMsg carries a failure or, in dry-run, the "would delete" detail.
+type deleteDoneMsg struct {
+	err    error
+	notice string
+}
 
 // restorePlanMsg is intercepted by Root, which opens the Sync preview on success.
 type restorePlanMsg struct {
@@ -44,6 +48,7 @@ type Backups struct {
 	cursor  int
 	err     error
 	confirm bool
+	notice  string
 }
 
 func newBackups(deps Deps, keys KeyMap, palette theme.Palette) *Backups {
@@ -83,7 +88,7 @@ func (b *Backups) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		b.cursor = max(min(b.cursor, len(b.backups)-1), 0)
 		return b, nil
 	case deleteDoneMsg:
-		b.err = msg.err
+		b.err, b.notice = msg.err, msg.notice
 		return b, b.load()
 	case restorePlanMsg:
 		b.err = msg.err
@@ -143,21 +148,27 @@ func (b *Backups) delete() tea.Cmd {
 	manager := b.manager
 	return func() tea.Msg {
 		res, _ := manager.DeleteBackup(context.Background(), sel.Dir, true)
-		if res.Status == domain.StepFailed {
+		switch res.Status {
+		case domain.StepFailed:
 			return deleteDoneMsg{err: fmt.Errorf("delete failed: %s", res.Detail)}
+		case domain.StepWouldApply:
+			return deleteDoneMsg{notice: res.Detail}
 		}
 		return deleteDoneMsg{}
 	}
 }
 
 func (b *Backups) View(width, height int) string {
-	return lipgloss.NewStyle().Width(width).Height(height).Padding(1, 2).Render(b.body(max(height-2, 1)))
+	return renderPanel(width, height, b.body(max(height-2*panelPadY, 1)))
 }
 
 func (b *Backups) body(height int) string {
 	var lines []string
 	if b.err != nil {
 		lines = append(lines, b.colored(b.palette.Error, b.err.Error()))
+	}
+	if b.notice != "" {
+		lines = append(lines, b.colored(b.palette.Warning, b.notice))
 	}
 	if len(b.backups) == 0 {
 		return strings.Join(append(lines, b.colored(b.palette.TextMuted, "No backups yet.")), "\n")

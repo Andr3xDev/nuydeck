@@ -86,6 +86,42 @@ func TestDashboardPerEntryStates(t *testing.T) {
 	}
 }
 
+func TestDashboardRowsFitHeightAndFollowCursor(t *testing.T) {
+	var entries []domain.ResolvedEntry
+	for _, p := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t"} {
+		entries = append(entries, resolved(p))
+	}
+	d := newTestDashboard(&fakeDrifter{}, entries...)
+
+	if n := strings.Count(d.View(100, 10), "\n") + 1; n > 10 {
+		t.Errorf("view has %d lines, want at most 10", n)
+	}
+	for range entries {
+		d.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	}
+	if !strings.Contains(plainView(d), "home:t") {
+		t.Error("cursor on the last entry must scroll it into view")
+	}
+}
+
+func TestDashboardRefreshesAfterApply(t *testing.T) {
+	f := &fakeDrifter{}
+	d := newTestDashboard(f, resolved("a"))
+	d.Init()
+	gen := d.gen
+
+	stamp := &domain.LastSync{Direction: "push"}
+	_, cmd := d.Update(applyDoneMsg{result: app.ApplyResult{Outcomes: []app.StepOutcome{
+		{Step: domain.SaveStateStep{State: domain.State{LastSync: stamp}}, Result: domain.StepResult{Status: domain.StepOK}},
+	}}})
+	if cmd == nil || d.gen != gen+1 || len(f.ctxs) != 2 {
+		t.Errorf("apply must re-run drift: gen=%d runs=%d", d.gen, len(f.ctxs))
+	}
+	if d.state.lastSync != stamp {
+		t.Error("last sync must adopt the applied state")
+	}
+}
+
 func TestDashboardPullPushRequestSync(t *testing.T) {
 	d := newTestDashboard(&fakeDrifter{}, resolved("a"))
 	for key, want := range map[rune]domain.Direction{'p': domain.Pull, 'P': domain.Push} {
