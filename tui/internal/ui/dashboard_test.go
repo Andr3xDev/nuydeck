@@ -71,7 +71,7 @@ func TestDashboardPerEntryStates(t *testing.T) {
 	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("a"), State: app.DriftInSync}})
 	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("b"), State: app.DriftError, Err: errors.New("boom")}})
 	view := plainView(d)
-	for _, want := range []string{"in sync", "error: boom"} {
+	for _, want := range []string{"in sync", "error"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("view missing %q:\n%s", want, view)
 		}
@@ -83,6 +83,60 @@ func TestDashboardPerEntryStates(t *testing.T) {
 	d.Update(driftDoneMsg{gen: d.gen})
 	if d.running {
 		t.Error("done message must stop the spinner")
+	}
+}
+
+func TestDashboardMissingSideStatuses(t *testing.T) {
+	d := newTestDashboard(&fakeDrifter{}, resolved("a"), resolved("b"))
+	d.Init()
+	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("a"), State: app.DriftDrifted, Missing: app.MissingInRepo}})
+	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("b"), State: app.DriftDrifted, Missing: app.MissingOnPC}})
+
+	view := plainView(d)
+	for _, want := range []string{"only in live", "not on PC"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestDashboardMultilineErrorStaysOutOfRowAndShowsOnOneDetailLine(t *testing.T) {
+	d := newTestDashboard(&fakeDrifter{}, resolved("a"), resolved("b"))
+	d.Init()
+	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("b"), State: app.DriftError, Err: errors.New("first line\nsecond line")}})
+
+	d.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	var detail []string
+	for _, line := range strings.Split(plainView(d), "\n") {
+		if strings.Contains(line, "home:b") {
+			if !strings.Contains(line, "error") || strings.Contains(line, "first line") {
+				t.Errorf("row must hold the short status only: %q", line)
+			}
+		} else if strings.Contains(line, "first line") {
+			detail = append(detail, line)
+		}
+	}
+	if len(detail) != 1 || !strings.Contains(detail[0], "second line") {
+		t.Errorf("want the flattened error on exactly one separate line, got %q", detail)
+	}
+
+	d.Update(tea.KeyPressMsg{Code: 'k', Text: "k"})
+	if strings.Contains(plainView(d), "first line") {
+		t.Error("detail line must show only while the cursor is on the error row")
+	}
+}
+
+func TestDashboardErrorDetailLineKeepsViewWithinHeight(t *testing.T) {
+	var entries []domain.ResolvedEntry
+	for _, p := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"} {
+		entries = append(entries, resolved(p))
+	}
+	d := newTestDashboard(&fakeDrifter{}, entries...)
+	d.Init()
+	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("a"), State: app.DriftError, Err: errors.New("boom")}})
+
+	if n := strings.Count(d.View(100, 10), "\n") + 1; n > 10 {
+		t.Errorf("view has %d lines with a detail line, want at most 10", n)
 	}
 }
 

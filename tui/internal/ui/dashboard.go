@@ -168,7 +168,15 @@ func (d *Dashboard) View(width, height int) string {
 	if len(d.entries) == 0 {
 		lines = append(lines, d.muted("No managed entries."))
 	}
-	visible := max(height-2*panelPadY-len(lines), 1)
+	detail := d.errorDetail()
+	reserved := 0
+	if detail != "" {
+		reserved = 1
+	}
+	visible := max(height-2*panelPadY-len(lines)-reserved, 1)
+	if detail != "" {
+		lines = append(lines, detail)
+	}
 	start := max(min(d.cursor-visible/2, len(d.entries)-visible), 0)
 	for i := start; i < min(start+visible, len(d.entries)); i++ {
 		e := d.entries[i]
@@ -179,6 +187,18 @@ func (d *Dashboard) View(width, height int) string {
 		lines = append(lines, fmt.Sprintf("%s%-40s %s", cursor, fmt.Sprintf("%s:%s", e.Root, e.Path), d.entryStatus(e.Entry)))
 	}
 	return renderPanel(width, height, strings.Join(lines, "\n"))
+}
+
+// errorDetail is the cursor row's error flattened to one line, or "" when the row has none.
+func (d *Dashboard) errorDetail() string {
+	if d.cursor >= len(d.entries) {
+		return ""
+	}
+	r, ok := d.results[d.entries[d.cursor].Entry]
+	if !ok || r.State != app.DriftError || r.Err == nil {
+		return ""
+	}
+	return lipgloss.NewStyle().Foreground(d.palette.Error).Render(strings.Join(strings.Fields(r.Err.Error()), " "))
 }
 
 func (d *Dashboard) statusLines() string {
@@ -216,8 +236,14 @@ func (d *Dashboard) entryStatus(e domain.Entry) string {
 	}
 	switch r.State {
 	case app.DriftError:
-		return lipgloss.NewStyle().Foreground(d.palette.Error).Render("error: " + r.Err.Error())
+		return lipgloss.NewStyle().Foreground(d.palette.Error).Render("error")
 	case app.DriftDrifted:
+		switch r.Missing {
+		case app.MissingInRepo:
+			return lipgloss.NewStyle().Foreground(d.palette.Warning).Render("only in live")
+		case app.MissingOnPC:
+			return lipgloss.NewStyle().Foreground(d.palette.Warning).Render("not on PC")
+		}
 		return lipgloss.NewStyle().Foreground(d.palette.Warning).Render(fmt.Sprintf("drifted (%d changes)", r.Changes))
 	}
 	return lipgloss.NewStyle().Foreground(d.palette.Success).Render("in sync")
