@@ -71,6 +71,7 @@ type StepResult struct {
 // StepProgress reports one transferred item.
 type StepProgress struct {
 	Path string
+	Line string
 }
 
 // LogEntry is one JSONL record of a write operation.
