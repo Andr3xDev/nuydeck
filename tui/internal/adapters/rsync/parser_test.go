@@ -19,7 +19,7 @@ func fixture(t *testing.T, name string) string {
 }
 
 func TestParseItemize_MixedOutput(t *testing.T) {
-	got, err := ParseItemize(fixture(t, "plan_mixed.txt"))
+	got, _, err := parseItemize(fixture(t, "plan_mixed.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestParseItemize_MixedOutput(t *testing.T) {
 }
 
 func TestParseItemize_DropsDirNoiseUnescapesNames(t *testing.T) {
-	got, err := ParseItemize(fixture(t, "plan_dirs_escapes.txt"))
+	got, _, err := parseItemize(fixture(t, "plan_dirs_escapes.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestParseItemize_Errors(t *testing.T) {
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := ParseItemize(in); err == nil {
+			if _, _, err := parseItemize(in); err == nil {
 				t.Fatal("want error, got nil")
 			}
 		})
@@ -74,21 +74,21 @@ func TestParseItemize_Errors(t *testing.T) {
 }
 
 func TestParseItemize_EmptyOutputHasNoItems(t *testing.T) {
-	got, err := ParseItemize("")
+	got, _, err := parseItemize("")
 	if err != nil || len(got) != 0 {
 		t.Fatalf("got %v, %v", got, err)
 	}
 }
 
 func TestPlanExit(t *testing.T) {
-	if w, err := PlanExit(0); w != "" || err != nil {
+	if w, err := planExit(0); w != "" || err != nil {
 		t.Fatalf("0: %q, %v", w, err)
 	}
-	if w, err := PlanExit(24); w == "" || err != nil {
+	if w, err := planExit(24); w == "" || err != nil {
 		t.Fatalf("24 must warn without error: %q, %v", w, err)
 	}
 	for _, code := range []int{23, 1, 12} {
-		if _, err := PlanExit(code); err == nil {
+		if _, err := planExit(code); err == nil {
 			t.Fatalf("%d must be an error", code)
 		}
 	}

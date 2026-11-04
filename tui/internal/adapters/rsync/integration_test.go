@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -98,7 +100,7 @@ func TestIntegrationPlanApplyTouchesOnlySelected(t *testing.T) {
 		{"sub/deep.txt", domain.Create, domain.KindFile},
 		{"upd.txt", domain.Update, domain.KindFile},
 	}
-	slices.SortFunc(got, func(a, b Item) int { return compareStrings(a.Path, b.Path) })
+	slices.SortFunc(got, func(a, b Item) int { return strings.Compare(a.Path, b.Path) })
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
 	}
@@ -118,22 +120,12 @@ func TestIntegrationPlanApplyTouchesOnlySelected(t *testing.T) {
 	}
 }
 
-func compareStrings(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	}
-	return 0
-}
-
 func TestIntegrationApplyFileEntry(t *testing.T) {
 	requireRsync(t)
 	root := t.TempDir()
 	write(t, root+"/repo/.zshrc", "new", 0o644)
 	write(t, root+"/home/.zshrc", "old", 0o644)
-	apply(t, Request{Src: root + "/repo/.zshrc", Dst: root + "/home/.zshrc"}, nil...)
+	apply(t, Request{Src: root + "/repo/.zshrc", Dst: root + "/home/.zshrc"})
 	if read(t, root+"/home/.zshrc") != "new" {
 		t.Fatal("file entry not synced")
 	}
@@ -245,5 +237,57 @@ func TestIntegrationChecksumDecidesSync(t *testing.T) {
 	want := []Item{{"content.txt", domain.Update, domain.KindFile}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %+v want %+v", got, want)
+	}
+}
+
+func TestIntegrationPlanSkipsFifoWithWarning(t *testing.T) {
+	requireRsync(t)
+	root := t.TempDir()
+	src, dst := root+"/src", root+"/dst"
+	write(t, src+"/a.txt", "a", 0o644)
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(src+"/pipe", 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Plan(context.Background(), dirReq(src, dst))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []Item{{"a.txt", domain.Create, domain.KindFile}}; !slices.Equal(res.Items, want) {
+		t.Fatalf("got %+v want %+v", res.Items, want)
+	}
+	if !strings.Contains(res.Warning, "pipe") {
+		t.Fatalf("warning must name the skipped fifo, got %q", res.Warning)
+	}
+}
+
+func TestIntegrationPlanUnreadableSourceIsError(t *testing.T) {
+	requireRsync(t)
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores file permissions")
+	}
+	root := t.TempDir()
+	src, dst := root+"/src", root+"/dst"
+	write(t, src+"/locked/secret.txt", "s", 0o644)
+	// A dry-run lists unreadable files but still fails (exit 23) on an unreadable directory.
+	if err := os.Chmod(src+"/locked", 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(src+"/locked", 0o755) })
+
+	if _, err := Plan(context.Background(), dirReq(src, dst)); err == nil {
+		t.Fatal("want error when a source directory is unreadable")
+	}
+}
+
+func TestIntegrationApplyDirWithNoPathsIsNoOp(t *testing.T) {
+	requireRsync(t)
+	root := t.TempDir()
+	r := dirReq(root+"/missing", root+"/dst")
+	if err := Apply(context.Background(), r, nil); err != nil {
+		t.Fatalf("empty selection must not invoke rsync, got %v", err)
 	}
 }

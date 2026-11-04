@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -35,26 +34,22 @@ type PlanResult struct {
 }
 
 const (
-	deletingPrefix = "*deleting   "
-	skippingPrefix = "skipping non-regular file "
-	flagsLen       = 11
-	allNewFlags    = "+++++++++"
-	linkArrow      = " -> "
-	exitVanished   = 24
+	deletingPrefix   = "*deleting   "
+	skippingPrefix   = "skipping non-regular file "
+	createdDirPrefix = "created directory "
+	flagsLen         = 11
+	allNewFlags      = "+++++++++"
+	linkArrow        = " -> "
+	exitVanished     = 24
 )
 
 var escapedByte = regexp.MustCompile(`\\#(\d{3})`)
 
-// ParseItemize parses --itemize-changes output. Directory noise and rsync's
-// "skipping non-regular file" notices produce no items.
-func ParseItemize(output string) ([]Item, error) {
-	items, _, err := parseItemize(output)
-	return items, err
-}
-
+// parseItemize parses --itemize-changes output. Directory noise and rsync's
+// informational notices produce no items; skipped non-regular files are returned.
 func parseItemize(output string) (items []Item, skipped []string, err error) {
 	for _, line := range strings.Split(output, "\n") {
-		if line == "" {
+		if line == "" || strings.HasPrefix(line, createdDirPrefix) {
 			continue
 		}
 		if name, ok := strings.CutPrefix(line, skippingPrefix); ok {
@@ -115,9 +110,9 @@ func baseArgs(r Request) []string {
 
 func endpoints(r Request) []string {
 	if r.Dir {
-		return []string{r.Src + "/", r.Dst + "/"}
+		return []string{"--", r.Src + "/", r.Dst + "/"}
 	}
-	return []string{r.Src, r.Dst}
+	return []string{"--", r.Src, r.Dst}
 }
 
 func PlanArgs(r Request) []string {
@@ -134,8 +129,8 @@ func ApplyArgs(r Request, filesFrom string) []string {
 	return append(args, endpoints(r)...)
 }
 
-// PlanExit maps a Plan exit code: 0 ok, 24 warning, anything else an error.
-func PlanExit(code int) (warning string, err error) {
+// planExit maps a Plan exit code: 0 ok, 24 warning, anything else an error.
+func planExit(code int) (warning string, err error) {
 	switch code {
 	case 0:
 		return "", nil
@@ -151,7 +146,7 @@ func Plan(ctx context.Context, r Request) (PlanResult, error) {
 	if err != nil {
 		return PlanResult{}, err
 	}
-	warning, err := PlanExit(res.ExitCode)
+	warning, err := planExit(res.ExitCode)
 	if err != nil {
 		return PlanResult{}, fmt.Errorf("%w: %s", err, strings.TrimSpace(res.Stderr))
 	}
@@ -159,17 +154,23 @@ func Plan(ctx context.Context, r Request) (PlanResult, error) {
 	if err != nil {
 		return PlanResult{}, err
 	}
-	if len(skipped) > 0 {
-		note := "skipped non-regular files: " + strings.Join(skipped, ", ")
-		warning = strings.Join(slices.DeleteFunc([]string{warning, note}, func(w string) bool { return w == "" }), "; ")
+	var ws []string
+	if warning != "" {
+		ws = append(ws, warning)
 	}
-	return PlanResult{Items: items, Warning: warning}, nil
+	if len(skipped) > 0 {
+		ws = append(ws, "skipped non-regular files: "+strings.Join(skipped, ", "))
+	}
+	return PlanResult{Items: items, Warning: strings.Join(ws, "; ")}, nil
 }
 
 // Apply copies the selected paths (relative to Src) for Dir requests.
 func Apply(ctx context.Context, r Request, paths []string) error {
 	listPath := ""
 	if r.Dir {
+		if len(paths) == 0 {
+			return nil
+		}
 		f, err := os.CreateTemp("", "nuydeck-files-from-*")
 		if err != nil {
 			return err

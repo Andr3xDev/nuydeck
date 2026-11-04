@@ -38,14 +38,14 @@ func TestPlanArgs_DirEntry(t *testing.T) {
 		"--dry-run", "--itemize-changes", "--delete", "--8-bit-output",
 		"--exclude=/identities.json", "--exclude=/cache"})
 	assertNone(t, args, forbiddenFlags)
-	if got := args[len(args)-2:]; got[0] != "/repo/cfg/" || got[1] != "/home/u/.config/cfg/" {
-		t.Fatalf("dir entry must end with SRC/ DST/, got %v", got)
+	if got := args[len(args)-3:]; got[0] != "--" || got[1] != "/repo/cfg/" || got[2] != "/home/u/.config/cfg/" {
+		t.Fatalf("dir entry must end with -- SRC/ DST/, got %v", got)
 	}
 }
 
 func TestPlanArgs_FileEntryKeepsPathsWithoutSlash(t *testing.T) {
 	args := PlanArgs(Request{Src: "/repo/.zshrc", Dst: "/home/u/.zshrc"})
-	if got := args[len(args)-2:]; got[0] != "/repo/.zshrc" || got[1] != "/home/u/.zshrc" {
+	if got := args[len(args)-3:]; got[0] != "--" || got[1] != "/repo/.zshrc" || got[2] != "/home/u/.zshrc" {
 		t.Fatalf("got %v", got)
 	}
 }
@@ -56,6 +56,9 @@ func TestApplyArgs_NeverDeletes(t *testing.T) {
 		"--itemize-changes", "--8-bit-output", "--files-from=/tmp/list", "--from0",
 		"--exclude=/identities.json", "--exclude=/cache"})
 	assertNone(t, args, append([]string{"--delete", "--dry-run"}, forbiddenFlags...))
+	if got := args[len(args)-3:]; got[0] != "--" || got[1] != "/repo/cfg/" || got[2] != "/home/u/.config/cfg/" {
+		t.Fatalf("must end with -- SRC/ DST/, got %v", got)
+	}
 }
 
 func TestApplyArgs_FileEntryHasNoFilesFrom(t *testing.T) {
