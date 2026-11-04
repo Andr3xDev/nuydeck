@@ -14,8 +14,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 )
 
-var entryHeader = regexp.MustCompile(`^\s*\[\[\s*entry\s*\]\]`)
-
 // LoadManifest reads and validates the manifest; home expands the leading ~ of root destinations.
 // Errors are prefixed with the file's base name and the offending line when known.
 func LoadManifest(path, home string) (domain.Manifest, error) {
@@ -56,7 +54,7 @@ func LoadManifest(path, home string) (domain.Manifest, error) {
 		if !errors.As(err, &entryErr) {
 			return domain.Manifest{}, fail(0, err.Error())
 		}
-		lines := entryHeaderLines(data)
+		lines := headerLines(data, "entry")
 		msg := err.Error()
 		if entryErr.Prior >= 0 && entryErr.Prior < len(lines) {
 			msg += fmt.Sprintf(" (first declared at line %d)", lines[entryErr.Prior])
@@ -80,11 +78,12 @@ func expandHome(dest, home string) string {
 	return dest
 }
 
-// entryHeaderLines returns the 1-based line of each [[entry]] header, in file order.
-func entryHeaderLines(data []byte) []int {
+// headerLines returns the 1-based line of each [[table]] header, in file order.
+func headerLines(data []byte, table string) []int {
+	header := regexp.MustCompile(`^\s*\[\[\s*` + regexp.QuoteMeta(table) + `\s*\]\]`)
 	var lines []int
 	for i, line := range strings.Split(string(data), "\n") {
-		if entryHeader.MatchString(line) {
+		if header.MatchString(line) {
 			lines = append(lines, i+1)
 		}
 	}

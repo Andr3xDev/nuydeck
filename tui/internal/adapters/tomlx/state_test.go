@@ -45,6 +45,55 @@ func TestState_SaveThenLoadRoundTripCreatingMissingDir(t *testing.T) {
 	}
 }
 
+func TestState_IgnoredPackagesRoundTripKeepsIgnoresAndVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.toml")
+	want := domain.State{
+		Version:         1,
+		RepoPath:        "/home/u/nuydeck",
+		Ignores:         []string{"config:nvim/lazy-lock.json"},
+		IgnoredPackages: []string{"htop", "ncdu"},
+	}
+
+	if err := tomlx.SaveState(path, want); err != nil {
+		t.Fatal(err)
+	}
+	got, warning := tomlx.LoadState(path)
+
+	if warning != "" || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v (warning %q), want %+v", got, warning, want)
+	}
+}
+
+func TestState_SaveOmitsIgnoredPackagesKeyWhenEmpty(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.toml")
+
+	if err := tomlx.SaveState(path, domain.State{Version: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "ignored_packages") {
+		t.Errorf("state file has an ignored_packages key:\n%s", data)
+	}
+}
+
+func TestState_FileWithoutIgnoredPackagesLoadsEmptyWithoutWarning(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.toml")
+	old := "version = 1\nrepo_path = \"/x\"\nignores = [\"home:.zshrc\"]\n"
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, warning := tomlx.LoadState(path)
+
+	if warning != "" || len(got.IgnoredPackages) != 0 || got.Version != 1 || len(got.Ignores) != 1 {
+		t.Fatalf("got %+v (warning %q)", got, warning)
+	}
+}
+
 func TestState_FailedSaveLeavesNoTempFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.toml")
