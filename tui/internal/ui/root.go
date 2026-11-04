@@ -42,6 +42,7 @@ const syncSection = 1
 type Deps struct {
 	Drifter       Drifter
 	Syncer        Syncer
+	Backups       BackupManager
 	Entries       []domain.ResolvedEntry
 	StateWarning  string
 	LastSync      *domain.LastSync
@@ -75,7 +76,7 @@ func NewRoot(variant string, dryRun bool, deps Deps) Root {
 	sections := []section{
 		{"Dashboard", newDashboard(deps, keys, palette)},
 		{"Sync", newSync(deps, dryRun, keys, palette)},
-		{"Backups", placeholder{"Backups"}},
+		{"Backups", newBackups(deps, keys, palette)},
 	}
 	if deps.ManifestError != nil {
 		sections = []section{{"Manifest", ManifestError{err: deps.ManifestError, palette: palette}}}
@@ -113,6 +114,12 @@ func (r Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return r, s.startPlan(msg.direction)
 		}
 		return r, nil
+	case restorePlanMsg:
+		if s, ok := r.sections[syncSection].screen.(*Sync); ok && msg.err == nil {
+			s.showPlan(msg.plan)
+			r.selected, r.panelFocus = syncSection, true
+			return r, nil
+		}
 	}
 	return r.broadcast(msg)
 }
@@ -146,12 +153,20 @@ func (r Root) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return r, nil
 	case !r.panelFocus && key.Matches(msg, r.keys.Up):
 		r.selected = max(r.selected-1, 0)
-		return r, nil
+		return r, r.enterSelected()
 	case !r.panelFocus && key.Matches(msg, r.keys.Down):
 		r.selected = min(r.selected+1, len(r.sections)-1)
-		return r, nil
+		return r, r.enterSelected()
 	}
 	return r.forward(msg)
+}
+
+// enterSelected lets the newly selected screen refresh itself.
+func (r Root) enterSelected() tea.Cmd {
+	if e, ok := r.sections[r.selected].screen.(interface{ enter() tea.Cmd }); ok {
+		return e.enter()
+	}
+	return nil
 }
 
 // panelModal reports whether the active screen has a dialog open, so q and esc close it first.

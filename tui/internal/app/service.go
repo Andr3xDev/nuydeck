@@ -522,6 +522,11 @@ func (s *Service) lastCompleteBackup(ctx context.Context) *domain.Backup {
 }
 
 // DeleteBackup runs a DeleteBackupStep only when confirmed; the bool reports whether a step ran.
+// ListBackups returns the existing backups newest first.
+func (s *Service) ListBackups(ctx context.Context) ([]domain.Backup, error) {
+	return s.Inspector.ListBackups(ctx)
+}
+
 func (s *Service) DeleteBackup(ctx context.Context, dir string, confirmed bool) (domain.StepResult, bool) {
 	if !confirmed {
 		return domain.StepResult{}, false

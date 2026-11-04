@@ -110,6 +110,19 @@ func (s *Sync) startPlan(dir domain.Direction) tea.Cmd {
 	}
 }
 
+// showPlan opens the preview on a plan computed elsewhere (restore).
+func (s *Sync) showPlan(plan app.SyncPlan) {
+	s.gen++
+	s.direction, s.err = plan.Direction, nil
+	s.loadPlan(plan)
+}
+
+func (s *Sync) loadPlan(plan app.SyncPlan) {
+	s.plan, s.cursor, s.phase = plan, 0, phasePreview
+	s.sel = app.Selection{}
+	maps.Copy(s.sel, plan.Selection)
+}
+
 func (s *Sync) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case planMsg:
@@ -121,9 +134,7 @@ func (s *Sync) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			s.result = app.ApplyResult{}
 			return s, nil
 		}
-		s.plan, s.cursor, s.phase = msg.plan, 0, phasePreview
-		s.sel = app.Selection{}
-		maps.Copy(s.sel, msg.plan.Selection)
+		s.loadPlan(msg.plan)
 		return s, nil
 	case applyStartedMsg:
 		if msg.gen != s.gen {

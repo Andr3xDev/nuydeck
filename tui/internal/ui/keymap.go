@@ -18,6 +18,7 @@ type KeyMap struct {
 	No      key.Binding
 	Pull    key.Binding
 	Push    key.Binding
+	Delete  key.Binding
 }
 
 // DefaultKeyMap returns the keybindings documented in the tui-shell spec.
@@ -37,6 +38,7 @@ func DefaultKeyMap() KeyMap {
 		No:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "no")),
 		Pull:    key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pull")),
 		Push:    key.NewBinding(key.WithKeys("P"), key.WithHelp("P", "push")),
+		Delete:  key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete backup")),
 	}
 }
 
@@ -49,7 +51,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Focus, k.Confirm, k.Back},
-		{k.Toggle, k.All, k.Pull, k.Push},
+		{k.Toggle, k.All, k.Pull, k.Push, k.Delete},
 		{k.Refresh, k.Help, k.Quit},
 	}
 }
