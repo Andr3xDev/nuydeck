@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -41,19 +40,5 @@ func TestFileEntry_PlanAndApplyUseTheFilePathsDirectly(t *testing.T) {
 	want := domain.BackupFile{Root: domain.RootHome, Path: ".zshrc"}
 	if len(backups) != 1 || !reflect.DeepEqual(backups[0].Files, []domain.BackupFile{want}) || backups[0].Roots[domain.RootHome] != testHome {
 		t.Fatalf("backup steps = %+v", backups)
-	}
-}
-
-func TestPlanSync_MissingSourceIsAnErrorNamingTheEntry(t *testing.T) {
-	e := resolved(domain.RootHome, ".gone")
-	in := &fakeInspector{
-		diff:  diffReturning(change(".gone", domain.Create, domain.KindFile)),
-		kinds: map[string]domain.NodeKind{e.RepoPath: domain.KindNone},
-	}
-
-	_, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{e})
-
-	if err == nil || !strings.Contains(err.Error(), ".gone") {
-		t.Fatalf("err = %v, want an error naming .gone", err)
 	}
 }

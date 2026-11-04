@@ -73,6 +73,17 @@ func keyPress(code rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: code, Text: string(code)}
 }
 
+func TestSyncPreviewShowsPlanNotices(t *testing.T) {
+	const notice = "skipped: source missing: home/.gone"
+	plan := selectedPlan()
+	plan.Notices = []string{notice}
+	s := newPreview(&fakeSyncer{plan: plan}, false)
+
+	if !strings.Contains(ansi.Strip(s.View(120, 20)), notice) {
+		t.Fatalf("preview does not show %q", notice)
+	}
+}
+
 func TestSyncToggleRespectsBlockedItems(t *testing.T) {
 	plan := app.SyncPlan{Items: []app.PlanItem{planItem("a", false), planItem("b", true)}, Selection: app.Selection{}}
 	plan.Selection[plan.Items[0].Key()] = true

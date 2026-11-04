@@ -364,6 +364,9 @@ func (s *Sync) previewView(height int) string {
 	if s.plan.StateWarning != "" {
 		lines = append(lines, s.warn("State: "+s.plan.StateWarning))
 	}
+	for _, notice := range s.plan.Notices {
+		lines = append(lines, s.warn(notice))
+	}
 	if len(s.plan.Items) == 0 {
 		return strings.Join(append(lines, s.muted("Nothing to sync.")), "\n")
 	}

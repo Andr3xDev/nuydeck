@@ -75,6 +75,8 @@ type SyncPlan struct {
 	Items        []PlanItem
 	Selection    Selection
 	StateWarning string
+	// Notices lists entries left out of the plan, e.g. a missing source.
+	Notices []string
 }
 
 type ApplyOptions struct {
@@ -119,6 +121,10 @@ func (s *Service) PlanSync(ctx context.Context, dir domain.Direction, entries []
 			src, dst = dst, src
 		}
 		items, err := s.planEntry(ctx, dir, e, src, dst, managed)
+		if errors.Is(err, errSourceMissing) {
+			plan.Notices = append(plan.Notices, fmt.Sprintf("skipped: source missing: %s/%s", e.Root, e.Path))
+			continue
+		}
 		if err != nil {
 			return SyncPlan{}, err
 		}
@@ -132,18 +138,20 @@ func (s *Service) PlanSync(ctx context.Context, dir domain.Direction, entries []
 
 func ignoreKey(k ItemKey) string { return string(k.Root) + ":" + k.Path }
 
+var errSourceMissing = errors.New("source missing")
+
 // planEntry diffs one entry and turns the changes into plan items.
 func (s *Service) planEntry(ctx context.Context, dir domain.Direction, e domain.ResolvedEntry, src, dst string, managed []domain.Entry) ([]PlanItem, error) {
-	changes, err := s.Inspector.Diff(ctx, e, domain.Endpoint{Path: src}, domain.Endpoint{Path: dst})
-	if err != nil {
-		return nil, fmt.Errorf("%s/%s: %w", e.Root, e.Path, err)
-	}
 	srcKind, err := s.Inspector.PathKind(src)
 	if err != nil {
 		return nil, fmt.Errorf("%s/%s: %w", e.Root, e.Path, err)
 	}
 	if srcKind == domain.KindNone {
-		return nil, fmt.Errorf("%s/%s: source %s does not exist", e.Root, e.Path, src)
+		return nil, fmt.Errorf("%s/%s: source %s: %w", e.Root, e.Path, src, errSourceMissing)
+	}
+	changes, err := s.Inspector.Diff(ctx, e, domain.Endpoint{Path: src}, domain.Endpoint{Path: dst})
+	if err != nil {
+		return nil, fmt.Errorf("%s/%s: %w", e.Root, e.Path, err)
 	}
 	fileEntry := srcKind == domain.KindFile || srcKind == domain.KindLink
 	kept := changes[:0:0]
@@ -443,11 +451,21 @@ const (
 	DriftError
 )
 
+// Missing says which side of a drifted entry does not exist.
+type Missing int
+
+const (
+	MissingNone Missing = iota
+	MissingInRepo
+	MissingOnPC
+)
+
 // DriftConcurrency bounds simultaneous entry diffs.
 const DriftConcurrency = 4
 
 type DriftResult struct {
 	Entry      domain.ResolvedEntry
+	Missing    Missing
 	State      DriftState
 	Changes    int
 	Err        error
@@ -495,6 +513,27 @@ func (s *Service) Drift(ctx context.Context, entries []domain.ResolvedEntry) <-c
 
 func (s *Service) driftEntry(ctx context.Context, e domain.ResolvedEntry) DriftResult {
 	r := DriftResult{Entry: e}
+	repoKind, err := s.Inspector.PathKind(e.RepoPath)
+	if err != nil {
+		r.State, r.Err = DriftError, err
+		return r
+	}
+	pcKind, err := s.Inspector.PathKind(e.DestPath)
+	if err != nil {
+		r.State, r.Err = DriftError, err
+		return r
+	}
+	switch {
+	case repoKind == domain.KindNone && pcKind == domain.KindNone:
+		r.State, r.Err = DriftError, errors.New("absent on both sides")
+		return r
+	case repoKind == domain.KindNone:
+		r.State, r.Missing = DriftDrifted, MissingInRepo
+		return r
+	case pcKind == domain.KindNone:
+		r.State, r.Missing = DriftDrifted, MissingOnPC
+		return r
+	}
 	changes, err := s.Inspector.Diff(ctx, e, domain.Endpoint{Path: e.RepoPath}, domain.Endpoint{Path: e.DestPath})
 	if err != nil {
 		r.State, r.Err = DriftError, err

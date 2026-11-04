@@ -62,6 +62,37 @@ func TestDrift_ClassifiesEntriesAndIsolatesErrors(t *testing.T) {
 	}
 }
 
+func TestDrift_MissingSideIsClassifiedWithoutDiff(t *testing.T) {
+	e := resolved(domain.RootConfig, "hypr")
+	tests := []struct {
+		name        string
+		kinds       map[string]domain.NodeKind
+		wantState   DriftState
+		wantMissing Missing
+		wantErr     string
+	}{
+		{"absent in repo", map[string]domain.NodeKind{e.RepoPath: domain.KindNone, e.DestPath: domain.KindDir}, DriftDrifted, MissingInRepo, ""},
+		{"absent on pc", map[string]domain.NodeKind{e.RepoPath: domain.KindDir, e.DestPath: domain.KindNone}, DriftDrifted, MissingOnPC, ""},
+		{"absent on both", map[string]domain.NodeKind{e.RepoPath: domain.KindNone, e.DestPath: domain.KindNone}, DriftError, MissingNone, "absent on both sides"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := &fakeInspector{diff: diffReturning(), kinds: tt.kinds}
+			r := collectDrift(newService(t, in, &fakeRunner{}), []domain.ResolvedEntry{e})["hypr"]
+
+			if r.State != tt.wantState || r.Missing != tt.wantMissing {
+				t.Errorf("state = %v missing = %v, want %v %v", r.State, r.Missing, tt.wantState, tt.wantMissing)
+			}
+			if tt.wantErr != "" && (r.Err == nil || !strings.Contains(r.Err.Error(), tt.wantErr)) {
+				t.Errorf("err = %v, want %q", r.Err, tt.wantErr)
+			}
+			if len(in.diffCalls) != 0 {
+				t.Errorf("diff must not run when a side is absent: %+v", in.diffCalls)
+			}
+		})
+	}
+}
+
 func TestDrift_RunsAtMostFourDiffsAtOnce(t *testing.T) {
 	var inFlight, peak atomic.Int32
 	in := &fakeInspector{diff: func(domain.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {

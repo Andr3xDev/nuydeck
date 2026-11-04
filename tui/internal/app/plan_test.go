@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +30,30 @@ func TestPlanSync_DiffDirectionFollowsSyncDirection(t *testing.T) {
 				t.Fatalf("diff calls = %+v, want one %s -> %s", in.diffCalls, tt.wantSrc, tt.dst)
 			}
 		})
+	}
+}
+
+func TestPlanSync_MissingSourceSkipsEntryAndPlanContinues(t *testing.T) {
+	gone, ok := resolved(domain.RootConfig, "gone"), resolved(domain.RootConfig, "ok")
+	in := &fakeInspector{
+		diff:  diffReturning(change("a.conf", domain.Create, domain.KindFile)),
+		kinds: map[string]domain.NodeKind{gone.RepoPath: domain.KindNone},
+	}
+	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{gone, ok})
+	if err != nil {
+		t.Fatalf("missing source must not fail the plan: %v", err)
+	}
+	if len(plan.Items) != 1 || plan.Items[0].Resolved.Path != "ok" {
+		t.Fatalf("items = %+v, want only the ok entry", plan.Items)
+	}
+	for _, c := range in.diffCalls {
+		if c.src == gone.RepoPath {
+			t.Errorf("diff must not run for a missing source: %+v", c)
+		}
+	}
+	// The notice field shape is a design choice; match on the rendered plan.
+	if !strings.Contains(fmt.Sprintf("%+v", plan), "skipped: source missing") {
+		t.Errorf("plan carries no %q notice: %+v", "skipped: source missing", plan)
 	}
 }
 
