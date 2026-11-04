@@ -152,6 +152,10 @@ pattern = "hypr/configs/monitors_generated.lua"
 
 [[exclude]]
 root = "config"
+pattern = "hypr/configs/gpu_env.lua"
+
+[[exclude]]
+root = "config"
 pattern = "quickshell/lucyna/legacy/monitors/data/identities.json"
 
 [[exclude]]

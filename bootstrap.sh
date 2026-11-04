@@ -24,7 +24,7 @@ fi
 
 SUDO=(sudo)
 [ "$EUID" -eq 0 ] && SUDO=()
-"${SUDO[@]}" pacman -S --needed go git rsync
+"${SUDO[@]}" pacman -S --needed go git rsync pciutils
 
 if ! (cd "$ROOT/tui" && go build -o bin/nuydeck ./cmd/nuydeck); then
     echo "bootstrap.sh: build failed; not launching." >&2
