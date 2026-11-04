@@ -69,6 +69,33 @@ func TestApply_BuildsOrderedSteps(t *testing.T) {
 	}
 }
 
+func TestApply_CopyStepsOfDirectoryEntriesAreMarkedDir(t *testing.T) {
+	plan := twoEntryPlan(t, domain.Push)
+	r := &fakeRunner{}
+	runApply(t, plan, selectAll(plan), ApplyOptions{}, r)
+
+	copies := stepsOfType[domain.CopyStep](r.steps)
+	if len(copies) != 2 || !copies[0].Dir || !copies[1].Dir {
+		t.Fatalf("copy steps = %+v, want Dir=true on both", copies)
+	}
+}
+
+func TestApply_FailedStepWithoutErrOrDetailStillReportsNonBlankError(t *testing.T) {
+	plan := twoEntryPlan(t, domain.Push)
+	r := &fakeRunner{result: func(s domain.Step) domain.StepResult {
+		if _, ok := s.(domain.CopyStep); ok {
+			return domain.StepResult{Status: domain.StepFailed}
+		}
+		return domain.StepResult{Status: domain.StepOK}
+	}}
+
+	res := runApply(t, plan, selectAll(plan), ApplyOptions{}, r)
+
+	if res.Err == nil || res.Err.Error() != "step failed" {
+		t.Fatalf("Err = %v, want \"step failed\"", res.Err)
+	}
+}
+
 func TestApply_DeletesRunFilesFirstThenDirsDeepestFirst(t *testing.T) {
 	plan := twoEntryPlan(t, domain.Push)
 	r := &fakeRunner{}

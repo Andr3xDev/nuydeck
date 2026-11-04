@@ -12,6 +12,7 @@ type CopyStep struct {
 	Direction Direction
 	Src, Dst  string
 	Paths     []string
+	Dir       bool
 }
 
 // DeleteStep removes a single path.

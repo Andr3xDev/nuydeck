@@ -104,6 +104,55 @@ func TestDrift_AttachesTimesAndNewestCompleteBackup(t *testing.T) {
 	}
 }
 
+const driftWait = 2 * time.Second
+
+func TestDrift_CancelledContextYieldsOnlyErrorsAndClosesTheChannel(t *testing.T) {
+	var entries []domain.ResolvedEntry
+	for i := range 3 * DriftConcurrency {
+		entries = append(entries, resolved(domain.RootConfig, fmt.Sprintf("e%d", i)))
+	}
+	in := &fakeInspector{diff: diffReturning()}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ch := newService(t, in, &fakeRunner{}).Drift(ctx, entries)
+
+	timeout := time.After(driftWait)
+	for {
+		select {
+		case r, open := <-ch:
+			if !open {
+				return
+			}
+			if r.State != DriftError || !errors.Is(r.Err, context.Canceled) {
+				t.Fatalf("result = %+v, want DriftError wrapping context.Canceled", r)
+			}
+		case <-timeout:
+			t.Fatal("channel not closed after cancelled context")
+		}
+	}
+}
+
+func TestDrift_ReturnsBeforeListBackupsFinishes(t *testing.T) {
+	gate := make(chan struct{})
+	in := &fakeInspector{diff: diffReturning(), listBackupsGate: gate}
+	svc := newService(t, in, &fakeRunner{})
+	returned := make(chan (<-chan DriftResult), 1)
+	go func() {
+		returned <- svc.Drift(context.Background(), []domain.ResolvedEntry{resolved(domain.RootConfig, "a")})
+	}()
+
+	select {
+	case ch := <-returned:
+		close(gate)
+		for range ch {
+		}
+	case <-time.After(driftWait):
+		close(gate)
+		t.Fatal("Drift blocked on ListBackups before returning the channel")
+	}
+}
+
 func testBackup() domain.Backup {
 	return domain.Backup{
 		Dir:       "/home/u/.nuydeck-backups/20261103-100000",

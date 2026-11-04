@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -141,7 +142,10 @@ func (s *Service) planEntry(ctx context.Context, dir domain.Direction, e domain.
 	if err != nil {
 		return nil, fmt.Errorf("%s/%s: %w", e.Root, e.Path, err)
 	}
-	fileEntry := srcKind != domain.KindDir
+	if srcKind == domain.KindNone {
+		return nil, fmt.Errorf("%s/%s: source %s does not exist", e.Root, e.Path, src)
+	}
+	fileEntry := srcKind == domain.KindFile || srcKind == domain.KindLink
 	kept := changes[:0:0]
 	for _, c := range changes {
 		if !domain.Excluded(c.Path, c.Kind == domain.KindDir, e.Filter) {
@@ -276,7 +280,7 @@ func (s *Service) Apply(ctx context.Context, plan SyncPlan, sel Selection, opts 
 		if res.Err == nil {
 			res.Err = r.Err
 			if res.Err == nil {
-				res.Err = errors.New(r.Detail)
+				res.Err = errors.New(cmp.Or(r.Detail, "step failed"))
 			}
 		}
 		return r, false
@@ -293,7 +297,7 @@ func (s *Service) Apply(ctx context.Context, plan SyncPlan, sel Selection, opts 
 			if len(paths) == 0 {
 				continue
 			}
-			r, ok := run(domain.CopyStep{Entry: g[0].Resolved, Direction: plan.Direction, Src: g[0].Src, Dst: g[0].Dst, Paths: paths})
+			r, ok := run(domain.CopyStep{Entry: g[0].Resolved, Direction: plan.Direction, Src: g[0].Src, Dst: g[0].Dst, Paths: paths, Dir: !g[0].fileEntry})
 			for _, it := range group {
 				if ok || slices.Contains(r.Applied, it.Change.Path) {
 					applied[it.Key()] = true
@@ -328,6 +332,7 @@ func (s *Service) Apply(ctx context.Context, plan SyncPlan, sel Selection, opts 
 }
 
 func (s *Service) syncedState(ctx context.Context, dir domain.Direction) domain.State {
+	// Re-read so ignores and state saved since planning are not overwritten.
 	state, _ := s.Inspector.LoadState(ctx)
 	state.RepoPath = s.RepoDir
 	state.LastSync = &domain.LastSync{Time: s.Now(), Direction: directionName(dir)}
@@ -454,16 +459,29 @@ type DriftResult struct {
 // Drift diffs repo to PC per entry and streams one result per entry; the channel closes when all are done.
 func (s *Service) Drift(ctx context.Context, entries []domain.ResolvedEntry) <-chan DriftResult {
 	out := make(chan DriftResult, len(entries))
-	lastBackup := s.lastCompleteBackup(ctx)
+	var lastBackup *domain.Backup
+	backupDone := make(chan struct{})
+	go func() {
+		defer close(backupDone)
+		lastBackup = s.lastCompleteBackup(ctx)
+	}()
 	slots := make(chan struct{}, DriftConcurrency)
 	var wg sync.WaitGroup
 	for _, e := range entries {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			slots <- struct{}{}
-			defer func() { <-slots }()
+			select {
+			case slots <- struct{}{}:
+				defer func() { <-slots }()
+			case <-ctx.Done():
+			}
+			if err := ctx.Err(); err != nil {
+				out <- DriftResult{Entry: e, State: DriftError, Err: err}
+				return
+			}
 			r := s.driftEntry(ctx, e)
+			<-backupDone
 			r.LastBackup = lastBackup
 			out <- r
 		}()
