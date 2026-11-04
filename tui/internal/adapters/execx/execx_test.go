@@ -26,6 +26,19 @@ func TestRunCancel(t *testing.T) {
 	}
 }
 
+func TestRunCancelSendsSIGTERM(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	var out bytes.Buffer
+	_, err := Run(ctx, &out, "sh", "-c", `trap 'echo terminated; exit 0' TERM; while :; do sleep 0.05; done`)
+	if err == nil {
+		t.Fatal("want error on cancelled context")
+	}
+	if out.String() != "terminated\n" {
+		t.Fatalf("child did not see SIGTERM: out=%q", out.String())
+	}
+}
+
 func TestRunCancelReturnsWhenChildHoldsStderrPipe(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()

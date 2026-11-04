@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 )
 
@@ -27,6 +28,8 @@ func Run(ctx context.Context, out io.Writer, name string, args ...string) (Resul
 	cmd := exec.CommandContext(ctx, name, args...)
 	// Fixed locale keeps rsync output parseable.
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	// SIGTERM lets rsync remove its temp files; WaitDelay still escalates to kill.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = cancelWaitDelay
 	var stderr bytes.Buffer
 	cmd.Stdout = out
