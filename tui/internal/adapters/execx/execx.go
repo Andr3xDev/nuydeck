@@ -7,7 +7,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"time"
 )
+
+// cancelWaitDelay bounds how long Run waits for I/O after cancel, so an
+// orphaned child holding the stderr pipe cannot block the return.
+const cancelWaitDelay = 2 * time.Second
 
 // Result is the outcome of one finished command.
 type Result struct {
@@ -22,6 +27,7 @@ func Run(ctx context.Context, out io.Writer, name string, args ...string) (Resul
 	cmd := exec.CommandContext(ctx, name, args...)
 	// Fixed locale keeps rsync output parseable.
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	cmd.WaitDelay = cancelWaitDelay
 	var stderr bytes.Buffer
 	cmd.Stdout = out
 	cmd.Stderr = &stderr

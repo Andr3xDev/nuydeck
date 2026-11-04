@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 )
 
 func TestRunExitCodeStderrAndLocale(t *testing.T) {
@@ -22,5 +23,18 @@ func TestRunCancel(t *testing.T) {
 	cancel()
 	if _, err := Run(ctx, nil, "sleep", "5"); err == nil {
 		t.Fatal("want error on cancelled context")
+	}
+}
+
+func TestRunCancelReturnsWhenChildHoldsStderrPipe(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := Run(ctx, nil, "sh", "-c", "sleep 30 & sleep 30")
+	if err == nil {
+		t.Fatal("want error on cancelled context")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("Run hung %v on an orphaned child holding the pipe", elapsed)
 	}
 }
