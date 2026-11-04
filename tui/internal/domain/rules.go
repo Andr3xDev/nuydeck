@@ -154,6 +154,30 @@ func matchesPrefix(p, pattern string) bool {
 	return true
 }
 
+// Excluded applies anchored rsync rules ("/a/*.log", trailing "/" = dirs only):
+// a rule hits a path that matches it segment by segment or lies below a match.
+func Excluded(rel string, isDir bool, f Filter) bool {
+	relSegments := strings.Split(rel, "/")
+	for _, rule := range f.Excludes {
+		dirOnly := strings.HasSuffix(rule, "/")
+		ruleSegments := strings.Split(strings.Trim(rule, "/"), "/")
+		if len(ruleSegments) > len(relSegments) || (dirOnly && len(ruleSegments) == len(relSegments) && !isDir) {
+			continue
+		}
+		matched := true
+		for i, segment := range ruleSegments {
+			if ok, err := path.Match(segment, relSegments[i]); err != nil || !ok {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
 // ClassifyLink inspects a link target; linkDir is the link's directory relative to root and entries are the managed entries.
 func ClassifyLink(root Root, linkDir, target string, entries []Entry) LinkWarning {
 	if path.IsAbs(target) {
