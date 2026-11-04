@@ -58,14 +58,14 @@ func (r Runner) Run(ctx context.Context, s domain.Step, _ func(domain.StepProgre
 	return failed(fmt.Errorf("fsx cannot run %T", s))
 }
 
-// within reports whether p is base or lies below it, lexically.
-func within(base, p string) bool {
+// Within reports whether p is base or lies below it, lexically.
+func Within(base, p string) bool {
 	rel, err := filepath.Rel(base, p)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func strictlyWithin(base, p string) bool {
-	return within(base, p) && filepath.Clean(base) != filepath.Clean(p)
+	return Within(base, p) && filepath.Clean(base) != filepath.Clean(p)
 }
 
 // ResolveExisting resolves symlinks in the deepest existing ancestor of p and
@@ -74,6 +74,10 @@ func ResolveExisting(p string) (string, error) {
 	resolved, err := filepath.EvalSymlinks(p)
 	if !errors.Is(err, fs.ErrNotExist) {
 		return resolved, err
+	}
+	// EvalSymlinks also reports ErrNotExist for a dangling link, whose target could be anywhere.
+	if _, statErr := os.Lstat(p); statErr == nil {
+		return "", fmt.Errorf("cannot resolve dangling symlink %s", p)
 	}
 	parent := filepath.Dir(p)
 	if parent == p {
@@ -103,7 +107,7 @@ func deletePath(s domain.DeleteStep) domain.StepResult {
 	if err != nil {
 		return failed(err)
 	}
-	if !within(realRoot, realParent) {
+	if !Within(realRoot, realParent) {
 		return failed(fmt.Errorf("refusing to delete %s: parent resolves outside %s", target, root))
 	}
 	switch err := os.Remove(target); {
@@ -136,7 +140,7 @@ func (r Runner) backup(ctx context.Context, s domain.BackupStep) domain.StepResu
 		if err != nil {
 			return failed(err)
 		}
-		if within(realEntry, realBackupsDir) || within(realBackupsDir, realEntry) {
+		if Within(realEntry, realBackupsDir) || Within(realBackupsDir, realEntry) {
 			return failed(fmt.Errorf("refusing backup: %s lies inside %s/%s", backupsDir, f.Root, f.Path))
 		}
 	}

@@ -147,6 +147,46 @@ func TestBackupStep_RefusedWhenBackupsDirReachedThroughSymlinkedRoot(t *testing.
 	}
 }
 
+func TestBackupStep_RefusedWhenEntryLiesInsideBackupsDir(t *testing.T) {
+	requireRsync(t)
+	home := t.TempDir()
+	backups := fsx.BackupsDir(home)
+	writeFile(t, filepath.Join(backups, "20260101-000000", "f"), "x")
+	step := domain.BackupStep{
+		Files: []domain.BackupFile{{Root: domain.RootHome, Path: "20260101-000000/f"}},
+		Roots: map[domain.Root]string{domain.RootHome: backups},
+	}
+
+	res := fsx.Runner{Home: home}.Run(context.Background(), step, nil)
+
+	if res.Status != domain.StepFailed || res.Err == nil {
+		t.Fatalf("status = %v, err = %v; want refusal", res.Status, res.Err)
+	}
+	if entries, _ := os.ReadDir(backups); len(entries) != 1 {
+		t.Fatalf("refused backup changed the backups dir: %d entries", len(entries))
+	}
+}
+
+func TestResolveExisting_DanglingSymlinkFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	link := filepath.Join(dir, "dangling")
+	if err := os.Symlink(filepath.Join(dir, "nowhere"), link); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, p := range map[string]string{
+		"link itself":           link,
+		"missing tail below it": filepath.Join(link, "sub", "file"),
+	} {
+		if got, err := fsx.ResolveExisting(p); err == nil {
+			t.Errorf("%s: resolved to %q, want an error", name, got)
+		}
+	}
+	if _, err := fsx.ResolveExisting(filepath.Join(dir, "plain-missing", "file")); err != nil {
+		t.Errorf("plain missing path must still resolve: %v", err)
+	}
+}
+
 func TestListBackups_NewestFirstAndFlagsBrokenOnes(t *testing.T) {
 	requireRsync(t)
 	home := t.TempDir()

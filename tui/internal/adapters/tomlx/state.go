@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
@@ -87,14 +86,13 @@ func refuseInsideRepo(dir, repo string) error {
 	if err != nil {
 		return err
 	}
-	rel, err := filepath.Rel(realRepo, realDir)
-	if err != nil {
+	if _, err := filepath.Rel(realRepo, realDir); err != nil {
 		return fmt.Errorf("cannot determine whether state dir %s is inside the repo: %w", dir, err)
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return nil
+	if fsx.Within(realRepo, realDir) {
+		return fmt.Errorf("refusing to write state inside the repo: %s", dir)
 	}
-	return fmt.Errorf("refusing to write state inside the repo: %s", dir)
+	return nil
 }
 
 // AppendLog appends e as one JSON line to <logsDir>/YYYY-MM.jsonl, the month taken from e.Time.
