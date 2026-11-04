@@ -100,8 +100,9 @@ func TestRootOpensSyncOnStartSync(t *testing.T) {
 	r := NewRoot("", false, Deps{})
 	m, _ := r.Update(startSyncMsg{direction: domain.Push})
 	r = m.(Root)
-	if r.selected != syncSection || r.pendingSync == nil || *r.pendingSync != domain.Push {
-		t.Errorf("selected=%d pending=%v", r.selected, r.pendingSync)
+	sync := r.sections[syncSection].screen.(*Sync)
+	if r.selected != syncSection || sync.direction != domain.Push {
+		t.Errorf("selected=%d direction=%v", r.selected, sync.direction)
 	}
 }
 

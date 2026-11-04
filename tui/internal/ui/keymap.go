@@ -14,6 +14,8 @@ type KeyMap struct {
 	Toggle  key.Binding
 	All     key.Binding
 	Confirm key.Binding
+	Yes     key.Binding
+	No      key.Binding
 	Pull    key.Binding
 	Push    key.Binding
 }
@@ -31,6 +33,8 @@ func DefaultKeyMap() KeyMap {
 		Toggle:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "toggle")),
 		All:     key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "toggle all")),
 		Confirm: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "confirm")),
+		Yes:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yes")),
+		No:      key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "no")),
 		Pull:    key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pull")),
 		Push:    key.NewBinding(key.WithKeys("P"), key.WithHelp("P", "push")),
 	}

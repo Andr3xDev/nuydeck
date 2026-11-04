@@ -41,6 +41,7 @@ const syncSection = 1
 // Deps is what the shell needs from the app layer and startup.
 type Deps struct {
 	Drifter       Drifter
+	Syncer        Syncer
 	Entries       []domain.ResolvedEntry
 	StateWarning  string
 	LastSync      *domain.LastSync
@@ -61,7 +62,6 @@ type Root struct {
 	keys          KeyMap
 	help          help.Model
 	palette       theme.Palette
-	pendingSync   *domain.Direction
 }
 
 // NewRoot builds the shell. variant is the raw theme variant string read by
@@ -74,7 +74,7 @@ func NewRoot(variant string, dryRun bool, deps Deps) Root {
 	keys := DefaultKeyMap()
 	sections := []section{
 		{"Dashboard", newDashboard(deps, keys, palette)},
-		{"Sync", placeholder{"Sync"}},
+		{"Sync", newSync(deps, dryRun, keys, palette)},
 		{"Backups", placeholder{"Backups"}},
 	}
 	if deps.ManifestError != nil {
@@ -109,7 +109,9 @@ func (r Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return r.handleKey(msg)
 	case startSyncMsg:
 		r.selected, r.panelFocus = syncSection, true
-		r.pendingSync = &msg.direction
+		if s, ok := r.sections[syncSection].screen.(*Sync); ok {
+			return r, s.startPlan(msg.direction)
+		}
 		return r, nil
 	}
 	return r.broadcast(msg)
@@ -127,6 +129,8 @@ func (r Root) broadcast(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (r Root) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
+	case r.panelModal() && !r.showHelp && (key.Matches(msg, r.keys.Back) || msg.String() == "q"):
+		return r.forward(msg)
 	case key.Matches(msg, r.keys.Quit):
 		return r, tea.Quit
 	case key.Matches(msg, r.keys.Help):
@@ -148,6 +152,12 @@ func (r Root) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return r, nil
 	}
 	return r.forward(msg)
+}
+
+// panelModal reports whether the active screen has a dialog open, so q and esc close it first.
+func (r Root) panelModal() bool {
+	m, ok := r.sections[r.selected].screen.(interface{ Modal() bool })
+	return ok && m.Modal()
 }
 
 func (r Root) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
