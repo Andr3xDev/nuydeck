@@ -22,50 +22,65 @@ func LoadManifest(path, home string) (domain.Manifest, error) {
 		return domain.Manifest{}, err
 	}
 	name := filepath.Base(path)
-	fail := func(line int, msg string) error {
-		if line == 0 {
-			return fmt.Errorf("%s: %s", name, msg)
-		}
-		return fmt.Errorf("%s:%d: %s", name, line, msg)
-	}
-
 	var m domain.Manifest
-	dec := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields()
-	if err := dec.Decode(&m); err != nil {
-		var strict *toml.StrictMissingError
-		var decodeErr *toml.DecodeError
-		switch {
-		case errors.As(err, &strict) && len(strict.Errors) > 0:
-			first := strict.Errors[0]
-			line, _ := first.Position()
-			return domain.Manifest{}, fail(line, fmt.Sprintf("unknown key %q", strings.Join(first.Key(), ".")))
-		case errors.As(err, &decodeErr):
-			line, _ := decodeErr.Position()
-			return domain.Manifest{}, fail(line, decodeErr.Error())
-		}
-		return domain.Manifest{}, fail(0, err.Error())
+	if err := decodeStrict(name, data, &m); err != nil {
+		return domain.Manifest{}, err
 	}
 
 	for root, dest := range m.Roots {
 		m.Roots[root] = expandHome(dest, home)
 	}
 	if err := m.Validate(home); err != nil {
-		var entryErr *domain.EntryError
-		if !errors.As(err, &entryErr) {
-			return domain.Manifest{}, fail(0, err.Error())
-		}
-		lines := headerLines(data, "entry")
-		msg := err.Error()
-		if entryErr.Prior >= 0 && entryErr.Prior < len(lines) {
-			msg += fmt.Sprintf(" (first declared at line %d)", lines[entryErr.Prior])
-		}
-		line := 0
-		if entryErr.Index < len(lines) {
-			line = lines[entryErr.Index]
-		}
-		return domain.Manifest{}, fail(line, msg)
+		return domain.Manifest{}, entryFailure(name, data, "entry", err)
 	}
 	return m, nil
+}
+
+// failAt prefixes msg with the file name and, when known, the 1-based line.
+func failAt(name string, line int, msg string) error {
+	if line == 0 {
+		return fmt.Errorf("%s: %s", name, msg)
+	}
+	return fmt.Errorf("%s:%d: %s", name, line, msg)
+}
+
+// decodeStrict decodes data into out and rejects unknown keys, reporting file and line.
+func decodeStrict(name string, data []byte, out any) error {
+	dec := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields()
+	err := dec.Decode(out)
+	if err == nil {
+		return nil
+	}
+	var strict *toml.StrictMissingError
+	var decodeErr *toml.DecodeError
+	switch {
+	case errors.As(err, &strict) && len(strict.Errors) > 0:
+		first := strict.Errors[0]
+		line, _ := first.Position()
+		return failAt(name, line, fmt.Sprintf("unknown key %q", strings.Join(first.Key(), ".")))
+	case errors.As(err, &decodeErr):
+		line, _ := decodeErr.Position()
+		return failAt(name, line, decodeErr.Error())
+	}
+	return failAt(name, 0, err.Error())
+}
+
+// entryFailure locates a validation error at the header line of the offending [[table]] entry.
+func entryFailure(name string, data []byte, table string, err error) error {
+	var entryErr *domain.EntryError
+	if !errors.As(err, &entryErr) {
+		return failAt(name, 0, err.Error())
+	}
+	lines := headerLines(data, table)
+	msg := err.Error()
+	if entryErr.Prior >= 0 && entryErr.Prior < len(lines) {
+		msg += fmt.Sprintf(" (first declared at line %d)", lines[entryErr.Prior])
+	}
+	line := 0
+	if entryErr.Index < len(lines) {
+		line = lines[entryErr.Index]
+	}
+	return failAt(name, line, msg)
 }
 
 func expandHome(dest, home string) string {

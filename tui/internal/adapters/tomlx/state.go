@@ -18,6 +18,7 @@ import (
 const (
 	stateVersion   = 1
 	logMonthLayout = "2006-01"
+	stateFileMode  = 0o600
 )
 
 // StatePath is <home>/.local/state/nuydeck/state.toml.
@@ -65,21 +66,7 @@ func SaveState(path string, s domain.State) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".state-*.tmp")
-	if err != nil {
-		return err
-	}
-	_, werr := tmp.Write(data)
-	if cerr := tmp.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr == nil {
-		werr = os.Rename(tmp.Name(), path)
-	}
-	if werr != nil {
-		_ = os.Remove(tmp.Name())
-	}
-	return werr
+	return fsx.WriteAtomic(path, data, stateFileMode)
 }
 
 func refuseInsideRepo(dir, repo string) error {
