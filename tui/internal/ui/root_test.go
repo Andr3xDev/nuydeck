@@ -16,7 +16,7 @@ func press(t *testing.T, r Root, k tea.KeyPressMsg) (Root, tea.Cmd) {
 
 func TestRootQuitKeys(t *testing.T) {
 	for _, k := range []tea.KeyPressMsg{{Code: 'q', Text: "q"}, {Code: 'c', Mod: tea.ModCtrl}} {
-		_, cmd := press(t, NewRoot("", false), k)
+		_, cmd := press(t, NewRoot("", false, Deps{}), k)
 		if cmd == nil {
 			t.Fatalf("%q: no command returned", k.String())
 		}
@@ -27,7 +27,7 @@ func TestRootQuitKeys(t *testing.T) {
 }
 
 func TestRootHelpToggleAndEsc(t *testing.T) {
-	r := NewRoot("", false)
+	r := NewRoot("", false, Deps{})
 	r, _ = press(t, r, tea.KeyPressMsg{Code: '?', Text: "?"})
 	if !r.showHelp {
 		t.Fatal("? did not open help")
@@ -44,7 +44,7 @@ func TestRootHelpToggleAndEsc(t *testing.T) {
 }
 
 func TestRootResizeKeepsSelectedSection(t *testing.T) {
-	r := NewRoot("", true)
+	r := NewRoot("", true, Deps{})
 	r, _ = press(t, r, tea.KeyPressMsg{Code: 'j', Text: "j"})
 	r, _ = press(t, r, tea.KeyPressMsg{Code: tea.KeyDown})
 	if r.selected != 2 {
@@ -59,7 +59,7 @@ func TestRootResizeKeepsSelectedSection(t *testing.T) {
 }
 
 func TestRootViewShowsDryRunBadgeOnEverySection(t *testing.T) {
-	r := NewRoot("zenit", true)
+	r := NewRoot("zenit", true, Deps{})
 	m, _ := r.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
 	r = m.(Root)
 	for i := range r.sections {
@@ -72,7 +72,7 @@ func TestRootViewShowsDryRunBadgeOnEverySection(t *testing.T) {
 			t.Errorf("section %d: DRY-RUN badge missing", i)
 		}
 	}
-	plain, _ := NewRoot("", false).Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	plain, _ := NewRoot("", false, Deps{}).Update(tea.WindowSizeMsg{Width: 80, Height: 20})
 	if strings.Contains(ansi.Strip(plain.(Root).View().Content), dryRunBadge) {
 		t.Error("badge shown without dry-run")
 	}

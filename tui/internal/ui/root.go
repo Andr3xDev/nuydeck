@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
@@ -35,6 +36,20 @@ func (p placeholder) View(width, height int) string {
 	return lipgloss.NewStyle().Width(width).Height(height).Padding(1, 2).Render(p.title)
 }
 
+const syncSection = 1
+
+// Deps is what the shell needs from the app layer and startup.
+type Deps struct {
+	Drifter       Drifter
+	Entries       []domain.ResolvedEntry
+	StateWarning  string
+	LastSync      *domain.LastSync
+	ManifestError error
+}
+
+// initer is implemented by screens that start work when the program starts.
+type initer interface{ Init() tea.Cmd }
+
 // Root is the top-level Bubble Tea model: sidebar, active panel and keybar.
 type Root struct {
 	width, height int
@@ -46,28 +61,43 @@ type Root struct {
 	keys          KeyMap
 	help          help.Model
 	palette       theme.Palette
+	pendingSync   *domain.Direction
 }
 
 // NewRoot builds the shell. variant is the raw theme variant string read by
-// the caller; unknown values fall back to Nadir.
-func NewRoot(variant string, dryRun bool) Root {
+// the caller; unknown values fall back to Nadir. A manifest error leaves only
+// the error screen, so no sync, backup or restore action exists.
+func NewRoot(variant string, dryRun bool, deps Deps) Root {
 	palette := theme.ForVariant(variant)
 	h := help.New()
 	h.Styles = help.DefaultStyles(palette.Dark)
+	keys := DefaultKeyMap()
+	sections := []section{
+		{"Dashboard", newDashboard(deps, keys, palette)},
+		{"Sync", placeholder{"Sync"}},
+		{"Backups", placeholder{"Backups"}},
+	}
+	if deps.ManifestError != nil {
+		sections = []section{{"Manifest", ManifestError{err: deps.ManifestError, palette: palette}}}
+	}
 	return Root{
-		sections: []section{
-			{"Dashboard", placeholder{"Dashboard"}},
-			{"Sync", placeholder{"Sync"}},
-			{"Backups", placeholder{"Backups"}},
-		},
-		dryRun:  dryRun,
-		keys:    DefaultKeyMap(),
-		help:    h,
-		palette: palette,
+		sections: sections,
+		dryRun:   dryRun,
+		keys:     keys,
+		help:     h,
+		palette:  palette,
 	}
 }
 
-func (r Root) Init() tea.Cmd { return nil }
+func (r Root) Init() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, s := range r.sections {
+		if i, ok := s.screen.(initer); ok {
+			cmds = append(cmds, i.Init())
+		}
+	}
+	return tea.Batch(cmds...)
+}
 
 func (r Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -77,8 +107,22 @@ func (r Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return r, nil
 	case tea.KeyPressMsg:
 		return r.handleKey(msg)
+	case startSyncMsg:
+		r.selected, r.panelFocus = syncSection, true
+		r.pendingSync = &msg.direction
+		return r, nil
 	}
-	return r.forward(msg)
+	return r.broadcast(msg)
+}
+
+// broadcast delivers background messages to every screen, since results and
+// ticks must land even while another section is selected.
+func (r Root) broadcast(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmds := make([]tea.Cmd, len(r.sections))
+	for i := range r.sections {
+		r.sections[i].screen, cmds[i] = r.sections[i].screen.Update(msg)
+	}
+	return r, tea.Batch(cmds...)
 }
 
 func (r Root) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
