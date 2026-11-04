@@ -19,6 +19,8 @@ var (
 	ErrInvalidDriverID  = errors.New("invalid driver id")
 
 	ErrInvalidPackageName = errors.New("invalid package name")
+	ErrInvalidSecretName  = errors.New("invalid secret name")
+	ErrDuplicateSecret    = errors.New("duplicate secret")
 )
 
 // ParuPrerequisites are the packages paru needs before it can be built from the AUR.
@@ -35,6 +37,8 @@ const vendorIDLength = 4
 
 // Driver IDs end up in the gpu_env_<ids>.lua file name.
 var driverIDPattern = regexp.MustCompile(`^[a-z0-9]+$`)
+
+var secretNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 const (
 	ProfileMinimal = "minimal"
@@ -96,6 +100,21 @@ func ValidateDrivers(drivers []Driver) error {
 			return entryError(i, prior, fmt.Errorf("%w: %s", ErrDuplicateDriver, d.ID))
 		}
 		seen[d.ID] = i
+	}
+	return nil
+}
+
+// ValidateSecretNames accepts shell-safe variable names only: they are written unquoted into `export NAME=...`.
+func ValidateSecretNames(names []string) error {
+	seen := make(map[string]int, len(names))
+	for i, name := range names {
+		if !secretNamePattern.MatchString(name) {
+			return entryError(i, -1, fmt.Errorf("%w: %q", ErrInvalidSecretName, name))
+		}
+		if prior, dup := seen[name]; dup {
+			return entryError(i, prior, fmt.Errorf("%w: %s", ErrDuplicateSecret, name))
+		}
+		seen[name] = i
 	}
 	return nil
 }

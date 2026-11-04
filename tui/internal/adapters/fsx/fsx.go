@@ -54,6 +54,12 @@ func (r Runner) Run(ctx context.Context, s domain.Step, _ func(domain.StepProgre
 		return r.backup(ctx, s)
 	case domain.DeleteBackupStep:
 		return r.deleteBackup(s)
+	case domain.WriteFileStep:
+		return writeFile(s)
+	case domain.SymlinkStep:
+		return symlink(s)
+	case domain.WriteSecretsStep:
+		return writeSecrets(s)
 	}
 	return failed(fmt.Errorf("fsx cannot run %T", s))
 }
