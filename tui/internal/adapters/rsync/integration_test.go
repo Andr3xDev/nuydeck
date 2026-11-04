@@ -146,6 +146,19 @@ func TestIntegrationApplyFileEntry(t *testing.T) {
 	}
 }
 
+func TestIntegrationPlanErrorIsSingleLine(t *testing.T) {
+	requireRsync(t)
+	root := t.TempDir()
+
+	_, err := Plan(context.Background(), dirReq(root+"/missing-src", root+"/dst"))
+	if err == nil {
+		t.Fatal("expected an error for a missing source")
+	}
+	if strings.ContainsAny(err.Error(), "\r\n") {
+		t.Fatalf("plan error must be one line: %q", err)
+	}
+}
+
 func TestIntegrationApplyFailureIsError(t *testing.T) {
 	requireRsync(t)
 	root := t.TempDir()

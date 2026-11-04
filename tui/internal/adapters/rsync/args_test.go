@@ -43,6 +43,11 @@ func TestPlanArgs_DirEntry(t *testing.T) {
 	}
 }
 
+func TestArgs_BothCreateMissingDestinationParents(t *testing.T) {
+	assertAll(t, PlanArgs(dirRequest()), []string{"--mkpath"})
+	assertAll(t, ApplyArgs(dirRequest(), "/tmp/list"), []string{"--mkpath"})
+}
+
 func TestPlanArgs_FileEntryKeepsPathsWithoutSlash(t *testing.T) {
 	args := PlanArgs(Request{Src: "/repo/.zshrc", Dst: "/home/u/.zshrc"})
 	if got := args[len(args)-3:]; got[0] != "--" || got[1] != "/repo/.zshrc" || got[2] != "/home/u/.zshrc" {

@@ -35,14 +35,18 @@ type PlanResult struct {
 }
 
 const (
-	deletingPrefix   = "*deleting   "
-	skippingPrefix   = "skipping non-regular file "
-	createdDirPrefix = "created directory "
-	flagsLen         = 11
-	allNewFlags      = "+++++++++"
-	linkArrow        = " -> "
-	exitVanished     = 24
+	deletingPrefix     = "*deleting   "
+	skippingPrefix     = "skipping non-regular file "
+	createdDirPrefix   = "created directory "
+	cannotDeletePrefix = "cannot delete non-empty directory: "
+	flagsLen           = 11
+	allNewFlags        = "+++++++++"
+	linkArrow          = " -> "
+	exitVanished       = 24
 )
+
+// createdParentsNotice is what --mkpath prints: "created 2 directories for <dst>".
+var createdParentsNotice = regexp.MustCompile(`^created \d+ director(y|ies) for `)
 
 var escapedByte = regexp.MustCompile(`\\#(\d{3})`)
 
@@ -50,7 +54,11 @@ var escapedByte = regexp.MustCompile(`\\#(\d{3})`)
 // informational notices produce no items; skipped non-regular files are returned.
 func parseItemize(output string) (items []Item, skipped []string, err error) {
 	for _, line := range strings.Split(output, "\n") {
-		if line == "" || strings.HasPrefix(line, createdDirPrefix) {
+		if line == "" || strings.HasPrefix(line, createdDirPrefix) || createdParentsNotice.MatchString(line) {
+			continue
+		}
+		// An excluded file inside keeps the directory non-empty, so rsync cannot delete it.
+		if strings.HasPrefix(line, cannotDeletePrefix) {
 			continue
 		}
 		if name, ok := strings.CutPrefix(line, skippingPrefix); ok {
@@ -102,7 +110,7 @@ func unescape(name string) string {
 }
 
 func baseArgs(r Request) []string {
-	args := []string{"--recursive", "--links", "--checksum", "--executability"}
+	args := []string{"--recursive", "--links", "--checksum", "--executability", "--mkpath"}
 	for _, e := range r.Filter.Excludes {
 		args = append(args, "--exclude="+e)
 	}
@@ -141,6 +149,19 @@ func planExit(code int) (warning string, err error) {
 	return "", fmt.Errorf("rsync exited with code %d", code)
 }
 
+func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// stderrDetail flattens rsync stderr and hints at the rsync version when
+// --mkpath was rejected as an unknown option.
+func stderrDetail(stderr string) string {
+	detail := oneLine(stderr)
+	lower := strings.ToLower(detail)
+	if strings.Contains(lower, "unknown option") || strings.Contains(lower, "unrecognized option") {
+		detail += "; rsync >= 3.2.3 required (--mkpath)"
+	}
+	return detail
+}
+
 func Plan(ctx context.Context, r Request) (PlanResult, error) {
 	var out bytes.Buffer
 	res, err := execx.Run(ctx, &out, "rsync", PlanArgs(r)...)
@@ -149,7 +170,7 @@ func Plan(ctx context.Context, r Request) (PlanResult, error) {
 	}
 	warning, err := planExit(res.ExitCode)
 	if err != nil {
-		return PlanResult{}, fmt.Errorf("%w: %s", err, strings.TrimSpace(res.Stderr))
+		return PlanResult{}, fmt.Errorf("%w: %s", err, stderrDetail(res.Stderr))
 	}
 	items, skipped, err := parseItemize(out.String())
 	if err != nil {
@@ -226,7 +247,7 @@ func Apply(ctx context.Context, r Request, paths []string, progress func(path st
 		return err
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("rsync exited with code %d: %s", res.ExitCode, strings.TrimSpace(res.Stderr))
+		return fmt.Errorf("rsync exited with code %d: %s", res.ExitCode, stderrDetail(res.Stderr))
 	}
 	return nil
 }
