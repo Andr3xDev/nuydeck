@@ -4,8 +4,11 @@ package system
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"os/exec"
 	"time"
 
+	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/gitx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/rsync"
@@ -57,6 +60,17 @@ func (i Inspector) LoadState(context.Context) (domain.State, string) {
 type Runner struct {
 	Home      string
 	ConfigDir string
+	// Exec runs external commands; nil means execx.RunWith.
+	Exec func(ctx context.Context, opts execx.Options, name string, args ...string) (execx.Result, error)
+	// Terminal runs the interactive handoff; nil means no terminal.
+	Terminal interface {
+		Run(ctx context.Context, cmd *exec.Cmd) error
+	}
+	// TempDir holds the user-owned temp file of privileged writes; it must be owned by the user and not group/world-writable.
+	// Empty means $XDG_RUNTIME_DIR, else <Home>/.cache/nuydeck/tmp (created 0700).
+	TempDir string
+	// Lstat inspects the backup source; nil means os.Lstat.
+	Lstat func(path string) (fs.FileInfo, error)
 }
 
 func (r Runner) Run(ctx context.Context, s domain.Step, progress func(domain.StepProgress)) domain.StepResult {
@@ -75,8 +89,17 @@ func (r Runner) Run(ctx context.Context, s domain.Step, progress func(domain.Ste
 		return done(tomlx.SaveState(tomlx.StatePath(r.Home), s.State))
 	case domain.AppendLogStep:
 		return done(tomlx.AppendLog(tomlx.LogsDir(r.ConfigDir), s.Entry))
-	case domain.DeleteStep, domain.BackupStep, domain.DeleteBackupStep:
+	case domain.DeleteStep, domain.BackupStep, domain.DeleteBackupStep, domain.SymlinkStep, domain.WriteSecretsStep:
 		return fsx.Runner{Home: r.Home}.Run(ctx, s, progress)
+	case domain.WriteFileStep:
+		if s.Privileged {
+			return r.writePrivileged(ctx, s)
+		}
+		return fsx.Runner{Home: r.Home}.Run(ctx, s, progress)
+	case domain.AppendPackageStep:
+		return done(tomlx.AppendPackage(s.Path, s.Entry))
+	case domain.CommandStep:
+		return r.runCommand(ctx, s, progress)
 	}
 	return domain.StepResult{Status: domain.StepFailed, Err: fmt.Errorf("unsupported step %T", s)}
 }

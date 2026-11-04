@@ -30,7 +30,38 @@ func render(s domain.Step) string {
 	case domain.DeleteBackupStep:
 		return "would delete backup " + s.Dir
 	case domain.SaveStateStep:
-		return "would save state"
+		if len(s.State.IgnoredPackages) == 0 {
+			return "would save state"
+		}
+		return "would save state; ignored_packages: " + strings.Join(s.State.IgnoredPackages, ", ")
+	case domain.CommandStep:
+		argv := s.Argv
+		if s.Sudo {
+			argv = append([]string{"sudo"}, argv...)
+		}
+		return "would run " + strings.Join(argv, " ")
+	case domain.WriteFileStep:
+		detail := fmt.Sprintf("would write %s (%d bytes)", s.Path, len(s.Content))
+		if s.Privileged {
+			detail += " with sudo"
+		}
+		if s.BackupTo != "" {
+			detail += ", backup to " + s.BackupTo
+		}
+		return detail
+	case domain.SymlinkStep:
+		return fmt.Sprintf("would link %s -> %s", s.Path, s.Target)
+	case domain.WriteSecretsStep:
+		if len(s.Entries) == 0 {
+			return fmt.Sprintf("would create empty %s (mode 600)", s.Path)
+		}
+		names := make([]string, len(s.Entries))
+		for i, e := range s.Entries {
+			names[i] = e.Name
+		}
+		return fmt.Sprintf("would create %s with variables: %s", s.Path, strings.Join(names, ", "))
+	case domain.AppendPackageStep:
+		return fmt.Sprintf("would append package %s (%s) to %s", s.Entry.Name, s.Entry.Source, s.Path)
 	case domain.AppendLogStep:
 		return "would append log entry: " + s.Entry.Op
 	default:
