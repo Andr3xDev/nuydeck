@@ -237,5 +237,5 @@ func (m ManifestError) Update(tea.Msg) (Screen, tea.Cmd) { return m, nil }
 
 func (m ManifestError) View(width, height int) string {
 	title := lipgloss.NewStyle().Bold(true).Foreground(m.palette.Error).Render("Invalid manifest")
-	return renderPanel(width, height, title+"\n\n"+m.err.Error()+"\n\nFix manifest/paths.toml and restart.")
+	return renderPanel(width, height, title+"\n\n"+wrapToPanel(width, m.err.Error())+"\n\nFix manifest/paths.toml and restart.")
 }

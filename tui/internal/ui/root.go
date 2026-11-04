@@ -25,9 +25,16 @@ const (
 // renderPanel pads content into a width x height box. Lines are clipped, never
 // wrapped, so long paths cannot push the box past its height.
 func renderPanel(width, height int, content string) string {
-	inner := max(width-2*panelPadX, 1)
 	return lipgloss.NewStyle().Width(width).Height(height).Padding(panelPadY, panelPadX).
-		Render(lipgloss.NewStyle().MaxWidth(inner).Render(content))
+		Render(lipgloss.NewStyle().MaxWidth(panelInnerWidth(width)).Render(content))
+}
+
+func panelInnerWidth(width int) int { return max(width-2*panelPadX, 1) }
+
+// wrapToPanel wraps text to the panel's inner width so a long message stays
+// readable instead of being clipped by renderPanel.
+func wrapToPanel(width int, text string) string {
+	return lipgloss.NewStyle().Width(panelInnerWidth(width)).Render(text)
 }
 
 // canceller is implemented by screens with background work to stop on quit.

@@ -159,13 +159,13 @@ func (b *Backups) delete() tea.Cmd {
 }
 
 func (b *Backups) View(width, height int) string {
-	return renderPanel(width, height, b.body(max(height-2*panelPadY, 1)))
+	return renderPanel(width, height, b.body(width, max(height-2*panelPadY, 1)))
 }
 
-func (b *Backups) body(height int) string {
+func (b *Backups) body(width, height int) string {
 	var lines []string
 	if b.err != nil {
-		lines = append(lines, b.colored(b.palette.Error, b.err.Error()))
+		lines = append(lines, b.colored(b.palette.Error, wrapToPanel(width, b.err.Error())))
 	}
 	if b.notice != "" {
 		lines = append(lines, b.colored(b.palette.Warning, b.notice))

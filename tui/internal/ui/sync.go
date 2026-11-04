@@ -329,23 +329,24 @@ func waitProgress(gen int, ch <-chan applyEvent) tea.Cmd {
 }
 
 func (s *Sync) View(width, height int) string {
-	return renderPanel(width, height, s.body(max(height-2*panelPadY, 1)))
+	return renderPanel(width, height, s.body(width, max(height-2*panelPadY, 1)))
 }
 
-func (s *Sync) body(height int) string {
+func (s *Sync) body(width, height int) string {
 	switch s.phase {
 	case phaseIdle:
 		return s.muted("Press p to pull or P to push.")
 	case phasePlanning:
 		return s.muted("Planning " + directionLabel(s.direction) + "...")
 	case phaseApplying:
-		text := fmt.Sprintf("Applying... %d items transferred (ctrl+c quits and interrupts the run)", s.progress)
+		quit := s.keys.Quit.Help()
+		text := fmt.Sprintf("Applying... %d items transferred (%s to %s and interrupt the run)", s.progress, quit.Key, quit.Desc)
 		if s.notice != "" {
 			text += "\n\n" + s.warn(s.notice)
 		}
 		return text
 	case phaseResult:
-		return s.resultView(height)
+		return s.resultView(width, height)
 	}
 	preview := s.previewView(height - 2)
 	switch s.phase {
@@ -394,17 +395,17 @@ func (s *Sync) itemLine(i int, it app.PlanItem) string {
 	return line
 }
 
-func (s *Sync) resultView(height int) string {
+func (s *Sync) resultView(width, height int) string {
 	var lines []string
 	switch {
 	case s.err != nil:
-		lines = append(lines, s.colored(s.palette.Error, "Plan failed: "+s.err.Error()))
+		lines = append(lines, s.colored(s.palette.Error, wrapToPanel(width, "Plan failed: "+s.err.Error())))
 	case s.result.Nothing:
 		lines = append(lines, "Nothing was done.")
 	default:
 		lines = append(lines, resultLines(s.result)...)
 		if s.result.Err != nil {
-			lines = append(lines, s.colored(s.palette.Error, "Failed: "+s.result.Err.Error()))
+			lines = append(lines, s.colored(s.palette.Error, wrapToPanel(width, "Failed: "+s.result.Err.Error())))
 		}
 	}
 	if len(lines) > height {
