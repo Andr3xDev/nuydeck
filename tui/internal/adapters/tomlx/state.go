@@ -2,7 +2,9 @@ package tomlx
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -31,6 +33,9 @@ func LogsDir(configDir string) string { return filepath.Join(configDir, "nuydeck
 func LoadState(path string) (state domain.State, warning string) {
 	defaults := domain.State{Version: stateVersion}
 	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return defaults, ""
+	}
 	if err != nil {
 		return defaults, fmt.Sprintf("state not loaded (%v); using defaults", err)
 	}

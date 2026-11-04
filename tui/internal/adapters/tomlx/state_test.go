@@ -79,8 +79,8 @@ func TestState_MissingCorruptOrUnknownVersionGivesDefaultsAndWarning(t *testing.
 
 			got, warning := tomlx.LoadState(path)
 
-			if warning == "" {
-				t.Error("expected a warning")
+			if wantWarning := content != nil; (warning != "") != wantWarning {
+				t.Errorf("warning = %q, want a warning only for corrupt or unknown-version files", warning)
 			}
 			if got.Version != 1 || got.RepoPath != "" || got.LastSync != nil || len(got.Ignores) != 0 {
 				t.Errorf("not defaults: %+v", got)
