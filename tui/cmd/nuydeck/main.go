@@ -75,12 +75,18 @@ func run(dryRun bool, repoFlag string) error {
 
 // resolveRepo picks the repo: the --repo flag, then the saved state, then the
 // nearest ancestor of cwd holding the manifest. It returns "" when none is found.
+// A saved repo without a manifest is stale and falls through to the cwd walk.
 func resolveRepo(flagRepo, stateRepo, cwd string) string {
 	if flagRepo != "" {
+		if abs, err := filepath.Abs(flagRepo); err == nil {
+			return abs
+		}
 		return flagRepo
 	}
 	if stateRepo != "" {
-		return stateRepo
+		if _, err := os.Stat(filepath.Join(stateRepo, manifestRelPath)); err == nil {
+			return stateRepo
+		}
 	}
 	for dir := cwd; ; dir = filepath.Dir(dir) {
 		if _, err := os.Stat(filepath.Join(dir, manifestRelPath)); err == nil {
