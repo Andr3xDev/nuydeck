@@ -83,7 +83,11 @@ type Sync struct {
 	stream    <-chan applyEvent
 	progress  int
 	result    app.ApplyResult
+	notice    string
+	cancel    context.CancelFunc
 }
+
+const applyBusyNotice = "Another sync was ignored: an apply is in progress."
 
 func newSync(deps Deps, dryRun bool, keys KeyMap, palette theme.Palette) *Sync {
 	return &Sync{syncer: deps.Syncer, entries: deps.Entries, dryRun: dryRun, keys: keys, palette: palette}
@@ -94,8 +98,29 @@ func (s *Sync) Modal() bool {
 	return s.phase == phaseBackupDialog || s.phase == phaseConfirmDialog || s.phase == phaseApplying
 }
 
+// cancelWork stops the running plan or apply, if any.
+func (s *Sync) cancelWork() {
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
+}
+
+// busy reports a running apply and leaves a notice: a new plan must not replace it.
+func (s *Sync) busy() bool {
+	if s.phase != phaseApplying {
+		return false
+	}
+	s.notice = applyBusyNotice
+	return true
+}
+
 // startPlan always recomputes: a plan is never cached (spec).
 func (s *Sync) startPlan(dir domain.Direction) tea.Cmd {
+	if s.busy() {
+		return nil
+	}
+	s.cancelWork()
 	s.gen++
 	s.direction, s.err = dir, nil
 	if s.syncer == nil {
@@ -103,15 +128,21 @@ func (s *Sync) startPlan(dir domain.Direction) tea.Cmd {
 		return nil
 	}
 	s.phase = phasePlanning
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
 	gen, syncer, entries := s.gen, s.syncer, s.entries
 	return func() tea.Msg {
-		plan, err := syncer.PlanSync(context.Background(), dir, entries)
+		plan, err := syncer.PlanSync(ctx, dir, entries)
 		return planMsg{gen: gen, plan: plan, err: err}
 	}
 }
 
 // showPlan opens the preview on a plan computed elsewhere (restore).
 func (s *Sync) showPlan(plan app.SyncPlan) {
+	if s.busy() {
+		return
+	}
+	s.cancelWork()
 	s.gen++
 	s.direction, s.err = plan.Direction, nil
 	s.loadPlan(plan)
@@ -242,8 +273,8 @@ func (s *Sync) selectedCount() int {
 func (s *Sync) confirm() tea.Cmd {
 	switch {
 	case s.selectedCount() == 0:
-		s.backup = false
-		return s.startApply()
+		s.err, s.result, s.phase = nil, app.ApplyResult{Nothing: true}, phaseResult
+		return nil
 	case s.syncer.NeedsBackup(s.plan, s.sel):
 		s.phase = phaseBackupDialog
 	default:
@@ -254,18 +285,29 @@ func (s *Sync) confirm() tea.Cmd {
 }
 
 func (s *Sync) startApply() tea.Cmd {
+	s.cancelWork()
 	s.gen++
-	s.phase, s.progress = phaseApplying, 0
+	s.phase, s.progress, s.notice = phaseApplying, 0, ""
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
 	gen, syncer, plan, opts := s.gen, s.syncer, s.plan, app.ApplyOptions{Backup: s.backup, DryRun: s.dryRun}
 	sel := maps.Clone(s.sel)
 	return func() tea.Msg {
 		ch := make(chan applyEvent)
+		// send gives up once ctx is cancelled, so a consumer that stopped reading cannot hang Apply.
+		send := func(ev applyEvent) {
+			select {
+			case ch <- ev:
+			case <-ctx.Done():
+			}
+		}
 		go func() {
 			defer close(ch)
-			res := syncer.Apply(context.Background(), plan, sel, opts, func(p domain.StepProgress) {
-				ch <- applyEvent{path: p.Path}
+			defer cancel()
+			res := syncer.Apply(ctx, plan, sel, opts, func(p domain.StepProgress) {
+				send(applyEvent{path: p.Path})
 			})
-			ch <- applyEvent{done: &res}
+			send(applyEvent{done: &res})
 		}()
 		return applyStartedMsg{gen: gen, ch: ch}
 	}
@@ -287,7 +329,7 @@ func waitProgress(gen int, ch <-chan applyEvent) tea.Cmd {
 }
 
 func (s *Sync) View(width, height int) string {
-	return lipgloss.NewStyle().Width(width).Height(height).Padding(1, 2).Render(s.body(max(height-2, 1)))
+	return renderPanel(width, height, s.body(max(height-2*panelPadY, 1)))
 }
 
 func (s *Sync) body(height int) string {
@@ -297,7 +339,11 @@ func (s *Sync) body(height int) string {
 	case phasePlanning:
 		return s.muted("Planning " + directionLabel(s.direction) + "...")
 	case phaseApplying:
-		return fmt.Sprintf("Applying... %d items transferred", s.progress)
+		text := fmt.Sprintf("Applying... %d items transferred (ctrl+c quits and interrupts the run)", s.progress)
+		if s.notice != "" {
+			text += "\n\n" + s.warn(s.notice)
+		}
+		return text
 	case phaseResult:
 		return s.resultView(height)
 	}

@@ -17,6 +17,22 @@ const (
 	dryRunBadge  = "DRY-RUN"
 )
 
+const (
+	panelPadX = 2
+	panelPadY = 1
+)
+
+// renderPanel pads content into a width x height box. Lines are clipped, never
+// wrapped, so long paths cannot push the box past its height.
+func renderPanel(width, height int, content string) string {
+	inner := max(width-2*panelPadX, 1)
+	return lipgloss.NewStyle().Width(width).Height(height).Padding(panelPadY, panelPadX).
+		Render(lipgloss.NewStyle().MaxWidth(inner).Render(content))
+}
+
+// canceller is implemented by screens with background work to stop on quit.
+type canceller interface{ cancelWork() }
+
 // Screen is one sidebar section's panel. Later tasks replace the placeholders.
 type Screen interface {
 	Update(msg tea.Msg) (Screen, tea.Cmd)
@@ -33,7 +49,7 @@ type placeholder struct{ title string }
 func (p placeholder) Update(tea.Msg) (Screen, tea.Cmd) { return p, nil }
 
 func (p placeholder) View(width, height int) string {
-	return lipgloss.NewStyle().Width(width).Height(height).Padding(1, 2).Render(p.title)
+	return renderPanel(width, height, p.title)
 }
 
 const syncSection = 1
@@ -139,6 +155,11 @@ func (r Root) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case r.panelModal() && !r.showHelp && (key.Matches(msg, r.keys.Back) || msg.String() == "q"):
 		return r.forward(msg)
 	case key.Matches(msg, r.keys.Quit):
+		for _, s := range r.sections {
+			if c, ok := s.screen.(canceller); ok {
+				c.cancelWork()
+			}
+		}
 		return r, tea.Quit
 	case key.Matches(msg, r.keys.Help):
 		r.showHelp = !r.showHelp
@@ -196,9 +217,9 @@ func (r Root) render() string {
 
 	panel := r.sections[r.selected].screen.View(panelWidth, bodyHeight)
 	if r.showHelp {
-		panel = lipgloss.NewStyle().Width(panelWidth).Height(bodyHeight).Padding(1, 2).
-			Render(r.help.FullHelpView(r.keys.FullHelp()))
+		panel = renderPanel(panelWidth, bodyHeight, r.help.FullHelpView(r.keys.FullHelp()))
 	}
+	panel = lipgloss.NewStyle().MaxWidth(panelWidth).MaxHeight(bodyHeight).Render(panel)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, r.renderSidebar(bodyHeight), panel)
 	return lipgloss.JoinVertical(lipgloss.Left, body, r.renderKeybar())
 }

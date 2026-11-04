@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -14,8 +15,12 @@ import (
 )
 
 type fakeSyncer struct {
-	plan        app.SyncPlan
-	needsBackup bool
+	plan          app.SyncPlan
+	needsBackup   bool
+	progressPaths []string
+	blockUntilCtx bool
+	opts          app.ApplyOptions
+	applyCalls    int
 }
 
 func (f *fakeSyncer) PlanSync(context.Context, domain.Direction, []domain.ResolvedEntry) (app.SyncPlan, error) {
@@ -24,8 +29,28 @@ func (f *fakeSyncer) PlanSync(context.Context, domain.Direction, []domain.Resolv
 
 func (f *fakeSyncer) NeedsBackup(app.SyncPlan, app.Selection) bool { return f.needsBackup }
 
-func (f *fakeSyncer) Apply(context.Context, app.SyncPlan, app.Selection, app.ApplyOptions, func(domain.StepProgress)) app.ApplyResult {
+func (f *fakeSyncer) Apply(ctx context.Context, _ app.SyncPlan, _ app.Selection, opts app.ApplyOptions, progress func(domain.StepProgress)) app.ApplyResult {
+	f.applyCalls++
+	f.opts = opts
+	for _, p := range f.progressPaths {
+		progress(domain.StepProgress{Path: p})
+	}
+	if f.blockUntilCtx {
+		<-ctx.Done()
+	}
 	return app.ApplyResult{}
+}
+
+func selectedPlan() app.SyncPlan {
+	item := planItem("a", false)
+	return app.SyncPlan{Items: []app.PlanItem{item}, Selection: app.Selection{item.Key(): true}}
+}
+
+// runCmds feeds every command result back into the screen until no command is left.
+func runCmds(s *Sync, cmd tea.Cmd) {
+	for cmd != nil {
+		_, cmd = s.Update(cmd())
+	}
 }
 
 func planItem(path string, blocked bool) app.PlanItem {
@@ -99,6 +124,94 @@ func TestSyncDiscardsStalePlan(t *testing.T) {
 	s.Update(planMsg{gen: stale, plan: app.SyncPlan{Items: []app.PlanItem{planItem("a", false)}}})
 	if s.phase != phasePlanning || len(s.plan.Items) != 0 {
 		t.Error("stale plan must be discarded")
+	}
+}
+
+func TestSyncApplyLoopForwardsOptions(t *testing.T) {
+	tests := []struct {
+		name       string
+		dryRun     bool
+		backupKey  rune
+		wantBackup bool
+	}{
+		{"backup accepted in dry-run", true, 'y', true},
+		{"backup declined on real run", false, 'n', false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeSyncer{plan: selectedPlan(), needsBackup: true, progressPaths: []string{"a", "b"}}
+			s := newPreview(f, tt.dryRun)
+
+			s.Update(keyPress(tea.KeyEnter))
+			s.Update(keyPress(tt.backupKey))
+			_, cmd := s.Update(keyPress('y'))
+			if s.phase != phaseApplying {
+				t.Fatalf("phase = %v, want applying", s.phase)
+			}
+			runCmds(s, cmd)
+
+			want := app.ApplyOptions{Backup: tt.wantBackup, DryRun: tt.dryRun}
+			if f.opts != want || s.progress != 2 || s.phase != phaseResult {
+				t.Errorf("opts=%+v progress=%d phase=%v", f.opts, s.progress, s.phase)
+			}
+		})
+	}
+}
+
+func TestSyncNothingSelectedDoesNotApply(t *testing.T) {
+	f := &fakeSyncer{plan: app.SyncPlan{Items: []app.PlanItem{planItem("a", false)}}}
+	s := newPreview(f, false)
+
+	_, cmd := s.Update(keyPress(tea.KeyEnter))
+	if cmd != nil || s.phase != phaseResult || !s.result.Nothing || f.applyCalls != 0 {
+		t.Errorf("cmd=%v phase=%v nothing=%v applyCalls=%d", cmd != nil, s.phase, s.result.Nothing, f.applyCalls)
+	}
+}
+
+func applyingRoot(t *testing.T, f *fakeSyncer) (Root, *Sync, tea.Cmd) {
+	t.Helper()
+	r := NewRoot("", false, Deps{Syncer: f})
+	s := r.sections[syncSection].screen.(*Sync)
+	s.Update(planMsg{gen: s.gen, plan: f.plan})
+	s.Update(keyPress(tea.KeyEnter))
+	_, cmd := s.Update(keyPress('y'))
+	if s.phase != phaseApplying {
+		t.Fatalf("phase = %v, want applying", s.phase)
+	}
+	return r, s, cmd
+}
+
+func TestRootIgnoresNewPlansWhileApplying(t *testing.T) {
+	r, s, _ := applyingRoot(t, &fakeSyncer{plan: selectedPlan()})
+	gen := s.gen
+
+	for _, msg := range []tea.Msg{startSyncMsg{direction: domain.Pull}, restorePlanMsg{plan: selectedPlan()}} {
+		r.Update(msg)
+		if s.phase != phaseApplying || s.gen != gen {
+			t.Fatalf("%T changed the running apply: phase=%v gen=%d want gen %d", msg, s.phase, s.gen, gen)
+		}
+	}
+	if !strings.Contains(ansi.Strip(s.View(120, 20)), applyBusyNotice) {
+		t.Error("busy notice not shown")
+	}
+}
+
+func TestRootQuitCancelsRunningApplyWithoutHanging(t *testing.T) {
+	r, _, startCmd := applyingRoot(t, &fakeSyncer{plan: selectedPlan(), blockUntilCtx: true, progressPaths: []string{"a"}})
+	started := startCmd().(applyStartedMsg)
+
+	press(t, r, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+
+	done := make(chan struct{})
+	go func() {
+		for range started.ch {
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("apply stream still open after quit")
 	}
 }
 
