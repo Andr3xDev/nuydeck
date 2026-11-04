@@ -71,8 +71,23 @@ func plan(t *testing.T, r Request) []Item {
 
 func apply(t *testing.T, r Request, paths ...string) {
 	t.Helper()
-	if err := Apply(context.Background(), r, paths); err != nil {
+	if err := Apply(context.Background(), r, paths, nil); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestIntegrationApplyReportsProgressPerItem(t *testing.T) {
+	requireRsync(t)
+	root := t.TempDir()
+	write(t, root+"/repo/a", "1", 0o644)
+	write(t, root+"/repo/b", "2", 0o644)
+	var got []string
+	err := Apply(context.Background(), dirReq(root+"/repo", root+"/home"), []string{"a", "b"}, func(p string) { got = append(got, p) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Errorf("progress = %v, want a and b", got)
 	}
 }
 
@@ -135,7 +150,7 @@ func TestIntegrationApplyFailureIsError(t *testing.T) {
 	requireRsync(t)
 	root := t.TempDir()
 	r := dirReq(root+"/missing", root+"/dst")
-	if err := Apply(context.Background(), r, []string{"a"}); err == nil {
+	if err := Apply(context.Background(), r, []string{"a"}, nil); err == nil {
 		t.Fatal("want error for missing source")
 	}
 }
@@ -287,7 +302,7 @@ func TestIntegrationApplyDirWithNoPathsIsNoOp(t *testing.T) {
 	requireRsync(t)
 	root := t.TempDir()
 	r := dirReq(root+"/missing", root+"/dst")
-	if err := Apply(context.Background(), r, nil); err != nil {
+	if err := Apply(context.Background(), r, nil, nil); err != nil {
 		t.Fatalf("empty selection must not invoke rsync, got %v", err)
 	}
 }

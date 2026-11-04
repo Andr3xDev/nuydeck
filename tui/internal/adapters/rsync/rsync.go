@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"strconv"
@@ -164,8 +165,35 @@ func Plan(ctx context.Context, r Request) (PlanResult, error) {
 	return PlanResult{Items: items, Warning: strings.Join(ws, "; ")}, nil
 }
 
-// Apply copies the selected paths (relative to Src) for Dir requests.
-func Apply(ctx context.Context, r Request, paths []string) error {
+// itemWriter parses rsync's itemize output line by line as it streams and
+// reports each transferred item. Lines that do not parse are ignored: the exit
+// code decides success.
+type itemWriter struct {
+	buf      []byte
+	progress func(path string)
+}
+
+func (w *itemWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		i := bytes.IndexByte(w.buf, '\n')
+		if i < 0 {
+			return len(p), nil
+		}
+		items, _, err := parseItemize(string(w.buf[:i]))
+		w.buf = w.buf[i+1:]
+		if err != nil {
+			continue
+		}
+		for _, it := range items {
+			w.progress(it.Path)
+		}
+	}
+}
+
+// Apply copies the selected paths (relative to Src) for Dir requests. progress
+// (may be nil) is called with each item path as rsync transfers it.
+func Apply(ctx context.Context, r Request, paths []string, progress func(path string)) error {
 	listPath := ""
 	if r.Dir {
 		if len(paths) == 0 {
@@ -189,7 +217,11 @@ func Apply(ctx context.Context, r Request, paths []string) error {
 			return werr
 		}
 	}
-	res, err := execx.Run(ctx, nil, "rsync", ApplyArgs(r, listPath)...)
+	var out io.Writer
+	if progress != nil {
+		out = &itemWriter{progress: progress}
+	}
+	res, err := execx.Run(ctx, out, "rsync", ApplyArgs(r, listPath)...)
 	if err != nil {
 		return err
 	}

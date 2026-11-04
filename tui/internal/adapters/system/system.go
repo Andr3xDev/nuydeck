@@ -63,13 +63,12 @@ func (r Runner) Run(ctx context.Context, s domain.Step, progress func(domain.Ste
 	switch s := s.(type) {
 	case domain.CopyStep:
 		req := rsync.Request{Src: s.Src, Dst: s.Dst, Dir: s.Dir, Filter: s.Entry.Filter}
-		if err := rsync.Apply(ctx, req, s.Paths); err != nil {
-			return domain.StepResult{Status: domain.StepFailed, Err: err}
-		}
+		var onItem func(string)
 		if progress != nil {
-			for _, p := range s.Paths {
-				progress(domain.StepProgress{Path: p})
-			}
+			onItem = func(p string) { progress(domain.StepProgress{Path: p}) }
+		}
+		if err := rsync.Apply(ctx, req, s.Paths, onItem); err != nil {
+			return domain.StepResult{Status: domain.StepFailed, Err: err}
 		}
 		return domain.StepResult{Status: domain.StepOK, Applied: s.Paths}
 	case domain.SaveStateStep:

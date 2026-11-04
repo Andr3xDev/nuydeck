@@ -203,7 +203,7 @@ func writeBackup(ctx context.Context, s domain.BackupStep, dir string, created t
 		if err := os.MkdirAll(dst, 0o755); err != nil {
 			return err
 		}
-		if err := rsync.Apply(ctx, rsync.Request{Src: s.Roots[root], Dst: dst, Dir: true}, byRoot[root]); err != nil {
+		if err := rsync.Apply(ctx, rsync.Request{Src: s.Roots[root], Dst: dst, Dir: true}, byRoot[root], nil); err != nil {
 			return err
 		}
 	}
