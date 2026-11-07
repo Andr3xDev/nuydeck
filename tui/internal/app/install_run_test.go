@@ -471,6 +471,26 @@ func TestRun_ScrubsSecretValuesFromProgressLines(t *testing.T) {
 	}
 }
 
+func TestRun_ScrubsALongerSecretThatStartsWithAShorterOne(t *testing.T) {
+	r := &scriptedRunner{}
+	r.handle = func(_ context.Context, s domain.Step, progress func(domain.StepProgress)) domain.StepResult {
+		if _, ok := s.(domain.WriteSecretsStep); ok {
+			progress(domain.StepProgress{Line: "wrote abc"})
+		}
+		return domain.StepResult{Status: domain.StepOK}
+	}
+	secrets := planned(domain.PhaseEnv, domain.WriteSecretsStep{
+		Path:    secretsPath,
+		Entries: []domain.SecretEntry{{Name: "A", Value: "ab"}, {Name: "B", Value: "abc"}},
+	})
+
+	_, events := runInstall(t, newRunInstaller(r), []domain.PlannedStep{secrets}, nil)
+
+	if !slices.Contains(describe(events), "line:0:wrote ***") {
+		t.Errorf("events = %v, want the whole longer value replaced", describe(events))
+	}
+}
+
 func TestRun_ScrubsSecretValuesFromTheFailureEventResultAndLog(t *testing.T) {
 	r := &scriptedRunner{}
 	r.handle = func(_ context.Context, s domain.Step, _ func(domain.StepProgress)) domain.StepResult {

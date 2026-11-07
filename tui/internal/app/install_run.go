@@ -218,15 +218,21 @@ func isVerificationProbe(ps domain.PlannedStep) bool {
 
 // secretScrubber masks every secret value of the plan; values never reach argv or output by design, this is the second line.
 func secretScrubber(steps []domain.PlannedStep) *strings.Replacer {
-	var pairs []string
+	var values []string
 	for _, ps := range steps {
 		if w, ok := ps.Step.(domain.WriteSecretsStep); ok {
 			for _, e := range w.Entries {
 				if e.Value != "" {
-					pairs = append(pairs, e.Value.Reveal(), secretMask)
+					values = append(values, e.Value.Reveal())
 				}
 			}
 		}
+	}
+	// NewReplacer matches in argument order, so a longer value must come before its prefix.
+	slices.SortStableFunc(values, func(a, b string) int { return len(b) - len(a) })
+	pairs := make([]string, 0, 2*len(values))
+	for _, v := range values {
+		pairs = append(pairs, v, secretMask)
 	}
 	return strings.NewReplacer(pairs...)
 }
