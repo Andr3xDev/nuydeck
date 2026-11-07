@@ -1,0 +1,756 @@
+version = 1
+
+# base-devel and git (paru prerequisites) are installed by the paru bootstrap, not listed here.
+# GPU driver packages live in hardware.toml.
+
+# ---- system (install-minimal.sh:29) ----
+
+[[package]]
+name = "base"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "linux"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "linux-headers"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "sudo"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "git"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "wget"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "rsync"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "tree"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "smartmontools"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "dosfstools"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "unzip"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "zip"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "xdg-utils"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "zram-generator"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "power-profiles-daemon"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "npm"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "system"
+
+[[package]]
+name = "gearlever"
+source = "aur"
+profiles = ["minimal", "full"]
+group = "system"
+
+# ---- network and bluetooth ----
+
+[[package]]
+name = "networkmanager"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "network"
+service = "NetworkManager.service"
+
+[[package]]
+name = "network-manager-applet"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "network"
+
+[[package]]
+name = "iwd"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "network"
+
+[[package]]
+name = "bluez"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "network"
+service = "bluetooth.service"
+
+[[package]]
+name = "bluez-utils"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "network"
+
+[[package]]
+name = "bluetui"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "network"
+
+# ---- audio ----
+
+[[package]]
+name = "pipewire"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "audio"
+
+[[package]]
+name = "pipewire-alsa"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "audio"
+
+[[package]]
+name = "pipewire-jack"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "audio"
+
+[[package]]
+name = "pipewire-pulse"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "audio"
+
+[[package]]
+name = "wireplumber"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "audio"
+
+[[package]]
+name = "gst-plugin-pipewire"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "audio"
+
+[[package]]
+name = "pavucontrol"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "audio"
+
+# ---- desktop ----
+
+[[package]]
+name = "hyprland"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "hypridle"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "hyprlock"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "hyprpicker"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "hyprshot"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "awww"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "uwsm"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "quickshell"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "xdg-desktop-portal-hyprland"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "xdg-desktop-portal-gnome"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "polkit-gnome"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "dunst"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "brightnessctl"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "grim"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "slurp"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "satty"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "wlr-randr"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "cliphist"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "qt5-wayland"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "qt6-wayland"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "python-gobject"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "xorg-server"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "xorg-xinit"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "xsettingsd"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+
+[[package]]
+name = "ly"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "desktop"
+service = "ly.service"
+
+# ---- theme and fonts ----
+
+[[package]]
+name = "gtk3"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "theme"
+
+[[package]]
+name = "gtk4"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "theme"
+
+[[package]]
+name = "nwg-look"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "theme"
+
+[[package]]
+name = "papirus-icon-theme"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "theme"
+
+[[package]]
+name = "phinger-cursors"
+source = "aur"
+profiles = ["minimal", "full"]
+group = "theme"
+
+[[package]]
+name = "noto-fonts-emoji"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "fonts"
+
+[[package]]
+name = "noto-fonts-cjk"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "fonts"
+
+[[package]]
+name = "ttf-jetbrains-mono-nerd"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "fonts"
+
+[[package]]
+name = "ttf-nerd-fonts-symbols"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "fonts"
+
+[[package]]
+name = "woff2-font-awesome"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "fonts"
+
+# ---- terminal and shell ----
+
+[[package]]
+name = "kitty"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "ghostty"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "zsh"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "starship"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "fzf"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "lsd"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "tmux"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "btop"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "htop"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "fastfetch"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "kotofetch"
+source = "aur"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "yazi"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "nano"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "vim"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+[[package]]
+name = "neovim"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "terminal"
+
+# ---- apps ----
+
+[[package]]
+name = "zen-browser-bin"
+source = "aur"
+profiles = ["minimal", "full"]
+group = "apps"
+
+[[package]]
+name = "libreoffice-fresh"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "apps"
+
+[[package]]
+name = "mpv"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "apps"
+
+[[package]]
+name = "obs-studio"
+source = "pacman"
+profiles = ["minimal", "full"]
+group = "apps"
+
+# ---- kernel and drivers (install-personal.sh:141) ----
+
+[[package]]
+name = "linux-zen"
+source = "pacman"
+profiles = ["full"]
+group = "kernel"
+
+[[package]]
+name = "linux-zen-headers"
+source = "pacman"
+profiles = ["full"]
+group = "kernel"
+
+# ---- development (install-personal.sh:145-179) ----
+
+[[package]]
+name = "docker"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+service = "docker.service"
+
+[[package]]
+name = "docker-buildx"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "docker-compose"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "visual-studio-code-bin"
+source = "aur"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "lazygit"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "git-delta"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "rust"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "cmake"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "maven"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "jdk-openjdk"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "terraform"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "tree-sitter-cli"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "luarocks"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "uv"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "sassc"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "pacman-contrib"
+source = "pacman"
+profiles = ["full"]
+group = "development"
+
+[[package]]
+name = "claude-code"
+source = "aur"
+profiles = ["full"]
+group = "ai"
+
+[[package]]
+name = "opencode"
+source = "pacman"
+profiles = ["full"]
+group = "ai"
+
+[[package]]
+name = "openspec"
+source = "aur"
+profiles = ["full"]
+group = "ai"
+
+[[package]]
+name = "engram-bin"
+source = "aur"
+profiles = ["full"]
+group = "ai"
+
+# ---- virtualization (install-personal.sh:167) ----
+
+[[package]]
+name = "qemu-full"
+source = "pacman"
+profiles = ["full"]
+group = "virtualization"
+
+[[package]]
+name = "virt-manager"
+source = "pacman"
+profiles = ["full"]
+group = "virtualization"
+
+[[package]]
+name = "virt-viewer"
+source = "pacman"
+profiles = ["full"]
+group = "virtualization"
+
+[[package]]
+name = "swtpm"
+source = "pacman"
+profiles = ["full"]
+group = "virtualization"
+
+[[package]]
+name = "dnsmasq"
+source = "pacman"
+profiles = ["full"]
+group = "virtualization"
+
+[[package]]
+name = "iptables"
+source = "pacman"
+profiles = ["full"]
+group = "virtualization"
+
+# ---- personal apps (install-personal.sh:157, 183-184, 190; install-spotify.sh:50-51) ----
+
+[[package]]
+name = "steam"
+source = "pacman"
+profiles = ["full"]
+group = "personal"
+
+[[package]]
+name = "discord"
+source = "pacman"
+profiles = ["full"]
+group = "personal"
+
+[[package]]
+name = "obsidian"
+source = "pacman"
+profiles = ["full"]
+group = "personal"
+
+[[package]]
+name = "spotify-launcher"
+source = "pacman"
+profiles = ["full"]
+group = "personal"
+
+[[package]]
+name = "spicetify-cli"
+source = "aur"
+profiles = ["full"]
+group = "personal"
+
+[[package]]
+name = "teams-for-linux"
+source = "aur"
+profiles = ["full"]
+group = "personal"
+
+[[package]]
+name = "proton-vpn-gtk-app"
+source = "pacman"
+profiles = ["full"]
+group = "personal"
+
+[[package]]
+name = "vial-appimage"
+source = "aur"
+profiles = ["full"]
+group = "personal"
+
+[[package]]
+name = "cabextract"
+source = "pacman"
+profiles = ["full"]
+group = "personal"
