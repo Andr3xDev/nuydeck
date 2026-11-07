@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"os/exec"
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
@@ -26,4 +27,21 @@ type Inspector interface {
 // Runner is the only way anything is modified; dry-run swaps in a recorder.
 type Runner interface {
 	Run(ctx context.Context, s domain.Step, progress func(domain.StepProgress)) domain.StepResult
+}
+
+// Terminal hands the real terminal to a child process, for the one interactive step.
+type Terminal interface {
+	Run(ctx context.Context, cmd *exec.Cmd) error
+}
+
+// SystemProbe holds the read-only machine queries of the install and the package screens; always the real implementation.
+type SystemProbe interface {
+	DetectGPUs(ctx context.Context) ([]domain.PCIDevice, error)
+	InstalledPackages(ctx context.Context) (map[string]bool, error)
+	ExplicitPackages(ctx context.Context) ([]string, error)
+	HasCommand(name string) bool
+	LoginShell(ctx context.Context) (string, error)
+	// ReadSystemFile reads an allow-listed system file; a missing file returns an error wrapping fs.ErrNotExist.
+	ReadSystemFile(path string) ([]byte, error)
+	IsRoot() bool
 }

@@ -31,10 +31,12 @@ type PlannedStep struct {
 
 // CommandStep runs an external command.
 type CommandStep struct {
-	Label       string
-	Argv        []string
-	Dir         string
-	Sudo        bool
+	Label string
+	Argv  []string
+	Dir   string
+	Sudo  bool
+	// UsesSudo marks a command that calls sudo itself, so the Runner must not prefix it but the run still guards its credentials.
+	UsesSudo    bool
 	Interactive bool
 	Quiet       bool
 }
