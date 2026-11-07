@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -59,7 +60,11 @@ func (p placeholder) View(width, height int) string {
 	return renderPanel(width, height, p.title)
 }
 
-const syncSection = 1
+const (
+	syncSection     = 1
+	installSection  = 3
+	packagesSection = 4
+)
 
 // Deps is what the shell needs from the app layer and startup.
 type Deps struct {
@@ -70,7 +75,13 @@ type Deps struct {
 	StateWarning  string
 	LastSync      *domain.LastSync
 	ManifestError error
+	// CatalogError replaces only the Install and Packages sections.
+	CatalogError error
+	Install      InstallDeps
+	Packages     PackageManager
 }
+
+const catalogFiles = "manifest/packages.toml, hardware.toml or secrets.toml"
 
 // initer is implemented by screens that start work when the program starts.
 type initer interface{ Init() tea.Cmd }
@@ -100,6 +111,12 @@ func NewRoot(variant string, dryRun bool, deps Deps) Root {
 		{"Dashboard", newDashboard(deps, keys, palette)},
 		{"Sync", newSync(deps, dryRun, keys, palette)},
 		{"Backups", newBackups(deps, keys, palette)},
+		{"Install", newInstall(deps.Install, keys, palette)},
+		{"Packages", newPackages(deps, keys, palette)},
+	}
+	if deps.CatalogError != nil {
+		catalogErr := ManifestError{err: deps.CatalogError, palette: palette, fix: catalogFiles}
+		sections[installSection].screen, sections[packagesSection].screen = catalogErr, catalogErr
 	}
 	if deps.ManifestError != nil {
 		sections = []section{{"Manifest", ManifestError{err: deps.ManifestError, palette: palette}}}
@@ -110,6 +127,15 @@ func NewRoot(variant string, dryRun bool, deps Deps) Root {
 		keys:     keys,
 		help:     h,
 		palette:  palette,
+	}
+}
+
+// WaitInstall blocks after the program exits until a started install has finished its bookkeeping, up to timeout.
+func (r Root) WaitInstall(timeout time.Duration) {
+	for _, s := range r.sections {
+		if in, ok := s.screen.(*Install); ok {
+			in.WaitRun(timeout)
+		}
 	}
 }
 
@@ -143,6 +169,8 @@ func (r Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			r.selected, r.panelFocus = syncSection, true
 			return r, nil
 		}
+	case execRequestMsg:
+		return r, tea.ExecProcess(msg.cmd, msg.finish)
 	}
 	return r.broadcast(msg)
 }
@@ -159,7 +187,9 @@ func (r Root) broadcast(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (r Root) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case r.panelModal() && !r.showHelp && (key.Matches(msg, r.keys.Back) || msg.String() == "q"):
+	case r.panelFocus && r.panelCapturesText() && msg.String() != "ctrl+c":
+		return r.forward(msg)
+	case r.panelFocus && r.panelModal() && !r.showHelp && (key.Matches(msg, r.keys.Back) || msg.String() == "q"):
 		return r.forward(msg)
 	case key.Matches(msg, r.keys.Quit):
 		for _, s := range r.sections {
@@ -201,6 +231,12 @@ func (r Root) enterSelected() tea.Cmd {
 func (r Root) panelModal() bool {
 	m, ok := r.sections[r.selected].screen.(interface{ Modal() bool })
 	return ok && m.Modal()
+}
+
+// panelCapturesText reports whether the active screen is reading typed text, so shell keys such as ? and q must reach it.
+func (r Root) panelCapturesText() bool {
+	c, ok := r.sections[r.selected].screen.(interface{ capturesText() bool })
+	return ok && c.capturesText()
 }
 
 func (r Root) forward(msg tea.Msg) (tea.Model, tea.Cmd) {

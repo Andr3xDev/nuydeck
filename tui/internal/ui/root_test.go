@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,6 +25,24 @@ func TestRootQuitKeys(t *testing.T) {
 		if _, ok := cmd().(tea.QuitMsg); !ok {
 			t.Errorf("%q: command did not quit", k.String())
 		}
+	}
+}
+
+func TestRootQuitsFromSidebarWhileInstallIsPastTheFirstPage(t *testing.T) {
+	root, in := newTestRoot(&fakeInstaller{plan: onePlan()})
+	toHardware(in)
+	root.selected = installSection
+	if in.page != pageHardware || root.panelFocus {
+		t.Fatalf("page=%v panelFocus=%v, want the hardware page with sidebar focus", in.page, root.panelFocus)
+	}
+
+	_, cmd := press(t, root, keyPress('q'))
+
+	if cmd == nil {
+		t.Fatal("no command returned")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Error("q with sidebar focus did not quit")
 	}
 }
 
@@ -55,6 +75,42 @@ func TestRootResizeKeepsSelectedSection(t *testing.T) {
 	r = m.(Root)
 	if r.selected != 2 || r.width != 60 || r.height != 20 {
 		t.Errorf("state after resize: selected=%d size=%dx%d", r.selected, r.width, r.height)
+	}
+}
+
+func sectionTitles(r Root) []string {
+	titles := make([]string, len(r.sections))
+	for i, s := range r.sections {
+		titles[i] = s.title
+	}
+	return titles
+}
+
+func TestRootSidebarOrderKeepsSyncSection(t *testing.T) {
+	r := NewRoot("", false, Deps{})
+
+	want := []string{"Dashboard", "Sync", "Backups", "Install", "Packages"}
+	if got := sectionTitles(r); !slices.Equal(got, want) {
+		t.Fatalf("sections = %v, want %v", got, want)
+	}
+	if _, ok := r.sections[syncSection].screen.(*Sync); !ok || syncSection != 1 {
+		t.Errorf("syncSection = %d does not hold the Sync screen", syncSection)
+	}
+}
+
+func TestRootCatalogErrorReplacesOnlyInstallAndPackages(t *testing.T) {
+	r := NewRoot("", false, Deps{CatalogError: errors.New("packages.toml:3: bad source")})
+
+	for i, s := range r.sections {
+		_, isError := s.screen.(ManifestError)
+		if want := i == installSection || i == packagesSection; isError != want {
+			t.Errorf("section %s: ManifestError = %v, want %v", s.title, isError, want)
+		}
+	}
+
+	r = NewRoot("", false, Deps{ManifestError: errors.New("paths.toml:1: bad"), CatalogError: errors.New("packages.toml:3: bad source")})
+	if got := sectionTitles(r); !slices.Equal(got, []string{"Manifest"}) {
+		t.Errorf("sections with a paths.toml error = %v, want only Manifest", got)
 	}
 }
 

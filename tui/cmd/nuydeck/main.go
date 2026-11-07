@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,13 +17,22 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
+	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/sysx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/tomlx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui"
 )
 
-const manifestRelPath = "manifest/paths.toml"
+const (
+	manifestRelPath = "manifest/paths.toml"
+	packagesRelPath = "manifest/packages.toml"
+	hardwareRelPath = "manifest/hardware.toml"
+	secretsRelPath  = "manifest/secrets.toml"
+)
+
+// installShutdownTimeout bounds the wait for a cancelled install to persist its log and reap its child.
+const installShutdownTimeout = 10 * time.Second
 
 var errRepoNotFound = errors.New("repo not found: pass --repo or run from inside the repo")
 
@@ -52,11 +62,17 @@ func run(dryRun bool, repoFlag string) error {
 	}
 	logRsyncVersion()
 
+	current, err := user.Current()
+	if err != nil {
+		return err
+	}
+
 	inspector := system.Inspector{Home: home}
 	state, stateWarning := inspector.LoadState(context.Background())
 	repo := resolveRepo(repoFlag, state.RepoPath, cwd)
 
-	var runner app.Runner = system.Runner{Home: home, ConfigDir: configDir}
+	bridge := ui.NewTerminalBridge()
+	var runner app.Runner = system.Runner{Home: home, ConfigDir: configDir, Terminal: bridge}
 	if dryRun {
 		runner = dryrun.Recorder{}
 	}
@@ -67,10 +83,56 @@ func run(dryRun bool, repoFlag string) error {
 		deps.ManifestError = errRepoNotFound
 	} else if deps.Entries, err = loadEntries(repo, home); err != nil {
 		deps.ManifestError = err
+	} else {
+		wireCatalog(&deps, svc, repo, home, current.Username, dryRun, runner, inspector)
 	}
 
-	_, err = tea.NewProgram(ui.NewRoot(fsx.ReadVariant(configDir), dryRun, deps)).Run()
+	root := ui.NewRoot(fsx.ReadVariant(configDir), dryRun, deps)
+	program := tea.NewProgram(root)
+	bridge.Attach(program)
+	_, err = program.Run()
+	root.WaitInstall(installShutdownTimeout)
 	return err
+}
+
+// wireCatalog loads the package, hardware and secret-name manifests and builds the install and packages use cases.
+// A bad manifest only sets CatalogError, so sync and backups keep working.
+func wireCatalog(deps *ui.Deps, svc *app.Service, repo, home, username string, dryRun bool, runner app.Runner, inspector app.Inspector) {
+	catalog, err := tomlx.LoadPackages(filepath.Join(repo, packagesRelPath))
+	if err != nil {
+		deps.CatalogError = err
+		return
+	}
+	drivers, err := tomlx.LoadHardware(filepath.Join(repo, hardwareRelPath))
+	if err != nil {
+		deps.CatalogError = err
+		return
+	}
+	secretNames, err := tomlx.LoadSecrets(filepath.Join(repo, secretsRelPath))
+	if err != nil {
+		deps.CatalogError = err
+		return
+	}
+
+	probe := sysx.Probe{User: username}
+	preview := dryrun.Recorder{}
+	deps.Install = ui.InstallDeps{
+		Installer: &app.Installer{
+			Service: svc, Probe: probe, Runner: runner, Preview: preview, Now: time.Now, DryRun: dryRun,
+			Catalog: catalog, Drivers: drivers, Entries: deps.Entries, Home: home, User: username,
+		},
+		Preview:     preview,
+		GPUs:        probe,
+		Paths:       inspector,
+		SecretsPath: filepath.Join(home, ".secrets"),
+		SecretNames: secretNames,
+		Catalog:     catalog,
+		Drivers:     drivers,
+	}
+	deps.Packages = &app.Packages{
+		Probe: probe, Inspector: inspector, Runner: runner, Catalog: catalog, Drivers: drivers,
+		CatalogPath: filepath.Join(repo, packagesRelPath),
+	}
 }
 
 // resolveRepo picks the repo: the --repo flag, then the saved state, then the

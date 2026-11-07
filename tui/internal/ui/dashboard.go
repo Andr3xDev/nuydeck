@@ -253,15 +253,21 @@ func (d *Dashboard) muted(s string) string {
 	return lipgloss.NewStyle().Foreground(d.palette.TextMuted).Render(s)
 }
 
-// ManifestError replaces every section when the manifest is invalid: no operation is offered.
+// ManifestError replaces the sections that depend on an invalid manifest: no operation is offered.
 type ManifestError struct {
 	err     error
 	palette theme.Palette
+	// fix names the file to repair; empty means manifest/paths.toml.
+	fix string
 }
 
 func (m ManifestError) Update(tea.Msg) (Screen, tea.Cmd) { return m, nil }
 
 func (m ManifestError) View(width, height int) string {
+	fix := m.fix
+	if fix == "" {
+		fix = "manifest/paths.toml"
+	}
 	title := lipgloss.NewStyle().Bold(true).Foreground(m.palette.Error).Render("Invalid manifest")
-	return renderPanel(width, height, title+"\n\n"+wrapToPanel(width, m.err.Error())+"\n\nFix manifest/paths.toml and restart.")
+	return renderPanel(width, height, title+"\n\n"+wrapToPanel(width, m.err.Error())+"\n\nFix "+fix+" and restart.")
 }
