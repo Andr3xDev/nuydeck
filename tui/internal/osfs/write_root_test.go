@@ -41,6 +41,27 @@ func TestWriteFile_WithRootRefusesPathsThatEscapeIt(t *testing.T) {
 	}
 }
 
+func TestWriteFile_WithRootWritesTheCleanedPathNotTheRawOne(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
+		t.Fatal(err)
+	}
+
+	run(t, plan.WriteFileStep{Path: root + "/linked/../f", Content: []byte("x"), Mode: 0o644, Root: root})
+
+	if exists(filepath.Join(base, "f")) {
+		t.Fatal("wrote outside root through symlink/..")
+	}
+}
+
 func TestWriteFile_WithRootWritesInsideRootAndReplacesSymlinkAtPath(t *testing.T) {
 	base := t.TempDir()
 	root := filepath.Join(base, "root")

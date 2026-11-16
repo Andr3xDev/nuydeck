@@ -20,8 +20,12 @@ func writeFile(s plan.WriteFileStep) plan.StepResult {
 	if s.Privileged {
 		return failed(fmt.Errorf("privileged write of %s needs the system runner", s.Path))
 	}
+	path := s.Path
 	if s.Root != "" {
-		root, path := filepath.Clean(s.Root), filepath.Clean(s.Path)
+		// The cleaned path is what gets checked and written; a raw "link/../f" would resolve elsewhere.
+		// The check-then-rename TOCTOU window is accepted for a single-user TUI.
+		root := filepath.Clean(s.Root)
+		path = filepath.Clean(s.Path)
 		if !fsutil.StrictlyWithin(root, path) {
 			return failed(fmt.Errorf("refusing to write %s: not inside %s", path, root))
 		}
@@ -33,10 +37,10 @@ func writeFile(s plan.WriteFileStep) plan.StepResult {
 			return failed(fmt.Errorf("refusing to write %s: parent resolves outside %s", path, root))
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(s.Path), userDirMode); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), userDirMode); err != nil {
 		return failed(err)
 	}
-	return done(fsutil.WriteAtomic(s.Path, s.Content, s.Mode))
+	return done(fsutil.WriteAtomic(path, s.Content, s.Mode))
 }
 
 func symlink(s plan.SymlinkStep) plan.StepResult {
