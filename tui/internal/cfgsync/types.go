@@ -25,6 +25,8 @@ type PlanItem struct {
 	Resolved manifest.ResolvedEntry
 	Src, Dst string
 	Blocked  bool
+	// Ignored marks an item the user ignores; it is offered but not selected by default.
+	Ignored bool
 	// RepoTime and PCTime are zero for the side that does not have the file.
 	RepoTime, PCTime time.Time
 	FileEntry        bool
@@ -64,6 +66,10 @@ type ApplyOptions struct {
 	// Backup is true when the user accepted the backup offer.
 	Backup bool
 	DryRun bool
+	// Hard makes Apply delete the selected Delete items; a normal run never deletes.
+	Hard bool
+	// Mandatory marks a backup that is taken without being offered.
+	Mandatory bool
 }
 
 type StepOutcome struct {

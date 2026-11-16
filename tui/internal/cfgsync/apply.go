@@ -35,7 +35,7 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 	}
 
 	func() {
-		if files := BackupFiles(items); opts.Backup && len(files) > 0 {
+		if files := BackupFiles(items, opts.Hard); opts.Backup && len(files) > 0 {
 			if _, ok := run(BackupStep(syncPlan.Direction, files)); !ok {
 				return
 			}
@@ -55,11 +55,13 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 				return
 			}
 		}
-		for _, it := range orderedDeletes(items) {
-			if _, ok := run(plan.DeleteStep{Path: it.DstPath(), Root: it.Dst}); !ok {
-				return
+		if opts.Hard {
+			for _, it := range orderedDeletes(items) {
+				if _, ok := run(plan.DeleteStep{Path: it.DstPath(), Root: it.Dst}); !ok {
+					return
+				}
+				applied[it.Key()] = true
 			}
-			applied[it.Key()] = true
 		}
 		if syncPlan.Direction != plan.Restore {
 			if _, ok := run(plan.SaveStateStep{State: s.syncedState(ctx, syncPlan.Direction)}); !ok {

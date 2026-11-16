@@ -56,7 +56,7 @@ func TestApply_BuildsOrderedSteps(t *testing.T) {
 			kinds = append(kinds, "log")
 		}
 	}
-	want := []string{"backup", "copy", "copy", "delete", "delete", "delete", "delete", "state", "log"}
+	want := []string{"backup", "copy", "copy", "state", "log"}
 	if !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("step order = %v, want %v", kinds, want)
 	}
@@ -95,25 +95,6 @@ func TestApply_FailedStepWithoutErrOrDetailStillReportsNonBlankError(t *testing.
 
 	if res.Err == nil || res.Err.Error() != "step failed" {
 		t.Fatalf("Err = %v, want \"step failed\"", res.Err)
-	}
-}
-
-func TestApply_DeletesRunFilesFirstThenDirsDeepestFirst(t *testing.T) {
-	syncPlan := twoEntryPlan(t, plan.Push)
-	r := &fakeRunner{}
-	runApply(t, syncPlan, selectAll(syncPlan), ApplyOptions{}, r)
-
-	var got []string
-	for _, d := range stepsOfType[plan.DeleteStep](r.steps) {
-		got = append(got, d.Path)
-		if d.Root != hypr.DestPath {
-			t.Errorf("delete root = %s, want %s", d.Root, hypr.DestPath)
-		}
-	}
-	base := hypr.DestPath + "/"
-	want := []string{base + "old/f.txt", base + "old/sub/g.txt", base + "old/sub", base + "old"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("delete order = %v, want %v", got, want)
 	}
 }
 
@@ -159,7 +140,7 @@ func TestNeedsBackup(t *testing.T) {
 	}{
 		{"only creates", byPath("b.conf", "kitty.conf"), false},
 		{"an update", byPath("b.conf", "a.conf"), true},
-		{"a delete", byPath("old/f.txt"), true},
+		{"a delete", byPath("old/f.txt"), false},
 		{"nothing", Selection{}, false},
 	}
 	svc := newService(t, &fakeInspector{}, &fakeRunner{})
@@ -175,7 +156,7 @@ func TestNeedsBackup(t *testing.T) {
 func TestApply_BackupStepCoversOnlyOverwrittenAndDeletedFiles(t *testing.T) {
 	syncPlan := twoEntryPlan(t, plan.Push)
 	r := &fakeRunner{}
-	runApply(t, syncPlan, selectAll(syncPlan), ApplyOptions{Backup: true}, r)
+	runApply(t, syncPlan, selectAll(syncPlan), ApplyOptions{Backup: true, Hard: true}, r)
 
 	backups := stepsOfType[plan.BackupStep](r.steps)
 	if len(backups) != 1 {

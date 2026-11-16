@@ -27,7 +27,7 @@ func (i *Installer) pushSteps(ctx context.Context, entries []manifest.ResolvedEn
 		sel[it.Key()] = syncPlan.Selection[it.Key()]
 	}
 	items := cfgsync.SelectedItems(syncPlan, sel)
-	if files := cfgsync.BackupFiles(items); len(files) > 0 {
+	if files := cfgsync.BackupFiles(items, false); len(files) > 0 {
 		steps = append(steps, cfgsync.BackupStep(plan.Push, files))
 	}
 	for _, g := range cfgsync.GroupByEntry(items) {
