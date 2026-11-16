@@ -1,4 +1,4 @@
-package app
+package drift
 
 import (
 	"context"
@@ -7,9 +7,26 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
+
+// Inspector holds the reads the drift check needs; always the real implementation.
+type Inspector interface {
+	PathKind(path string) (plan.NodeKind, error)
+	Diff(ctx context.Context, e manifest.ResolvedEntry, src, dst plan.Endpoint) ([]plan.Change, error)
+	RepoTimes(ctx context.Context, repoDir, rel string) (plan.RepoTimes, error)
+	NewestMTime(ctx context.Context, path string, filter manifest.Filter) (time.Time, error)
+	// ListBackups returns backups newest first.
+	ListBackups(ctx context.Context) ([]backup.Backup, error)
+}
+
+// Service holds the drift use case; the embedded sync service supplies the repo directory.
+type Service struct {
+	*cfgsync.Service
+	Inspector Inspector
+}
 
 type DriftState int
 

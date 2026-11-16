@@ -9,8 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
@@ -18,12 +18,12 @@ import (
 
 type fakeDrifter struct {
 	ctxs []context.Context
-	out  chan app.DriftResult
+	out  chan drift.DriftResult
 }
 
-func (f *fakeDrifter) Drift(ctx context.Context, _ []manifest.ResolvedEntry) <-chan app.DriftResult {
+func (f *fakeDrifter) Drift(ctx context.Context, _ []manifest.ResolvedEntry) <-chan drift.DriftResult {
 	f.ctxs = append(f.ctxs, ctx)
-	f.out = make(chan app.DriftResult, 8)
+	f.out = make(chan drift.DriftResult, 8)
 	return f.out
 }
 
@@ -52,12 +52,12 @@ func TestDashboardDiscardsStaleGeneration(t *testing.T) {
 		t.Error("refresh must cancel the prior context")
 	}
 
-	_, cmd := d.Update(driftEntryMsg{gen: staleGen, result: app.DriftResult{Entry: resolved("a"), State: app.DriftDrifted, Changes: 3}})
+	_, cmd := d.Update(driftEntryMsg{gen: staleGen, result: drift.DriftResult{Entry: resolved("a"), State: drift.DriftDrifted, Changes: 3}})
 	if cmd != nil || len(d.results) != 0 {
 		t.Fatal("stale result must be discarded without re-issuing the read")
 	}
 
-	_, cmd = d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("a"), State: app.DriftInSync}})
+	_, cmd = d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("a"), State: drift.DriftInSync}})
 	if cmd == nil || len(d.results) != 1 {
 		t.Fatal("current result must be stored and the read re-issued")
 	}
@@ -71,8 +71,8 @@ func TestDashboardPerEntryStates(t *testing.T) {
 		t.Fatal("entries must show a spinner before results arrive")
 	}
 
-	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("a"), State: app.DriftInSync}})
-	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("b"), State: app.DriftError, Err: errors.New("boom")}})
+	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("a"), State: drift.DriftInSync}})
+	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("b"), State: drift.DriftError, Err: errors.New("boom")}})
 	view := plainView(d)
 	for _, want := range []string{"in sync", "error"} {
 		if !strings.Contains(view, want) {
@@ -92,8 +92,8 @@ func TestDashboardPerEntryStates(t *testing.T) {
 func TestDashboardMissingSideStatuses(t *testing.T) {
 	d := newTestDashboard(&fakeDrifter{}, resolved("a"), resolved("b"))
 	d.Init()
-	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("a"), State: app.DriftDrifted, Missing: app.MissingInRepo}})
-	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("b"), State: app.DriftDrifted, Missing: app.MissingOnPC}})
+	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("a"), State: drift.DriftDrifted, Missing: drift.MissingInRepo}})
+	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("b"), State: drift.DriftDrifted, Missing: drift.MissingOnPC}})
 
 	view := plainView(d)
 	for _, want := range []string{"only in live", "not on PC"} {
@@ -106,7 +106,7 @@ func TestDashboardMissingSideStatuses(t *testing.T) {
 func TestDashboardMultilineErrorStaysOutOfRowAndShowsOnOneDetailLine(t *testing.T) {
 	d := newTestDashboard(&fakeDrifter{}, resolved("a"), resolved("b"))
 	d.Init()
-	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("b"), State: app.DriftError, Err: errors.New("first line\nsecond line")}})
+	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("b"), State: drift.DriftError, Err: errors.New("first line\nsecond line")}})
 
 	d.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	var detail []string
@@ -136,7 +136,7 @@ func TestDashboardErrorDetailLineKeepsViewWithinHeight(t *testing.T) {
 	}
 	d := newTestDashboard(&fakeDrifter{}, entries...)
 	d.Init()
-	d.Update(driftEntryMsg{gen: d.gen, result: app.DriftResult{Entry: resolved("a"), State: app.DriftError, Err: errors.New("boom")}})
+	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("a"), State: drift.DriftError, Err: errors.New("boom")}})
 
 	if n := strings.Count(d.View(100, 10), "\n") + 1; n > 10 {
 		t.Errorf("view has %d lines with a detail line, want at most 10", n)

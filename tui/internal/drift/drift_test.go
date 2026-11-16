@@ -1,4 +1,4 @@
-package app
+package drift
 
 import (
 	"context"
@@ -40,7 +40,7 @@ func TestDrift_ClassifiesEntriesAndIsolatesErrors(t *testing.T) {
 	entries := []manifest.ResolvedEntry{
 		resolved(manifest.RootConfig, "same"), resolved(manifest.RootConfig, "bad"), resolved(manifest.RootConfig, "drifty"),
 	}
-	got := collectDrift(newService(t, in, &fakeRunner{}), entries)
+	got := collectDrift(newService(t, in), entries)
 
 	if len(got) != 3 {
 		t.Fatalf("results = %d, want 3", len(got))
@@ -80,7 +80,7 @@ func TestDrift_MissingSideIsClassifiedWithoutDiff(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			in := &fakeInspector{diff: diffReturning(), kinds: tt.kinds}
-			r := collectDrift(newService(t, in, &fakeRunner{}), []manifest.ResolvedEntry{e})["hypr"]
+			r := collectDrift(newService(t, in), []manifest.ResolvedEntry{e})["hypr"]
 
 			if r.State != tt.wantState || r.Missing != tt.wantMissing {
 				t.Errorf("state = %v missing = %v, want %v %v", r.State, r.Missing, tt.wantState, tt.wantMissing)
@@ -109,7 +109,7 @@ func TestDrift_RunsAtMostFourDiffsAtOnce(t *testing.T) {
 	for i := range 12 {
 		entries = append(entries, resolved(manifest.RootConfig, fmt.Sprintf("e%d", i)))
 	}
-	if got := collectDrift(newService(t, in, &fakeRunner{}), entries); len(got) != 12 {
+	if got := collectDrift(newService(t, in), entries); len(got) != 12 {
 		t.Fatalf("results = %d, want 12", len(got))
 	}
 	if peak.Load() > DriftConcurrency {
@@ -127,7 +127,7 @@ func TestDrift_AttachesTimesAndNewestCompleteBackup(t *testing.T) {
 		repoTimes: map[string]plan.RepoTimes{"config/hypr": {Entry: repoT}},
 		backups:   []backup.Backup{{Dir: "/home/u/.nuydeck-backups/x.partial", Incomplete: true}, complete},
 	}
-	r := collectDrift(newService(t, in, &fakeRunner{}), []manifest.ResolvedEntry{e})["hypr"]
+	r := collectDrift(newService(t, in), []manifest.ResolvedEntry{e})["hypr"]
 
 	if !r.PCTime.Equal(pcT) || !r.RepoTimes.Entry.Equal(repoT) {
 		t.Errorf("times pc=%v repo=%v", r.PCTime, r.RepoTimes.Entry)
@@ -148,7 +148,7 @@ func TestDrift_CancelledContextYieldsOnlyErrorsAndClosesTheChannel(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	ch := newService(t, in, &fakeRunner{}).Drift(ctx, entries)
+	ch := newService(t, in).Drift(ctx, entries)
 
 	timeout := time.After(driftWait)
 	for {
@@ -169,7 +169,7 @@ func TestDrift_CancelledContextYieldsOnlyErrorsAndClosesTheChannel(t *testing.T)
 func TestDrift_ReturnsBeforeListBackupsFinishes(t *testing.T) {
 	gate := make(chan struct{})
 	in := &fakeInspector{diff: diffReturning(), listBackupsGate: gate}
-	svc := newService(t, in, &fakeRunner{})
+	svc := newService(t, in)
 	returned := make(chan (<-chan DriftResult), 1)
 	go func() {
 		returned <- svc.Drift(context.Background(), []manifest.ResolvedEntry{resolved(manifest.RootConfig, "a")})

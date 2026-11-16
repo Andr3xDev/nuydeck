@@ -10,9 +10,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
@@ -21,15 +21,15 @@ import (
 
 const timeLayout = "2006-01-02 15:04"
 
-// Drifter streams per-entry drift results; *app.Service implements it.
+// Drifter streams per-entry drift results; *drift.Service implements it.
 type Drifter interface {
-	Drift(ctx context.Context, entries []manifest.ResolvedEntry) <-chan app.DriftResult
+	Drift(ctx context.Context, entries []manifest.ResolvedEntry) <-chan drift.DriftResult
 }
 
 // driftEntryMsg carries one entry result; gen drops results of a superseded run.
 type driftEntryMsg struct {
 	gen    int
-	result app.DriftResult
+	result drift.DriftResult
 }
 
 type driftDoneMsg struct{ gen int }
@@ -45,13 +45,13 @@ type Dashboard struct {
 	keys       KeyMap
 	palette    theme.Palette
 	spinner    spinner.Model
-	results    map[manifest.Entry]app.DriftResult
+	results    map[manifest.Entry]drift.DriftResult
 	lastBackup *backup.Backup
 	cursor     int
 	gen        int
 	running    bool
 	cancel     context.CancelFunc
-	stream     <-chan app.DriftResult
+	stream     <-chan drift.DriftResult
 }
 
 type dashboardInfo struct {
@@ -68,7 +68,7 @@ func newDashboard(deps Deps, keys KeyMap, palette theme.Palette) *Dashboard {
 		keys:    keys,
 		palette: palette,
 		spinner: sp,
-		results: map[manifest.Entry]app.DriftResult{},
+		results: map[manifest.Entry]drift.DriftResult{},
 	}
 }
 
@@ -78,7 +78,7 @@ func (d *Dashboard) start() tea.Cmd {
 		d.cancel()
 	}
 	d.gen++
-	d.results = map[manifest.Entry]app.DriftResult{}
+	d.results = map[manifest.Entry]drift.DriftResult{}
 	d.lastBackup = nil
 	if d.drifter == nil || len(d.entries) == 0 {
 		d.running, d.cancel = false, nil
@@ -92,7 +92,7 @@ func (d *Dashboard) start() tea.Cmd {
 }
 
 // waitDrift reads one result and is re-issued by Update until the stream closes (D10).
-func waitDrift(gen int, ch <-chan app.DriftResult) tea.Cmd {
+func waitDrift(gen int, ch <-chan drift.DriftResult) tea.Cmd {
 	return func() tea.Msg {
 		r, ok := <-ch
 		if !ok {
@@ -199,7 +199,7 @@ func (d *Dashboard) errorDetail() string {
 		return ""
 	}
 	r, ok := d.results[d.entries[d.cursor].Entry]
-	if !ok || r.State != app.DriftError || r.Err == nil {
+	if !ok || r.State != drift.DriftError || r.Err == nil {
 		return ""
 	}
 	return lipgloss.NewStyle().Foreground(d.palette.Error).Render(strings.Join(strings.Fields(r.Err.Error()), " "))
@@ -239,13 +239,13 @@ func (d *Dashboard) entryStatus(e manifest.Entry) string {
 		return d.muted("-")
 	}
 	switch r.State {
-	case app.DriftError:
+	case drift.DriftError:
 		return lipgloss.NewStyle().Foreground(d.palette.Error).Render("error")
-	case app.DriftDrifted:
+	case drift.DriftDrifted:
 		switch r.Missing {
-		case app.MissingInRepo:
+		case drift.MissingInRepo:
 			return lipgloss.NewStyle().Foreground(d.palette.Warning).Render("only in live")
-		case app.MissingOnPC:
+		case drift.MissingOnPC:
 			return lipgloss.NewStyle().Foreground(d.palette.Warning).Render("not on PC")
 		}
 		return lipgloss.NewStyle().Foreground(d.palette.Warning).Render(fmt.Sprintf("drifted (%d changes)", r.Changes))

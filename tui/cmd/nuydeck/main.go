@@ -16,6 +16,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
@@ -84,8 +85,9 @@ func run(dryRun bool, repoFlag string) error {
 	}
 
 	backups := &backup.Service{Service: svc.Service, Lister: inspector}
+	drifter := &drift.Service{Service: svc.Service, Inspector: inspector}
 
-	deps := ui.Deps{Drifter: svc, Syncer: svc, Backups: backups, StateWarning: stateWarning, LastSync: state.LastSync}
+	deps := ui.Deps{Drifter: drifter, Syncer: svc, Backups: backups, StateWarning: stateWarning, LastSync: state.LastSync}
 	if repo == "" {
 		deps.ManifestError = errRepoNotFound
 	} else if deps.Entries, err = loadEntries(repo, home); err != nil {

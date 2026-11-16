@@ -38,8 +38,6 @@ type fakeInspector struct {
 	backups     []backup.Backup
 	state       state.State
 	stateWarn   string
-	// listBackupsGate, when set, blocks ListBackups until it is closed.
-	listBackupsGate chan struct{}
 }
 
 func (f *fakeInspector) Diff(_ context.Context, e manifest.ResolvedEntry, src, dst plan.Endpoint) ([]plan.Change, error) {
@@ -67,9 +65,6 @@ func (f *fakeInspector) RepoTimes(_ context.Context, _, rel string) (plan.RepoTi
 }
 
 func (f *fakeInspector) ListBackups(context.Context) ([]backup.Backup, error) {
-	if f.listBackupsGate != nil {
-		<-f.listBackupsGate
-	}
 	return f.backups, nil
 }
 
