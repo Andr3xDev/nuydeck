@@ -12,6 +12,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
@@ -19,7 +20,7 @@ const timeLayout = "2006-01-02 15:04"
 
 // Drifter streams per-entry drift results; *app.Service implements it.
 type Drifter interface {
-	Drift(ctx context.Context, entries []domain.ResolvedEntry) <-chan app.DriftResult
+	Drift(ctx context.Context, entries []manifest.ResolvedEntry) <-chan app.DriftResult
 }
 
 // driftEntryMsg carries one entry result; gen drops results of a superseded run.
@@ -36,12 +37,12 @@ type startSyncMsg struct{ direction domain.Direction }
 // Dashboard lists drift per managed entry, computed in the background.
 type Dashboard struct {
 	drifter    Drifter
-	entries    []domain.ResolvedEntry
+	entries    []manifest.ResolvedEntry
 	state      dashboardInfo
 	keys       KeyMap
 	palette    theme.Palette
 	spinner    spinner.Model
-	results    map[domain.Entry]app.DriftResult
+	results    map[manifest.Entry]app.DriftResult
 	lastBackup *domain.Backup
 	cursor     int
 	gen        int
@@ -64,7 +65,7 @@ func newDashboard(deps Deps, keys KeyMap, palette theme.Palette) *Dashboard {
 		keys:    keys,
 		palette: palette,
 		spinner: sp,
-		results: map[domain.Entry]app.DriftResult{},
+		results: map[manifest.Entry]app.DriftResult{},
 	}
 }
 
@@ -74,7 +75,7 @@ func (d *Dashboard) start() tea.Cmd {
 		d.cancel()
 	}
 	d.gen++
-	d.results = map[domain.Entry]app.DriftResult{}
+	d.results = map[manifest.Entry]app.DriftResult{}
 	d.lastBackup = nil
 	if d.drifter == nil || len(d.entries) == 0 {
 		d.running, d.cancel = false, nil
@@ -226,7 +227,7 @@ func (d *Dashboard) lastBackupText() string {
 	return "none"
 }
 
-func (d *Dashboard) entryStatus(e domain.Entry) string {
+func (d *Dashboard) entryStatus(e manifest.Entry) string {
 	r, ok := d.results[e]
 	if !ok {
 		if d.running {

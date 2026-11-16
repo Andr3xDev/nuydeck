@@ -14,6 +14,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/rsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/tomlx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 // Inspector is the real app.Inspector.
@@ -21,7 +22,7 @@ type Inspector struct {
 	Home string
 }
 
-func (i Inspector) Diff(ctx context.Context, e domain.ResolvedEntry, src, dst domain.Endpoint) ([]domain.Change, error) {
+func (i Inspector) Diff(ctx context.Context, e manifest.ResolvedEntry, src, dst domain.Endpoint) ([]domain.Change, error) {
 	kind, err := fsx.PathKind(src.Path)
 	if err != nil {
 		return nil, err
@@ -40,7 +41,7 @@ func (i Inspector) Diff(ctx context.Context, e domain.ResolvedEntry, src, dst do
 func (Inspector) LinkTarget(path string) (string, error)        { return fsx.LinkTarget(path) }
 func (Inspector) PathKind(path string) (domain.NodeKind, error) { return fsx.PathKind(path) }
 
-func (Inspector) NewestMTime(_ context.Context, path string, filter domain.Filter) (time.Time, error) {
+func (Inspector) NewestMTime(_ context.Context, path string, filter manifest.Filter) (time.Time, error) {
 	return fsx.NewestMTime(path, filter)
 }
 
@@ -97,7 +98,7 @@ func (r Runner) Run(ctx context.Context, s domain.Step, progress func(domain.Ste
 		}
 		return fsx.Runner{Home: r.Home}.Run(ctx, s, progress)
 	case domain.AppendPackageStep:
-		return done(tomlx.AppendPackage(s.Path, s.Entry))
+		return done(manifest.AppendPackage(s.Path, s.Entry))
 	case domain.CommandStep:
 		return r.runCommand(ctx, s, progress)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/rsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const (
@@ -161,14 +162,14 @@ func reserveBackupDir(backupsDir, ts string) (final, partial string, err error) 
 }
 
 func writeBackup(ctx context.Context, s domain.BackupStep, dir string, created time.Time) error {
-	byRoot := map[domain.Root][]string{}
+	byRoot := map[manifest.Root][]string{}
 	meta := backupMeta{Created: created, Direction: int(s.Direction), Roots: map[string]string{}}
 	for _, f := range s.Files {
 		byRoot[f.Root] = append(byRoot[f.Root], f.Path)
 		meta.Roots[string(f.Root)] = s.Roots[f.Root]
 		meta.Files = append(meta.Files, string(f.Root)+"/"+f.Path)
 	}
-	roots := make([]domain.Root, 0, len(byRoot))
+	roots := make([]manifest.Root, 0, len(byRoot))
 	for root := range byRoot {
 		roots = append(roots, root)
 	}
@@ -226,9 +227,9 @@ func ListBackups(_ context.Context, home string) ([]domain.Backup, error) {
 			b.Unreadable = true
 		default:
 			b.Created, b.Direction, b.Files = meta.Created, domain.Direction(meta.Direction), meta.Files
-			b.Roots = map[domain.Root]string{}
+			b.Roots = map[manifest.Root]string{}
 			for root, dest := range meta.Roots {
-				b.Roots[domain.Root(root)] = dest
+				b.Roots[manifest.Root(root)] = dest
 			}
 		}
 		backups = append(backups, b)
@@ -282,7 +283,7 @@ func LinkTarget(p string) (string, error) { return os.Readlink(p) }
 // NewestMTime returns the newest mtime of the files and links under root,
 // ignoring paths the filter excludes. Symlinked dirs are not followed; a
 // missing root yields the zero time.
-func NewestMTime(root string, filter domain.Filter) (time.Time, error) {
+func NewestMTime(root string, filter manifest.Filter) (time.Time, error) {
 	var newest time.Time
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -292,7 +293,7 @@ func NewestMTime(root string, filter domain.Filter) (time.Time, error) {
 		if err != nil {
 			return err
 		}
-		if rel != "." && domain.Excluded(filepath.ToSlash(rel), d.IsDir(), filter) {
+		if rel != "." && manifest.Excluded(filepath.ToSlash(rel), d.IsDir(), filter) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}

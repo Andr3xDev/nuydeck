@@ -3,10 +3,12 @@ package domain
 import (
 	"path"
 	"strings"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 // ClassifyLink inspects a link target; linkDir is the link's directory relative to root and entries are the managed entries.
-func ClassifyLink(root Root, linkDir, target string, entries []Entry) LinkWarning {
+func ClassifyLink(root manifest.Root, linkDir, target string, entries []manifest.Entry) LinkWarning {
 	if path.IsAbs(target) {
 		return WarnAbsoluteLink
 	}
@@ -15,7 +17,7 @@ func ClassifyLink(root Root, linkDir, target string, entries []Entry) LinkWarnin
 		return WarnLeavesManagedSet
 	}
 	for _, e := range entries {
-		if e.Root == root && IsWithin(resolved, e.Path) {
+		if e.Root == root && manifest.IsWithin(resolved, e.Path) {
 			return NoLinkWarning
 		}
 	}

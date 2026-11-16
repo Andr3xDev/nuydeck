@@ -1,4 +1,4 @@
-package tomlx
+package manifest
 
 import (
 	"bytes"
@@ -10,28 +10,26 @@ import (
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
-
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 )
 
 // LoadManifest reads and validates the manifest; home expands the leading ~ of root destinations.
 // Errors are prefixed with the file's base name and the offending line when known.
-func LoadManifest(path, home string) (domain.Manifest, error) {
+func LoadManifest(path, home string) (Manifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return domain.Manifest{}, err
+		return Manifest{}, err
 	}
 	name := filepath.Base(path)
-	var m domain.Manifest
+	var m Manifest
 	if err := decodeStrict(name, data, &m); err != nil {
-		return domain.Manifest{}, err
+		return Manifest{}, err
 	}
 
 	for root, dest := range m.Roots {
 		m.Roots[root] = expandHome(dest, home)
 	}
 	if err := m.Validate(home); err != nil {
-		return domain.Manifest{}, entryFailure(name, data, "entry", err)
+		return Manifest{}, entryFailure(name, data, "entry", err)
 	}
 	return m, nil
 }
@@ -67,7 +65,7 @@ func decodeStrict(name string, data []byte, out any) error {
 
 // entryFailure locates a validation error at the header line of the offending [[table]] entry.
 func entryFailure(name string, data []byte, table string, err error) error {
-	var entryErr *domain.EntryError
+	var entryErr *EntryError
 	if !errors.As(err, &entryErr) {
 		return failAt(name, 0, err.Error())
 	}

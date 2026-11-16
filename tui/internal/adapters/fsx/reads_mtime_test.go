@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 func TestNewestMTime(t *testing.T) {
@@ -28,7 +28,7 @@ func TestNewestMTime(t *testing.T) {
 		root := t.TempDir()
 		touch(t, filepath.Join(root, "a"), time.Hour)
 		touch(t, filepath.Join(root, "d", "b"), 2*time.Hour)
-		got, err := NewestMTime(root, domain.Filter{})
+		got, err := NewestMTime(root, manifest.Filter{})
 		if err != nil || !got.Equal(base.Add(2*time.Hour)) {
 			t.Fatalf("got %v, %v", got, err)
 		}
@@ -38,7 +38,7 @@ func TestNewestMTime(t *testing.T) {
 		touch(t, filepath.Join(root, "a"), time.Hour)
 		touch(t, filepath.Join(root, "cache", "x"), 5*time.Hour)
 		touch(t, filepath.Join(root, "d", "y.log"), 6*time.Hour)
-		got, err := NewestMTime(root, domain.Filter{Excludes: []string{"/cache", "/d/*.log"}})
+		got, err := NewestMTime(root, manifest.Filter{Excludes: []string{"/cache", "/d/*.log"}})
 		if err != nil || !got.Equal(base.Add(time.Hour)) {
 			t.Fatalf("got %v, %v", got, err)
 		}
@@ -50,13 +50,13 @@ func TestNewestMTime(t *testing.T) {
 		if err := os.Symlink(outside, filepath.Join(root, "link")); err != nil {
 			t.Fatal(err)
 		}
-		got, err := NewestMTime(root, domain.Filter{})
+		got, err := NewestMTime(root, manifest.Filter{})
 		if err != nil || got.Equal(base.Add(9*time.Hour)) || got.Before(base.Add(time.Hour)) {
 			t.Fatalf("got %v, %v", got, err)
 		}
 	})
 	t.Run("missing root", func(t *testing.T) {
-		got, err := NewestMTime(filepath.Join(t.TempDir(), "nope"), domain.Filter{})
+		got, err := NewestMTime(filepath.Join(t.TempDir(), "nope"), manifest.Filter{})
 		if err != nil || !got.IsZero() {
 			t.Fatalf("got %v, %v", got, err)
 		}

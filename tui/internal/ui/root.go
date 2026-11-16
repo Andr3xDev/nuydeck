@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
@@ -71,7 +72,7 @@ type Deps struct {
 	Drifter       Drifter
 	Syncer        Syncer
 	Backups       BackupManager
-	Entries       []domain.ResolvedEntry
+	Entries       []manifest.ResolvedEntry
 	StateWarning  string
 	LastSync      *domain.LastSync
 	ManifestError error

@@ -16,6 +16,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 type execCall struct {
@@ -435,7 +436,7 @@ func TestAppendPackageStep_AppendsThroughTomlx(t *testing.T) {
 	if err := os.WriteFile(path, []byte("version = 1\n\n[[package]]\nname = \"a\"\nsource = \"pacman\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res := newRunner(&fakeExec{}).Run(context.Background(), domain.AppendPackageStep{Path: path, Entry: domain.Package{Name: "htop", Source: domain.SourceAUR}}, nil)
+	res := newRunner(&fakeExec{}).Run(context.Background(), domain.AppendPackageStep{Path: path, Entry: manifest.Package{Name: "htop", Source: manifest.SourceAUR}}, nil)
 	if res.Status != domain.StepOK {
 		t.Fatalf("result = %+v", res)
 	}

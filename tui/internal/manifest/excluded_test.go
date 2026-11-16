@@ -1,9 +1,9 @@
-package domain_test
+package manifest_test
 
 import (
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 func TestExcluded(t *testing.T) {
@@ -27,7 +27,7 @@ func TestExcluded(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := domain.Excluded(tt.rel, tt.isDir, domain.Filter{Excludes: tt.rules}); got != tt.want {
+			if got := manifest.Excluded(tt.rel, tt.isDir, manifest.Filter{Excludes: tt.rules}); got != tt.want {
 				t.Errorf("Excluded(%q, %v, %v) = %v, want %v", tt.rel, tt.isDir, tt.rules, got, tt.want)
 			}
 		})

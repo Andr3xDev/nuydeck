@@ -13,6 +13,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const waitTimeout = 2 * time.Second
@@ -45,7 +46,7 @@ func onePlan() app.InstallPlan {
 func newTestRoot(f *fakeInstaller, secretNames ...string) (Root, *Install) {
 	root := NewRoot("", false, Deps{Install: InstallDeps{
 		Installer:   f,
-		Drivers:     []domain.Driver{{ID: "amd", VendorID: "1002"}, {ID: "nvidia", VendorID: "10de"}},
+		Drivers:     []manifest.Driver{{ID: "amd", VendorID: "1002"}, {ID: "nvidia", VendorID: "10de"}},
 		SecretNames: secretNames,
 	}})
 	return root, root.sections[installSection].screen.(*Install)

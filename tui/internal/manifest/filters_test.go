@@ -1,14 +1,14 @@
-package domain_test
+package manifest_test
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 func TestFiltersFor(t *testing.T) {
-	spec := []domain.Exclude{
+	spec := []manifest.Exclude{
 		{Root: "config", Pattern: "hypr/configs/monitors_generated.lua"},
 		{Root: "config", Pattern: "quickshell/lucyna/legacy/monitors/data/identities.json"},
 		{Root: "config", Pattern: "systemd/user/*.wants/"},
@@ -18,8 +18,8 @@ func TestFiltersFor(t *testing.T) {
 	}
 	tests := []struct {
 		name      string
-		entry     domain.Entry
-		excludes  []domain.Exclude
+		entry     manifest.Entry
+		excludes  []manifest.Exclude
 		wantRules []string
 		wantWhole bool
 	}{
@@ -39,14 +39,14 @@ func TestFiltersFor(t *testing.T) {
 		{"glob segment excludes the matching entry whole", entry("config", "systemd/user/default.target.wants"), spec, nil, true},
 		{"entry inside a glob-matched dir is excluded whole", entry("config", "systemd/user/default.target.wants/x"), spec, nil, true},
 		{"glob does not span segments", entry("config", "systemd/user/a/b.wants"), spec, nil, false},
-		{"several patterns keep manifest order", entry("config", "hypr"), []domain.Exclude{
+		{"several patterns keep manifest order", entry("config", "hypr"), []manifest.Exclude{
 			{Root: "config", Pattern: "hypr/b.lua"}, {Root: "config", Pattern: "hypr/a.lua"}},
 			[]string{"/b.lua", "/a.lua"}, false},
 		{"no excludes", entry("config", "hypr"), nil, nil, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, whole := domain.FiltersFor(tt.entry, tt.excludes)
+			got, whole := manifest.FiltersFor(tt.entry, tt.excludes)
 			if whole != tt.wantWhole {
 				t.Errorf("wholeEntryExcluded = %v, want %v", whole, tt.wantWhole)
 			}

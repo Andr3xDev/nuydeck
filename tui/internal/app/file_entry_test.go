@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 // A file entry is itemized by rsync under its base name; the entry endpoints are the file paths themselves.
 func TestFileEntry_PlanAndApplyUseTheFilePathsDirectly(t *testing.T) {
-	e := resolved(domain.RootHome, ".zshrc")
+	e := resolved(manifest.RootHome, ".zshrc")
 	repoT := testNow.Add(-time.Hour)
 	in := &fakeInspector{
 		diff:      diffReturning(change(".zshrc", domain.Update, domain.KindFile)),
@@ -21,12 +22,12 @@ func TestFileEntry_PlanAndApplyUseTheFilePathsDirectly(t *testing.T) {
 	}
 	r := &fakeRunner{}
 	svc := newService(t, in, r)
-	plan, err := svc.PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{e})
+	plan, err := svc.PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{e})
 	if err != nil {
 		t.Fatal(err)
 	}
 	it := plan.Items[0]
-	if it.Key() != (ItemKey{Root: domain.RootHome, Path: ".zshrc"}) || it.Blocked || !it.RepoTime.Equal(repoT) || !it.PCTime.Equal(testNow) {
+	if it.Key() != (ItemKey{Root: manifest.RootHome, Path: ".zshrc"}) || it.Blocked || !it.RepoTime.Equal(repoT) || !it.PCTime.Equal(testNow) {
 		t.Fatalf("item = %+v key = %+v", it, it.Key())
 	}
 
@@ -37,8 +38,8 @@ func TestFileEntry_PlanAndApplyUseTheFilePathsDirectly(t *testing.T) {
 		t.Fatalf("copy steps = %+v", copies)
 	}
 	backups := stepsOfType[domain.BackupStep](r.steps)
-	want := domain.BackupFile{Root: domain.RootHome, Path: ".zshrc"}
-	if len(backups) != 1 || !reflect.DeepEqual(backups[0].Files, []domain.BackupFile{want}) || backups[0].Roots[domain.RootHome] != testHome {
+	want := domain.BackupFile{Root: manifest.RootHome, Path: ".zshrc"}
+	if len(backups) != 1 || !reflect.DeepEqual(backups[0].Files, []domain.BackupFile{want}) || backups[0].Roots[manifest.RootHome] != testHome {
 		t.Fatalf("backup steps = %+v", backups)
 	}
 }

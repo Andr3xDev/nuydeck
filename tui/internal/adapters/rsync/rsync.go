@@ -12,6 +12,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 // Item is one parsed itemize line: a create, update or delete.
@@ -26,7 +27,7 @@ type Item struct {
 type Request struct {
 	Src, Dst string
 	Dir      bool
-	Filter   domain.Filter
+	Filter   manifest.Filter
 }
 
 type PlanResult struct {

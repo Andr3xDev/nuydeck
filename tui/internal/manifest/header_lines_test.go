@@ -1,4 +1,4 @@
-package tomlx
+package manifest
 
 import (
 	"reflect"

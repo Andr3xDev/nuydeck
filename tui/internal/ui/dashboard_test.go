@@ -11,6 +11,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 type fakeDrifter struct {
@@ -18,17 +19,17 @@ type fakeDrifter struct {
 	out  chan app.DriftResult
 }
 
-func (f *fakeDrifter) Drift(ctx context.Context, _ []domain.ResolvedEntry) <-chan app.DriftResult {
+func (f *fakeDrifter) Drift(ctx context.Context, _ []manifest.ResolvedEntry) <-chan app.DriftResult {
 	f.ctxs = append(f.ctxs, ctx)
 	f.out = make(chan app.DriftResult, 8)
 	return f.out
 }
 
-func resolved(path string) domain.ResolvedEntry {
-	return domain.ResolvedEntry{Entry: domain.Entry{Root: "home", Path: path}}
+func resolved(path string) manifest.ResolvedEntry {
+	return manifest.ResolvedEntry{Entry: manifest.Entry{Root: "home", Path: path}}
 }
 
-func newTestDashboard(f *fakeDrifter, entries ...domain.ResolvedEntry) *Dashboard {
+func newTestDashboard(f *fakeDrifter, entries ...manifest.ResolvedEntry) *Dashboard {
 	root := NewRoot("", false, Deps{Drifter: f, Entries: entries})
 	return root.sections[0].screen.(*Dashboard)
 }
@@ -127,7 +128,7 @@ func TestDashboardMultilineErrorStaysOutOfRowAndShowsOnOneDetailLine(t *testing.
 }
 
 func TestDashboardErrorDetailLineKeepsViewWithinHeight(t *testing.T) {
-	var entries []domain.ResolvedEntry
+	var entries []manifest.ResolvedEntry
 	for _, p := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"} {
 		entries = append(entries, resolved(p))
 	}
@@ -141,7 +142,7 @@ func TestDashboardErrorDetailLineKeepsViewWithinHeight(t *testing.T) {
 }
 
 func TestDashboardRowsFitHeightAndFollowCursor(t *testing.T) {
-	var entries []domain.ResolvedEntry
+	var entries []manifest.ResolvedEntry
 	for _, p := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t"} {
 		entries = append(entries, resolved(p))
 	}

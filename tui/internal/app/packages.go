@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 // Packages manages explicit packages that the catalog does not know.
@@ -12,8 +13,8 @@ type Packages struct {
 	Probe       SystemProbe
 	Inspector   Inspector
 	Runner      Runner
-	Catalog     []domain.Package
-	Drivers     []domain.Driver
+	Catalog     []manifest.Package
+	Drivers     []manifest.Driver
 	CatalogPath string
 }
 
@@ -24,13 +25,13 @@ func (p *Packages) ListUnregistered(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	state, _ := p.Inspector.LoadState(ctx)
-	return domain.Unregistered(explicit, p.Catalog, p.Drivers, domain.ParuPrerequisites, state.IgnoredPackages), nil
+	return domain.Unregistered(explicit, p.Catalog, p.Drivers, manifest.ParuPrerequisites, state.IgnoredPackages), nil
 }
 
 // AddPackage appends pkg to the catalog file; an invalid or duplicate package is rejected before any write.
 // The in-memory catalog follows only a real write, so a dry-run leaves it untouched.
-func (p *Packages) AddPackage(ctx context.Context, pkg domain.Package) (domain.StepResult, error) {
-	if err := domain.ValidatePackages(append(slices.Clone(p.Catalog), pkg)); err != nil {
+func (p *Packages) AddPackage(ctx context.Context, pkg manifest.Package) (domain.StepResult, error) {
+	if err := manifest.ValidatePackages(append(slices.Clone(p.Catalog), pkg)); err != nil {
 		return domain.StepResult{}, err
 	}
 	res := p.Runner.Run(ctx, domain.AppendPackageStep{Path: p.CatalogPath, Entry: pkg}, nil)

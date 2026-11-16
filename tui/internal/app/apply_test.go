@@ -7,16 +7,17 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 var (
-	hypr  = resolved(domain.RootConfig, "hypr")
-	kitty = resolved(domain.RootConfig, "kitty")
+	hypr  = resolved(manifest.RootConfig, "hypr")
+	kitty = resolved(manifest.RootConfig, "kitty")
 )
 
 func twoEntryPlan(t *testing.T, dir domain.Direction) SyncPlan {
 	t.Helper()
-	return planOf(t, dir, []domain.ResolvedEntry{hypr, kitty}, map[string][]domain.Change{
+	return planOf(t, dir, []manifest.ResolvedEntry{hypr, kitty}, map[string][]domain.Change{
 		"hypr": {
 			change("a.conf", domain.Update, domain.KindFile),
 			change("b.conf", domain.Create, domain.KindFile),
@@ -184,16 +185,16 @@ func TestApply_BackupStepCoversOnlyOverwrittenAndDeletedFiles(t *testing.T) {
 		got[f] = true
 	}
 	for _, p := range []string{"hypr/a.conf", "hypr/old/f.txt", "hypr/old/sub/g.txt"} {
-		if !got[domain.BackupFile{Root: domain.RootConfig, Path: p}] {
+		if !got[domain.BackupFile{Root: manifest.RootConfig, Path: p}] {
 			t.Errorf("backup misses %s", p)
 		}
 	}
 	for _, p := range []string{"hypr/b.conf", "kitty/kitty.conf"} {
-		if got[domain.BackupFile{Root: domain.RootConfig, Path: p}] {
+		if got[domain.BackupFile{Root: manifest.RootConfig, Path: p}] {
 			t.Errorf("backup includes created file %s", p)
 		}
 	}
-	if backups[0].Roots[domain.RootConfig] != rootDirs[domain.RootConfig] || backups[0].Direction != domain.Push {
+	if backups[0].Roots[manifest.RootConfig] != rootDirs[manifest.RootConfig] || backups[0].Direction != domain.Push {
 		t.Errorf("backup roots/direction = %v / %v", backups[0].Roots, backups[0].Direction)
 	}
 }

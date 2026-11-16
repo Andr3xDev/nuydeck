@@ -18,9 +18,8 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/sysx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/tomlx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui"
 )
 
@@ -98,17 +97,17 @@ func run(dryRun bool, repoFlag string) error {
 // wireCatalog loads the package, hardware and secret-name manifests and builds the install and packages use cases.
 // A bad manifest only sets CatalogError, so sync and backups keep working.
 func wireCatalog(deps *ui.Deps, svc *app.Service, repo, home, username string, dryRun bool, runner app.Runner, inspector app.Inspector) {
-	catalog, err := tomlx.LoadPackages(filepath.Join(repo, packagesRelPath))
+	catalog, err := manifest.LoadPackages(filepath.Join(repo, packagesRelPath))
 	if err != nil {
 		deps.CatalogError = err
 		return
 	}
-	drivers, err := tomlx.LoadHardware(filepath.Join(repo, hardwareRelPath))
+	drivers, err := manifest.LoadHardware(filepath.Join(repo, hardwareRelPath))
 	if err != nil {
 		deps.CatalogError = err
 		return
 	}
-	secretNames, err := tomlx.LoadSecrets(filepath.Join(repo, secretsRelPath))
+	secretNames, err := manifest.LoadSecrets(filepath.Join(repo, secretsRelPath))
 	if err != nil {
 		deps.CatalogError = err
 		return
@@ -160,21 +159,21 @@ func resolveRepo(flagRepo, stateRepo, cwd string) string {
 	}
 }
 
-func loadEntries(repo, home string) ([]domain.ResolvedEntry, error) {
-	manifest, err := tomlx.LoadManifest(filepath.Join(repo, manifestRelPath), home)
+func loadEntries(repo, home string) ([]manifest.ResolvedEntry, error) {
+	loaded, err := manifest.LoadManifest(filepath.Join(repo, manifestRelPath), home)
 	if err != nil {
 		return nil, err
 	}
-	var entries []domain.ResolvedEntry
-	for _, e := range manifest.Entries {
-		filter, whole := domain.FiltersFor(e, manifest.Excludes)
+	var entries []manifest.ResolvedEntry
+	for _, e := range loaded.Entries {
+		filter, whole := manifest.FiltersFor(e, loaded.Excludes)
 		if whole {
 			continue
 		}
-		entries = append(entries, domain.ResolvedEntry{
+		entries = append(entries, manifest.ResolvedEntry{
 			Entry:    e,
 			RepoPath: filepath.Join(repo, string(e.Root), e.Path),
-			DestPath: filepath.Join(manifest.Roots[e.Root], e.Path),
+			DestPath: filepath.Join(loaded.Roots[e.Root], e.Path),
 			Filter:   filter,
 		})
 	}

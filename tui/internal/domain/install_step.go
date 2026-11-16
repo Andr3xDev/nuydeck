@@ -1,6 +1,10 @@
 package domain
 
-import "io/fs"
+import (
+	"io/fs"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+)
 
 // Phase is a stage of the guided install; the numeric order is the execution order.
 type Phase int
@@ -70,7 +74,7 @@ type SecretEntry struct {
 // AppendPackageStep adds one package block to the catalog file.
 type AppendPackageStep struct {
 	Path  string
-	Entry Package
+	Entry manifest.Package
 }
 
 func (CommandStep) isStep()       {}

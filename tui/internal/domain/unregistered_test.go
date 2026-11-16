@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 func TestCatalogUnregistered(t *testing.T) {
-	catalog := []domain.Package{{Name: "hyprland", Source: domain.SourcePacman, Profiles: []string{"full"}}}
-	drivers := []domain.Driver{{ID: "nvidia", VendorID: "10de", Packages: []string{"nvidia-utils"}}}
+	catalog := []manifest.Package{{Name: "hyprland", Source: manifest.SourcePacman, Profiles: []string{"full"}}}
+	drivers := []manifest.Driver{{ID: "nvidia", VendorID: "10de", Packages: []string{"nvidia-utils"}}}
 	prerequisites := []string{"base-devel", "git"}
 
 	tests := []struct {

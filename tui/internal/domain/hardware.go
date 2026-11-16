@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const displayClassPrefix = "03"
@@ -57,7 +59,7 @@ func lastHexGroup(s string) string {
 }
 
 // ProposeDrivers returns the drivers whose vendor owns a display device; with none detected it proposes all drivers and reports false.
-func ProposeDrivers(devices []PCIDevice, drivers []Driver) ([]string, bool) {
+func ProposeDrivers(devices []PCIDevice, drivers []manifest.Driver) ([]string, bool) {
 	var ids []string
 	for _, d := range drivers {
 		matches := slices.ContainsFunc(devices, func(dev PCIDevice) bool {

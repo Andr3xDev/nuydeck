@@ -10,6 +10,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const (
@@ -56,7 +57,7 @@ func writeSecrets(s domain.WriteSecretsStep) domain.StepResult {
 	for i, e := range s.Entries {
 		names[i] = e.Name
 	}
-	if err := domain.ValidateSecretNames(names); err != nil {
+	if err := manifest.ValidateSecretNames(names); err != nil {
 		return failed(err)
 	}
 	var body strings.Builder

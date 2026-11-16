@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 // Records are shaped like real `lspci -vmmnn` output (tab after the tag, blank line between records).
@@ -25,7 +26,7 @@ const (
 	lspciGarbage = "this is not lspci output\n\n\x00\x01 [zz]\nClass: no tab [0300]\n"
 )
 
-var testDrivers = []domain.Driver{
+var testDrivers = []manifest.Driver{
 	{ID: "intel", VendorID: "8086"},
 	{ID: "nvidia", VendorID: "10de"},
 	{ID: "amd", VendorID: "1002"},
@@ -80,7 +81,7 @@ func TestProposeDrivers(t *testing.T) {
 }
 
 func TestProposeDriversMatchesVendorCaseInsensitively(t *testing.T) {
-	ids, detected := domain.ProposeDrivers(domain.ParseLspci(lspciNvidiaGPU), []domain.Driver{{ID: "nvidia", VendorID: "10DE"}})
+	ids, detected := domain.ProposeDrivers(domain.ParseLspci(lspciNvidiaGPU), []manifest.Driver{{ID: "nvidia", VendorID: "10DE"}})
 	if !detected || !slices.Equal(ids, []string{"nvidia"}) {
 		t.Fatalf("ProposeDrivers() = %v, %v", ids, detected)
 	}

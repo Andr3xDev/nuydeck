@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const (
@@ -94,15 +95,15 @@ func (i *Installer) Plan(ctx context.Context, d Draft) (InstallPlan, error) {
 	return b.plan, nil
 }
 
-func (d Draft) includes(p domain.Package) bool {
+func (d Draft) includes(p manifest.Package) bool {
 	if d.Profile == ProfileCustom {
 		return slices.Contains(d.Packages, p.Name)
 	}
 	return slices.Contains(p.Profiles, d.Profile)
 }
 
-func (i *Installer) selectedDrivers(d Draft) []domain.Driver {
-	return slices.DeleteFunc(slices.Clone(i.Drivers), func(dr domain.Driver) bool { return !slices.Contains(d.Drivers, dr.ID) })
+func (i *Installer) selectedDrivers(d Draft) []manifest.Driver {
+	return slices.DeleteFunc(slices.Clone(i.Drivers), func(dr manifest.Driver) bool { return !slices.Contains(d.Drivers, dr.ID) })
 }
 
 // selectedPackages returns the sorted pacman and AUR names; driver packages and the paru prerequisites go to pacman.
@@ -110,7 +111,7 @@ func (i *Installer) selectedPackages(d Draft) (pacman, aur []string) {
 	for _, p := range i.Catalog {
 		switch {
 		case !d.includes(p):
-		case p.Source == domain.SourceAUR:
+		case p.Source == manifest.SourceAUR:
 			aur = append(aur, p.Name)
 		default:
 			pacman = append(pacman, p.Name)
@@ -120,7 +121,7 @@ func (i *Installer) selectedPackages(d Draft) (pacman, aur []string) {
 		pacman = append(pacman, dr.Packages...)
 	}
 	if len(aur) > 0 {
-		pacman = append(pacman, domain.ParuPrerequisites...)
+		pacman = append(pacman, manifest.ParuPrerequisites...)
 	}
 	slices.Sort(pacman)
 	slices.Sort(aur)
@@ -210,9 +211,9 @@ func (i *Installer) planLogind(b *planBuilder) {
 }
 
 func (i *Installer) planSync(ctx context.Context, b *planBuilder) error {
-	var fonts, configs []domain.ResolvedEntry
+	var fonts, configs []manifest.ResolvedEntry
 	for _, e := range i.Entries {
-		if e.Root == domain.RootFonts {
+		if e.Root == manifest.RootFonts {
 			fonts = append(fonts, e)
 		} else {
 			configs = append(configs, e)
@@ -220,7 +221,7 @@ func (i *Installer) planSync(ctx context.Context, b *planBuilder) error {
 	}
 	for _, group := range []struct {
 		phase   domain.Phase
-		entries []domain.ResolvedEntry
+		entries []manifest.ResolvedEntry
 	}{{domain.PhaseConfigs, configs}, {domain.PhaseFonts, fonts}} {
 		steps, notices, blocking, err := i.pushSteps(ctx, group.entries)
 		if err != nil {

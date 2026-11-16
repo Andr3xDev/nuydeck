@@ -1,12 +1,10 @@
-package tomlx
+package manifest
 
 import (
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
-
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 )
 
 const (
@@ -51,7 +49,7 @@ type secretRow struct {
 }
 
 // LoadPackages reads and validates the package catalog.
-func LoadPackages(path string) ([]domain.Package, error) {
+func LoadPackages(path string) ([]Package, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -59,23 +57,23 @@ func LoadPackages(path string) ([]domain.Package, error) {
 	return parsePackages(filepath.Base(path), data)
 }
 
-func parsePackages(name string, data []byte) ([]domain.Package, error) {
+func parsePackages(name string, data []byte) ([]Package, error) {
 	var doc packageDoc
 	if err := decodeStrict(name, data, &doc); err != nil {
 		return nil, err
 	}
-	pkgs := make([]domain.Package, len(doc.Package))
+	pkgs := make([]Package, len(doc.Package))
 	for i, p := range doc.Package {
-		pkgs[i] = domain.Package{Name: p.Name, Source: domain.Source(p.Source), Profiles: p.Profiles, Group: p.Group, Service: p.Service}
+		pkgs[i] = Package{Name: p.Name, Source: Source(p.Source), Profiles: p.Profiles, Group: p.Group, Service: p.Service}
 	}
-	if err := domain.ValidatePackages(pkgs); err != nil {
+	if err := ValidatePackages(pkgs); err != nil {
 		return nil, entryFailure(name, data, packageTable, err)
 	}
 	return pkgs, nil
 }
 
 // LoadHardware reads and validates the GPU driver catalog.
-func LoadHardware(path string) ([]domain.Driver, error) {
+func LoadHardware(path string) ([]Driver, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -85,11 +83,11 @@ func LoadHardware(path string) ([]domain.Driver, error) {
 	if err := decodeStrict(name, data, &doc); err != nil {
 		return nil, err
 	}
-	drivers := make([]domain.Driver, len(doc.Driver))
+	drivers := make([]Driver, len(doc.Driver))
 	for i, d := range doc.Driver {
-		drivers[i] = domain.Driver{ID: d.ID, VendorID: d.VendorID, Packages: d.Packages, Services: d.Services}
+		drivers[i] = Driver{ID: d.ID, VendorID: d.VendorID, Packages: d.Packages, Services: d.Services}
 	}
-	if err := domain.ValidateDrivers(drivers); err != nil {
+	if err := ValidateDrivers(drivers); err != nil {
 		return nil, entryFailure(name, data, driverTable, err)
 	}
 	return drivers, nil
@@ -112,7 +110,7 @@ func LoadSecrets(path string) ([]string, error) {
 	for _, s := range doc.Secret {
 		names = append(names, s.Name)
 	}
-	if err := domain.ValidateSecretNames(names); err != nil {
+	if err := ValidateSecretNames(names); err != nil {
 		return nil, entryFailure(filepath.Base(path), data, secretTable, err)
 	}
 	return names, nil

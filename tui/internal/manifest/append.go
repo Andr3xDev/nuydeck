@@ -1,4 +1,4 @@
-package tomlx
+package manifest
 
 import (
 	"fmt"
@@ -7,13 +7,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 )
 
 // AppendPackage adds one [[package]] block after the existing text, keeping comments and order.
 // The candidate is validated before it replaces the file.
-func AppendPackage(path string, entry domain.Package) error {
+func AppendPackage(path string, entry Package) error {
 	existing, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -33,7 +32,7 @@ func AppendPackage(path string, entry domain.Package) error {
 	return fsutil.WriteAtomic(path, []byte(candidate), info.Mode().Perm())
 }
 
-func renderPackage(p domain.Package) string {
+func renderPackage(p Package) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n[[package]]\nname = %s\nsource = %s\n", strconv.Quote(p.Name), strconv.Quote(string(p.Source)))
 	if len(p.Profiles) > 0 {

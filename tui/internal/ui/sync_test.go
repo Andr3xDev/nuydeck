@@ -12,6 +12,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 type fakeSyncer struct {
@@ -23,7 +24,7 @@ type fakeSyncer struct {
 	applyCalls    int
 }
 
-func (f *fakeSyncer) PlanSync(context.Context, domain.Direction, []domain.ResolvedEntry) (app.SyncPlan, error) {
+func (f *fakeSyncer) PlanSync(context.Context, domain.Direction, []manifest.ResolvedEntry) (app.SyncPlan, error) {
 	return f.plan, nil
 }
 
@@ -54,7 +55,7 @@ func runCmds(s *Sync, cmd tea.Cmd) {
 }
 
 func planItem(path string, blocked bool) app.PlanItem {
-	return app.PlanItem{Change: domain.Change{Entry: domain.Entry{Root: "home", Path: path}, Type: domain.Update}, Blocked: blocked}
+	return app.PlanItem{Change: domain.Change{Entry: manifest.Entry{Root: "home", Path: path}, Type: domain.Update}, Blocked: blocked}
 }
 
 func newPreview(f *fakeSyncer, dryRun bool) *Sync {

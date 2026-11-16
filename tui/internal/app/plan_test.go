@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 func TestPlanSync_DiffDirectionFollowsSyncDirection(t *testing.T) {
-	e := resolved(domain.RootConfig, "hypr")
+	e := resolved(manifest.RootConfig, "hypr")
 	tests := []struct {
 		name         string
 		dir          domain.Direction
@@ -23,7 +24,7 @@ func TestPlanSync_DiffDirectionFollowsSyncDirection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			in := &fakeInspector{diff: diffReturning()}
-			if _, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), tt.dir, []domain.ResolvedEntry{e}); err != nil {
+			if _, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), tt.dir, []manifest.ResolvedEntry{e}); err != nil {
 				t.Fatal(err)
 			}
 			if len(in.diffCalls) != 1 || in.diffCalls[0] != (diffCall{tt.wantSrc, tt.dst}) {
@@ -34,12 +35,12 @@ func TestPlanSync_DiffDirectionFollowsSyncDirection(t *testing.T) {
 }
 
 func TestPlanSync_MissingSourceSkipsEntryAndPlanContinues(t *testing.T) {
-	gone, ok := resolved(domain.RootConfig, "gone"), resolved(domain.RootConfig, "ok")
+	gone, ok := resolved(manifest.RootConfig, "gone"), resolved(manifest.RootConfig, "ok")
 	in := &fakeInspector{
 		diff:  diffReturning(change("a.conf", domain.Create, domain.KindFile)),
 		kinds: map[string]domain.NodeKind{gone.RepoPath: domain.KindNone},
 	}
-	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{gone, ok})
+	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{gone, ok})
 	if err != nil {
 		t.Fatalf("missing source must not fail the plan: %v", err)
 	}
@@ -58,9 +59,9 @@ func TestPlanSync_MissingSourceSkipsEntryAndPlanContinues(t *testing.T) {
 }
 
 func TestPlanSync_RecomputesOnEveryCall(t *testing.T) {
-	e := resolved(domain.RootConfig, "hypr")
+	e := resolved(manifest.RootConfig, "hypr")
 	calls := 0
-	in := &fakeInspector{diff: func(domain.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {
+	in := &fakeInspector{diff: func(manifest.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {
 		calls++
 		if calls == 1 {
 			return []domain.Change{change("a.conf", domain.Update, domain.KindFile)}, nil
@@ -68,20 +69,20 @@ func TestPlanSync_RecomputesOnEveryCall(t *testing.T) {
 		return nil, nil
 	}}
 	svc := newService(t, in, &fakeRunner{})
-	first, _ := svc.PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{e})
-	second, _ := svc.PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{e})
+	first, _ := svc.PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{e})
+	second, _ := svc.PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{e})
 	if len(first.Items) != 1 || len(second.Items) != 0 || calls != 2 {
 		t.Fatalf("items %d then %d after %d diffs; want 1 then 0 after 2", len(first.Items), len(second.Items), calls)
 	}
 }
 
 func TestPlanSync_ExcludedChangesAreNeverOffered(t *testing.T) {
-	e := resolved(domain.RootConfig, "nuydeck", "/logs/")
+	e := resolved(manifest.RootConfig, "nuydeck", "/logs/")
 	in := &fakeInspector{diff: diffReturning(
 		change("logs/2026-11.jsonl", domain.Create, domain.KindFile),
 		change("a.conf", domain.Create, domain.KindFile),
 	)}
-	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{e})
+	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{e})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +92,7 @@ func TestPlanSync_ExcludedChangesAreNeverOffered(t *testing.T) {
 }
 
 func TestPlanSync_LinkWarningsUseSourceSideTarget(t *testing.T) {
-	e := resolved(domain.RootConfig, "hypr")
+	e := resolved(manifest.RootConfig, "hypr")
 	in := &fakeInspector{
 		diff: diffReturning(
 			change("abs.lnk", domain.Create, domain.KindLink),
@@ -104,7 +105,7 @@ func TestPlanSync_LinkWarningsUseSourceSideTarget(t *testing.T) {
 			e.RepoPath + "/in.lnk":  "sub/file",
 		},
 	}
-	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{e})
+	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{e})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,12 +122,12 @@ func TestPlanSync_LinkWarningsUseSourceSideTarget(t *testing.T) {
 }
 
 func TestPlanSync_ItemBelowSymlinkedParentIsBlockedAndNotSelected(t *testing.T) {
-	e := resolved(domain.RootConfig, "hypr")
+	e := resolved(manifest.RootConfig, "hypr")
 	in := &fakeInspector{
 		diff:  diffReturning(change("sub/a.conf", domain.Create, domain.KindFile), change("b.conf", domain.Create, domain.KindFile)),
 		kinds: map[string]domain.NodeKind{e.DestPath + "/sub": domain.KindLink},
 	}
-	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{e})
+	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{e})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,12 +144,12 @@ func TestPlanSync_ItemBelowSymlinkedParentIsBlockedAndNotSelected(t *testing.T) 
 }
 
 func TestPlanSync_DefaultSelectionIsAllExceptStateIgnores(t *testing.T) {
-	e := resolved(domain.RootConfig, "hypr")
+	e := resolved(manifest.RootConfig, "hypr")
 	in := &fakeInspector{
 		diff:  diffReturning(change("a.conf", domain.Update, domain.KindFile), change("b.conf", domain.Update, domain.KindFile)),
 		state: domain.State{Ignores: []string{"config:hypr/b.conf"}},
 	}
-	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{e})
+	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{e})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,14 +164,14 @@ func TestPlanSync_DefaultSelectionIsAllExceptStateIgnores(t *testing.T) {
 
 func TestPlanSync_CorruptStateWarningIsCarriedNotFatal(t *testing.T) {
 	in := &fakeInspector{diff: diffReturning(), stateWarn: "state.toml is corrupt, using defaults"}
-	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{resolved(domain.RootConfig, "hypr")})
+	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{resolved(manifest.RootConfig, "hypr")})
 	if err != nil || plan.StateWarning != in.stateWarn {
 		t.Fatalf("err = %v, warning = %q", err, plan.StateWarning)
 	}
 }
 
 func TestPlanSync_LastUpdatedShowsOnlySidesThatHaveTheFile(t *testing.T) {
-	e := resolved(domain.RootConfig, "hypr")
+	e := resolved(manifest.RootConfig, "hypr")
 	repoT, pcT := testNow.Add(-48*time.Hour), testNow.Add(-2*time.Hour)
 	in := &fakeInspector{
 		diff: diffReturning(
@@ -181,7 +182,7 @@ func TestPlanSync_LastUpdatedShowsOnlySidesThatHaveTheFile(t *testing.T) {
 		repoTimes: map[string]domain.RepoTimes{"config/hypr": {Files: map[string]time.Time{"upd.conf": repoT, "new.conf": repoT}}},
 		mtimes:    map[string]time.Time{e.DestPath + "/upd.conf": pcT, e.DestPath + "/old.conf": pcT},
 	}
-	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []domain.ResolvedEntry{e})
+	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{e})
 	if err != nil {
 		t.Fatal(err)
 	}

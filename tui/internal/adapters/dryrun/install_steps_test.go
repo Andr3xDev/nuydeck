@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const sentinel = "SENTINEL-secret-value-4d2b"
@@ -42,7 +43,7 @@ func TestRecorderRendersInstallSteps(t *testing.T) {
 			[]string{"would write", "/home/u/.config/nuydeck/theme/name"}},
 		{"symlink", domain.SymlinkStep{Path: "/home/u/.config/hypr/configs/gpu_env.lua", Target: "gpu_env_nvidia.lua"},
 			[]string{"would link", "/home/u/.config/hypr/configs/gpu_env.lua", "gpu_env_nvidia.lua"}},
-		{"append package", domain.AppendPackageStep{Path: "/repo/manifest/packages.toml", Entry: domain.Package{Name: "htop", Source: domain.SourceAUR}},
+		{"append package", domain.AppendPackageStep{Path: "/repo/manifest/packages.toml", Entry: manifest.Package{Name: "htop", Source: manifest.SourceAUR}},
 			[]string{"would append", "htop", "aur", "/repo/manifest/packages.toml"}},
 	}
 	for _, c := range cases {
@@ -103,7 +104,7 @@ func TestRecorderInstallStepsTouchNoFileAndLeakNoSentinel(t *testing.T) {
 		domain.WriteFileStep{Path: filepath.Join(dir, "theme", "name"), Content: []byte("nuytek"), Mode: 0o644},
 		domain.SymlinkStep{Path: filepath.Join(dir, "gpu_env.lua"), Target: "gpu_env_amd.lua"},
 		domain.WriteSecretsStep{Path: filepath.Join(dir, ".secrets"), Entries: []domain.SecretEntry{{Name: "A", Value: sentinel}}},
-		domain.AppendPackageStep{Path: filepath.Join(dir, "packages.toml"), Entry: domain.Package{Name: "htop", Source: domain.SourcePacman}},
+		domain.AppendPackageStep{Path: filepath.Join(dir, "packages.toml"), Entry: manifest.Package{Name: "htop", Source: manifest.SourcePacman}},
 	}
 	for _, s := range steps {
 		res := Recorder{}.Run(context.Background(), s, nil)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const (
@@ -61,8 +62,8 @@ func newPlanFixture(t *testing.T) *planFixture {
 	in := &fakeInspector{
 		kinds:       kinds,
 		linkTargets: map[string]string{},
-		diff: func(e domain.ResolvedEntry, _, _ domain.Endpoint) ([]domain.Change, error) {
-			if e.Root == domain.RootFonts {
+		diff: func(e manifest.ResolvedEntry, _, _ domain.Endpoint) ([]domain.Change, error) {
+			if e.Root == manifest.RootFonts {
 				return []domain.Change{change("a.ttf", domain.Create, domain.KindFile)}, nil
 			}
 			return []domain.Change{
@@ -85,24 +86,24 @@ func newPlanFixture(t *testing.T) *planFixture {
 		Runner:  runner,
 		Preview: runner,
 		Now:     func() time.Time { return testNow },
-		Catalog: []domain.Package{
-			{Name: "hyprland", Source: domain.SourcePacman, Profiles: []string{"minimal", "full"}},
-			{Name: "networkmanager", Source: domain.SourcePacman, Profiles: []string{"minimal", "full"}, Service: "NetworkManager.service"},
-			{Name: "ly", Source: domain.SourcePacman, Profiles: []string{"minimal", "full"}, Service: "ly.service"},
-			{Name: "docker", Source: domain.SourcePacman, Profiles: []string{"full"}, Service: "docker.service"},
-			{Name: "steam", Source: domain.SourcePacman, Profiles: []string{"full"}},
-			{Name: "zen-browser-bin", Source: domain.SourceAUR, Profiles: []string{"full"}},
+		Catalog: []manifest.Package{
+			{Name: "hyprland", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}},
+			{Name: "networkmanager", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}, Service: "NetworkManager.service"},
+			{Name: "ly", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}, Service: "ly.service"},
+			{Name: "docker", Source: manifest.SourcePacman, Profiles: []string{"full"}, Service: "docker.service"},
+			{Name: "steam", Source: manifest.SourcePacman, Profiles: []string{"full"}},
+			{Name: "zen-browser-bin", Source: manifest.SourceAUR, Profiles: []string{"full"}},
 		},
-		Drivers: []domain.Driver{
+		Drivers: []manifest.Driver{
 			{ID: "intel", VendorID: "8086", Packages: []string{"intel-media-driver", "vulkan-intel"}},
 			{ID: "nvidia", VendorID: "10de", Packages: []string{"nvidia-open-dkms", "nvidia-utils"},
 				Services: []string{"nvidia-suspend.service", "nvidia-hibernate.service", "nvidia-resume.service"}},
 			{ID: "amd", VendorID: "1002", Packages: []string{"mesa", "vulkan-radeon"}},
 		},
-		Entries: []domain.ResolvedEntry{
-			resolved(domain.RootConfig, "hypr"),
+		Entries: []manifest.ResolvedEntry{
+			resolved(manifest.RootConfig, "hypr"),
 			{
-				Entry:    domain.Entry{Root: domain.RootFonts, Path: "JetBrains"},
+				Entry:    manifest.Entry{Root: manifest.RootFonts, Path: "JetBrains"},
 				RepoPath: testRepo + "/fonts/JetBrains",
 				DestPath: testHome + "/.local/share/fonts/JetBrains",
 			},
@@ -112,7 +113,7 @@ func newPlanFixture(t *testing.T) *planFixture {
 	}
 	return &planFixture{
 		probe: probe, in: in, runner: runner, inst: inst,
-		draft: Draft{Profile: domain.ProfileFull, Drivers: []string{"intel", "nvidia"}},
+		draft: Draft{Profile: manifest.ProfileFull, Drivers: []string{"intel", "nvidia"}},
 	}
 }
 
@@ -265,12 +266,12 @@ func TestPlan_PacmanStepUpgradesAndInstallsSelection(t *testing.T) {
 	}{
 		{
 			name:       "minimal selects only minimal packages",
-			draft:      Draft{Profile: domain.ProfileMinimal},
+			draft:      Draft{Profile: manifest.ProfileMinimal},
 			wantPacman: []string{"hyprland", "ly", "networkmanager"},
 		},
 		{
 			name:  "full adds drivers and the paru prerequisites",
-			draft: Draft{Profile: domain.ProfileFull, Drivers: []string{"nvidia", "intel"}},
+			draft: Draft{Profile: manifest.ProfileFull, Drivers: []string{"nvidia", "intel"}},
 			wantPacman: []string{
 				"base-devel", "docker", "git", "hyprland", "intel-media-driver", "ly", "networkmanager",
 				"nvidia-open-dkms", "nvidia-utils", "steam", "vulkan-intel",
@@ -333,7 +334,7 @@ func TestPlan_ParuBootstrapOnlyWhenNeededAndUnattended(t *testing.T) {
 		{name: "paru absent", mutate: func(*planFixture) {}, wantClone: true, wantMakepkg: true},
 		{name: "paru present", mutate: func(f *planFixture) { f.probe.commands["paru"] = true }},
 		{name: "clone cache exists", mutate: func(f *planFixture) { f.in.kinds[paruCacheDir] = domain.KindDir }, wantMakepkg: true},
-		{name: "no AUR package", mutate: func(f *planFixture) { f.draft.Profile = domain.ProfileMinimal }},
+		{name: "no AUR package", mutate: func(f *planFixture) { f.draft.Profile = manifest.ProfileMinimal }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -705,25 +706,25 @@ func TestPlan_ServicesAreEnabledOnlyForSelectedPackagesAndDrivers(t *testing.T) 
 	}{
 		{
 			name:  "full with nvidia",
-			draft: Draft{Profile: domain.ProfileFull, Drivers: []string{"nvidia"}},
+			draft: Draft{Profile: manifest.ProfileFull, Drivers: []string{"nvidia"}},
 			wantUnits: sorted("NetworkManager.service", "docker.service", "ly.service",
 				"nvidia-suspend.service", "nvidia-hibernate.service", "nvidia-resume.service"),
 		},
 		{
 			name:      "minimal without drivers",
-			draft:     Draft{Profile: domain.ProfileMinimal},
+			draft:     Draft{Profile: manifest.ProfileMinimal},
 			wantUnits: sorted("NetworkManager.service", "ly.service"),
 		},
 		{
 			name:       "another display manager is enabled",
-			draft:      Draft{Profile: domain.ProfileMinimal},
+			draft:      Draft{Profile: manifest.ProfileMinimal},
 			linkTarget: "/usr/lib/systemd/system/sddm.service",
 			wantUnits:  []string{"NetworkManager.service"},
 			wantNotice: true,
 		},
 		{
 			name:       "ly is already the display manager",
-			draft:      Draft{Profile: domain.ProfileMinimal},
+			draft:      Draft{Profile: manifest.ProfileMinimal},
 			linkTarget: "/usr/lib/systemd/system/ly.service",
 			wantUnits:  sorted("NetworkManager.service", "ly.service"),
 		},
@@ -755,8 +756,8 @@ func TestPlan_ServicesAreEnabledOnlyForSelectedPackagesAndDrivers(t *testing.T) 
 
 func TestPlan_ServicesAreEnabledOnceEach(t *testing.T) {
 	f := newPlanFixture(t)
-	f.inst.Catalog = append(f.inst.Catalog, domain.Package{Name: "docker-rootless", Source: domain.SourcePacman, Profiles: []string{"full"}, Service: "docker.service"})
-	f.draft = Draft{Profile: domain.ProfileFull}
+	f.inst.Catalog = append(f.inst.Catalog, manifest.Package{Name: "docker-rootless", Source: manifest.SourcePacman, Profiles: []string{"full"}, Service: "docker.service"})
+	f.draft = Draft{Profile: manifest.ProfileFull}
 
 	var units []string
 	for _, c := range runnableCommands(f.plan(t), domain.PhaseServices) {
@@ -805,7 +806,7 @@ func TestPlan_ThemeStateWritesNameAndVariantWithNadirDefault(t *testing.T) {
 
 func TestPlan_RerunOnAnInstalledMachineSkipsCompletedEffects(t *testing.T) {
 	f := newPlanFixture(t)
-	f.draft = Draft{Profile: domain.ProfileMinimal, Drivers: []string{"intel"}}
+	f.draft = Draft{Profile: manifest.ProfileMinimal, Drivers: []string{"intel"}}
 	for _, name := range []string{"hyprland", "intel-media-driver", "ly", "networkmanager", "vulkan-intel"} {
 		f.probe.installed[name] = true
 	}

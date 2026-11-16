@@ -1,4 +1,4 @@
-package domain
+package manifest
 
 // Root names a managed destination root; the repo folder has the same name.
 type Root string

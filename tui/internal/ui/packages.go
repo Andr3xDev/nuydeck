@@ -13,13 +13,14 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 // PackageManager is the packages use-case surface the screen needs; *app.Packages implements it.
 type PackageManager interface {
 	ListUnregistered(ctx context.Context) ([]string, error)
-	AddPackage(ctx context.Context, pkg domain.Package) (domain.StepResult, error)
+	AddPackage(ctx context.Context, pkg manifest.Package) (domain.StepResult, error)
 	IgnorePackage(ctx context.Context, name string) domain.StepResult
 }
 
@@ -47,7 +48,7 @@ const (
 	formRows
 )
 
-var sourceChoices = []domain.Source{"", domain.SourcePacman, domain.SourceAUR}
+var sourceChoices = []manifest.Source{"", manifest.SourcePacman, manifest.SourceAUR}
 
 type addForm struct {
 	name    string
@@ -231,12 +232,12 @@ func (p *Packages) submit() tea.Cmd {
 		return nil
 	}
 	f.err = ""
-	pkg := domain.Package{Name: f.name, Source: sourceChoices[f.source], Group: strings.TrimSpace(f.group.Value())}
+	pkg := manifest.Package{Name: f.name, Source: sourceChoices[f.source], Group: strings.TrimSpace(f.group.Value())}
 	if f.minimal {
-		pkg.Profiles = append(pkg.Profiles, domain.ProfileMinimal)
+		pkg.Profiles = append(pkg.Profiles, manifest.ProfileMinimal)
 	}
 	if f.full {
-		pkg.Profiles = append(pkg.Profiles, domain.ProfileFull)
+		pkg.Profiles = append(pkg.Profiles, manifest.ProfileFull)
 	}
 	manager := p.manager
 	return func() tea.Msg {

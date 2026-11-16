@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
-func collectDrift(svc *Service, entries []domain.ResolvedEntry) map[string]DriftResult {
+func collectDrift(svc *Service, entries []manifest.ResolvedEntry) map[string]DriftResult {
 	out := map[string]DriftResult{}
 	for r := range svc.Drift(context.Background(), entries) {
 		out[r.Entry.Path] = r
@@ -22,7 +23,7 @@ func collectDrift(svc *Service, entries []domain.ResolvedEntry) map[string]Drift
 
 func TestDrift_ClassifiesEntriesAndIsolatesErrors(t *testing.T) {
 	boom := errors.New("rsync exited with code 23")
-	in := &fakeInspector{diff: func(e domain.ResolvedEntry, src, dst domain.Endpoint) ([]domain.Change, error) {
+	in := &fakeInspector{diff: func(e manifest.ResolvedEntry, src, dst domain.Endpoint) ([]domain.Change, error) {
 		switch e.Path {
 		case "same":
 			return nil, nil
@@ -35,8 +36,8 @@ func TestDrift_ClassifiesEntriesAndIsolatesErrors(t *testing.T) {
 			change("differs", domain.Update, domain.KindFile),
 		}, nil
 	}}
-	entries := []domain.ResolvedEntry{
-		resolved(domain.RootConfig, "same"), resolved(domain.RootConfig, "bad"), resolved(domain.RootConfig, "drifty"),
+	entries := []manifest.ResolvedEntry{
+		resolved(manifest.RootConfig, "same"), resolved(manifest.RootConfig, "bad"), resolved(manifest.RootConfig, "drifty"),
 	}
 	got := collectDrift(newService(t, in, &fakeRunner{}), entries)
 
@@ -63,7 +64,7 @@ func TestDrift_ClassifiesEntriesAndIsolatesErrors(t *testing.T) {
 }
 
 func TestDrift_MissingSideIsClassifiedWithoutDiff(t *testing.T) {
-	e := resolved(domain.RootConfig, "hypr")
+	e := resolved(manifest.RootConfig, "hypr")
 	tests := []struct {
 		name        string
 		kinds       map[string]domain.NodeKind
@@ -78,7 +79,7 @@ func TestDrift_MissingSideIsClassifiedWithoutDiff(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			in := &fakeInspector{diff: diffReturning(), kinds: tt.kinds}
-			r := collectDrift(newService(t, in, &fakeRunner{}), []domain.ResolvedEntry{e})["hypr"]
+			r := collectDrift(newService(t, in, &fakeRunner{}), []manifest.ResolvedEntry{e})["hypr"]
 
 			if r.State != tt.wantState || r.Missing != tt.wantMissing {
 				t.Errorf("state = %v missing = %v, want %v %v", r.State, r.Missing, tt.wantState, tt.wantMissing)
@@ -95,7 +96,7 @@ func TestDrift_MissingSideIsClassifiedWithoutDiff(t *testing.T) {
 
 func TestDrift_RunsAtMostFourDiffsAtOnce(t *testing.T) {
 	var inFlight, peak atomic.Int32
-	in := &fakeInspector{diff: func(domain.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {
+	in := &fakeInspector{diff: func(manifest.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {
 		n := inFlight.Add(1)
 		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
 		}
@@ -103,9 +104,9 @@ func TestDrift_RunsAtMostFourDiffsAtOnce(t *testing.T) {
 		inFlight.Add(-1)
 		return nil, nil
 	}}
-	var entries []domain.ResolvedEntry
+	var entries []manifest.ResolvedEntry
 	for i := range 12 {
-		entries = append(entries, resolved(domain.RootConfig, fmt.Sprintf("e%d", i)))
+		entries = append(entries, resolved(manifest.RootConfig, fmt.Sprintf("e%d", i)))
 	}
 	if got := collectDrift(newService(t, in, &fakeRunner{}), entries); len(got) != 12 {
 		t.Fatalf("results = %d, want 12", len(got))
@@ -116,7 +117,7 @@ func TestDrift_RunsAtMostFourDiffsAtOnce(t *testing.T) {
 }
 
 func TestDrift_AttachesTimesAndNewestCompleteBackup(t *testing.T) {
-	e := resolved(domain.RootConfig, "hypr")
+	e := resolved(manifest.RootConfig, "hypr")
 	pcT, repoT := testNow.Add(-time.Hour), testNow.Add(-72*time.Hour)
 	complete := domain.Backup{Dir: "/home/u/.nuydeck-backups/20261103-100000", Created: testNow.Add(-26 * time.Hour)}
 	in := &fakeInspector{
@@ -125,7 +126,7 @@ func TestDrift_AttachesTimesAndNewestCompleteBackup(t *testing.T) {
 		repoTimes: map[string]domain.RepoTimes{"config/hypr": {Entry: repoT}},
 		backups:   []domain.Backup{{Dir: "/home/u/.nuydeck-backups/x.partial", Incomplete: true}, complete},
 	}
-	r := collectDrift(newService(t, in, &fakeRunner{}), []domain.ResolvedEntry{e})["hypr"]
+	r := collectDrift(newService(t, in, &fakeRunner{}), []manifest.ResolvedEntry{e})["hypr"]
 
 	if !r.PCTime.Equal(pcT) || !r.RepoTimes.Entry.Equal(repoT) {
 		t.Errorf("times pc=%v repo=%v", r.PCTime, r.RepoTimes.Entry)
@@ -138,9 +139,9 @@ func TestDrift_AttachesTimesAndNewestCompleteBackup(t *testing.T) {
 const driftWait = 2 * time.Second
 
 func TestDrift_CancelledContextYieldsOnlyErrorsAndClosesTheChannel(t *testing.T) {
-	var entries []domain.ResolvedEntry
+	var entries []manifest.ResolvedEntry
 	for i := range 3 * DriftConcurrency {
-		entries = append(entries, resolved(domain.RootConfig, fmt.Sprintf("e%d", i)))
+		entries = append(entries, resolved(manifest.RootConfig, fmt.Sprintf("e%d", i)))
 	}
 	in := &fakeInspector{diff: diffReturning()}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -170,7 +171,7 @@ func TestDrift_ReturnsBeforeListBackupsFinishes(t *testing.T) {
 	svc := newService(t, in, &fakeRunner{})
 	returned := make(chan (<-chan DriftResult), 1)
 	go func() {
-		returned <- svc.Drift(context.Background(), []domain.ResolvedEntry{resolved(domain.RootConfig, "a")})
+		returned <- svc.Drift(context.Background(), []manifest.ResolvedEntry{resolved(manifest.RootConfig, "a")})
 	}()
 
 	select {
@@ -188,7 +189,7 @@ func testBackup() domain.Backup {
 	return domain.Backup{
 		Dir:       "/home/u/.nuydeck-backups/20261103-100000",
 		Direction: domain.Push,
-		Roots:     map[domain.Root]string{domain.RootConfig: "/home/u/.config"},
+		Roots:     map[manifest.Root]string{manifest.RootConfig: "/home/u/.config"},
 		Files:     []string{"config/hypr/a.conf"},
 	}
 }

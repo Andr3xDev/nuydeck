@@ -14,6 +14,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
@@ -47,8 +48,8 @@ type InstallDeps struct {
 	Paths       PathKinder
 	SecretsPath string
 	SecretNames []string
-	Catalog     []domain.Package
-	Drivers     []domain.Driver
+	Catalog     []manifest.Package
+	Drivers     []manifest.Driver
 }
 
 type installPage int
@@ -62,7 +63,7 @@ const (
 	pageRun
 )
 
-var profileChoices = []string{domain.ProfileMinimal, domain.ProfileFull, app.ProfileCustom}
+var profileChoices = []string{manifest.ProfileMinimal, manifest.ProfileFull, app.ProfileCustom}
 
 type stepStatus int
 
@@ -161,7 +162,7 @@ func newInstall(deps InstallDeps, keys KeyMap, palette theme.Palette) *Install {
 		deps:        deps,
 		keys:        keys,
 		palette:     palette,
-		draft:       app.Draft{Profile: domain.ProfileMinimal},
+		draft:       app.Draft{Profile: manifest.ProfileMinimal},
 		secretInput: input,
 		summary:     viewport.New(),
 		logView:     viewport.New(),
@@ -300,7 +301,7 @@ func (s *Install) enterPage() tea.Cmd {
 	return nil
 }
 
-func detectGPUs(gpus GPUDetector, drivers []domain.Driver) tea.Cmd {
+func detectGPUs(gpus GPUDetector, drivers []manifest.Driver) tea.Cmd {
 	return func() tea.Msg {
 		var devices []domain.PCIDevice
 		if gpus != nil {
@@ -354,7 +355,7 @@ func (s *Install) seedSelection() {
 		s.seeded = true
 		s.selected = map[string]bool{}
 		for _, p := range s.deps.Catalog {
-			s.selected[p.Name] = slices.Contains(p.Profiles, domain.ProfileMinimal)
+			s.selected[p.Name] = slices.Contains(p.Profiles, manifest.ProfileMinimal)
 		}
 	}
 	pkgs := slices.Clone(s.deps.Catalog)

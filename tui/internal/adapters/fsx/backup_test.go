@@ -12,6 +12,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 func requireRsync(t *testing.T) {
@@ -26,9 +27,9 @@ func fixedNow(ts time.Time) func() time.Time { return func() time.Time { return 
 func backupStep(dest string, rels ...string) domain.BackupStep {
 	files := make([]domain.BackupFile, len(rels))
 	for i, r := range rels {
-		files[i] = domain.BackupFile{Root: domain.RootConfig, Path: r}
+		files[i] = domain.BackupFile{Root: manifest.RootConfig, Path: r}
 	}
-	return domain.BackupStep{Direction: domain.Push, Files: files, Roots: map[domain.Root]string{domain.RootConfig: dest}}
+	return domain.BackupStep{Direction: domain.Push, Files: files, Roots: map[manifest.Root]string{manifest.RootConfig: dest}}
 }
 
 func TestBackupStep_WritesCompleteBackupWithoutPartial(t *testing.T) {
@@ -58,7 +59,7 @@ func TestBackupStep_WritesCompleteBackupWithoutPartial(t *testing.T) {
 		t.Fatalf("ListBackups = %v, %v", backups, err)
 	}
 	got := backups[0]
-	if got.Incomplete || got.Unreadable || got.Direction != domain.Push || got.Roots[domain.RootConfig] != dest ||
+	if got.Incomplete || got.Unreadable || got.Direction != domain.Push || got.Roots[manifest.RootConfig] != dest ||
 		!slices.Equal(got.Files, []string{"config/nvim/init.lua"}) || !got.Created.Equal(ts) {
 		t.Fatalf("meta round trip mismatch: %+v", got)
 	}
@@ -109,8 +110,8 @@ func TestBackupStep_RefusedWhenBackupsDirInsideDestinationEntry(t *testing.T) {
 	home := t.TempDir()
 	writeFile(t, filepath.Join(home, "keep.txt"), "x")
 	step := domain.BackupStep{
-		Files: []domain.BackupFile{{Root: domain.RootHome, Path: ".nuydeck-backups"}},
-		Roots: map[domain.Root]string{domain.RootHome: home},
+		Files: []domain.BackupFile{{Root: manifest.RootHome, Path: ".nuydeck-backups"}},
+		Roots: map[manifest.Root]string{manifest.RootHome: home},
 	}
 	_ = os.MkdirAll(fsx.BackupsDir(home), 0o755)
 
@@ -133,8 +134,8 @@ func TestBackupStep_RefusedWhenBackupsDirReachedThroughSymlinkedRoot(t *testing.
 		t.Fatal(err)
 	}
 	step := domain.BackupStep{
-		Files: []domain.BackupFile{{Root: domain.RootHome, Path: ".nuydeck-backups"}},
-		Roots: map[domain.Root]string{domain.RootHome: linkedRoot},
+		Files: []domain.BackupFile{{Root: manifest.RootHome, Path: ".nuydeck-backups"}},
+		Roots: map[manifest.Root]string{manifest.RootHome: linkedRoot},
 	}
 
 	res := fsx.Runner{Home: home}.Run(context.Background(), step, nil)
@@ -153,8 +154,8 @@ func TestBackupStep_RefusedWhenEntryLiesInsideBackupsDir(t *testing.T) {
 	backups := fsx.BackupsDir(home)
 	writeFile(t, filepath.Join(backups, "20260101-000000", "f"), "x")
 	step := domain.BackupStep{
-		Files: []domain.BackupFile{{Root: domain.RootHome, Path: "20260101-000000/f"}},
-		Roots: map[domain.Root]string{domain.RootHome: backups},
+		Files: []domain.BackupFile{{Root: manifest.RootHome, Path: "20260101-000000/f"}},
+		Roots: map[manifest.Root]string{manifest.RootHome: backups},
 	}
 
 	res := fsx.Runner{Home: home}.Run(context.Background(), step, nil)

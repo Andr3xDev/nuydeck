@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const (
@@ -16,16 +17,16 @@ const (
 
 var testNow = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 
-var rootDirs = map[domain.Root]string{
-	domain.RootConfig: testHome + "/.config",
-	domain.RootHome:   testHome,
+var rootDirs = map[manifest.Root]string{
+	manifest.RootConfig: testHome + "/.config",
+	manifest.RootHome:   testHome,
 }
 
 type diffCall struct{ src, dst string }
 
 type fakeInspector struct {
 	mu          sync.Mutex
-	diff        func(e domain.ResolvedEntry, src, dst domain.Endpoint) ([]domain.Change, error)
+	diff        func(e manifest.ResolvedEntry, src, dst domain.Endpoint) ([]domain.Change, error)
 	diffCalls   []diffCall
 	linkTargets map[string]string
 	kinds       map[string]domain.NodeKind
@@ -38,7 +39,7 @@ type fakeInspector struct {
 	listBackupsGate chan struct{}
 }
 
-func (f *fakeInspector) Diff(_ context.Context, e domain.ResolvedEntry, src, dst domain.Endpoint) ([]domain.Change, error) {
+func (f *fakeInspector) Diff(_ context.Context, e manifest.ResolvedEntry, src, dst domain.Endpoint) ([]domain.Change, error) {
 	f.mu.Lock()
 	f.diffCalls = append(f.diffCalls, diffCall{src.Path, dst.Path})
 	f.mu.Unlock()
@@ -54,7 +55,7 @@ func (f *fakeInspector) PathKind(p string) (domain.NodeKind, error) {
 	return domain.KindDir, nil
 }
 
-func (f *fakeInspector) NewestMTime(_ context.Context, p string, _ domain.Filter) (time.Time, error) {
+func (f *fakeInspector) NewestMTime(_ context.Context, p string, _ manifest.Filter) (time.Time, error) {
 	return f.mtimes[p], nil
 }
 
@@ -92,12 +93,12 @@ func (r *fakeRunner) Run(_ context.Context, s domain.Step, progress func(domain.
 	return domain.StepResult{Status: domain.StepOK}
 }
 
-func resolved(root domain.Root, p string, excludes ...string) domain.ResolvedEntry {
-	return domain.ResolvedEntry{
-		Entry:    domain.Entry{Root: root, Path: p},
+func resolved(root manifest.Root, p string, excludes ...string) manifest.ResolvedEntry {
+	return manifest.ResolvedEntry{
+		Entry:    manifest.Entry{Root: root, Path: p},
 		RepoPath: testRepo + "/" + string(root) + "/" + p,
 		DestPath: rootDirs[root] + "/" + p,
-		Filter:   domain.Filter{Excludes: excludes},
+		Filter:   manifest.Filter{Excludes: excludes},
 	}
 }
 
@@ -106,8 +107,8 @@ func newService(t *testing.T, in *fakeInspector, r Runner) *Service {
 	return &Service{Inspector: in, Runner: r, RepoDir: testRepo, Now: func() time.Time { return testNow }}
 }
 
-func diffReturning(changes ...domain.Change) func(domain.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {
-	return func(domain.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {
+func diffReturning(changes ...domain.Change) func(manifest.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {
+	return func(manifest.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {
 		return changes, nil
 	}
 }
@@ -124,9 +125,9 @@ func selectAll(plan SyncPlan) Selection {
 	return sel
 }
 
-func planOf(t *testing.T, dir domain.Direction, entries []domain.ResolvedEntry, byEntry map[string][]domain.Change) SyncPlan {
+func planOf(t *testing.T, dir domain.Direction, entries []manifest.ResolvedEntry, byEntry map[string][]domain.Change) SyncPlan {
 	t.Helper()
-	in := &fakeInspector{diff: func(e domain.ResolvedEntry, _, _ domain.Endpoint) ([]domain.Change, error) {
+	in := &fakeInspector{diff: func(e manifest.ResolvedEntry, _, _ domain.Endpoint) ([]domain.Change, error) {
 		return byEntry[e.Path], nil
 	}}
 	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), dir, entries)

@@ -7,16 +7,17 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 type fakePackageManager struct {
 	names []string
-	adds  []domain.Package
+	adds  []manifest.Package
 }
 
 func (f *fakePackageManager) ListUnregistered(context.Context) ([]string, error) { return f.names, nil }
 
-func (f *fakePackageManager) AddPackage(_ context.Context, pkg domain.Package) (domain.StepResult, error) {
+func (f *fakePackageManager) AddPackage(_ context.Context, pkg manifest.Package) (domain.StepResult, error) {
 	f.adds = append(f.adds, pkg)
 	return domain.StepResult{Status: domain.StepOK}, nil
 }

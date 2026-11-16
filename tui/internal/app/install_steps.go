@@ -5,11 +5,12 @@ import (
 	"fmt"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 // pushSteps turns the push plan of the entries into a backup step (when something is overwritten) and one copy per entry.
 // Delete items are never selected, so the install cannot remove owner files; a blocked item is a blocking plan error.
-func (i *Installer) pushSteps(ctx context.Context, entries []domain.ResolvedEntry) (steps []domain.Step, notices []string, blocking []error, err error) {
+func (i *Installer) pushSteps(ctx context.Context, entries []manifest.ResolvedEntry) (steps []domain.Step, notices []string, blocking []error, err error) {
 	plan, err := i.Service.PlanSync(ctx, domain.Push, entries)
 	if err != nil {
 		return nil, nil, nil, err

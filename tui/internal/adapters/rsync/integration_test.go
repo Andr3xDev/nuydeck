@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 func requireRsync(t *testing.T) {
@@ -92,7 +93,7 @@ func TestIntegrationApplyReportsProgressPerItem(t *testing.T) {
 }
 
 func dirReq(src, dst string, excludes ...string) Request {
-	return Request{Src: src, Dst: dst, Dir: true, Filter: domain.Filter{Excludes: excludes}}
+	return Request{Src: src, Dst: dst, Dir: true, Filter: manifest.Filter{Excludes: excludes}}
 }
 
 func TestIntegrationPlanApplyTouchesOnlySelected(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const (
@@ -79,9 +80,9 @@ func checkbox(on bool) string {
 
 func (s *Install) profileView() string {
 	descriptions := map[string]string{
-		domain.ProfileMinimal: "the essential packages",
-		domain.ProfileFull:    "every packaged tool",
-		app.ProfileCustom:     "mark packages one by one",
+		manifest.ProfileMinimal: "the essential packages",
+		manifest.ProfileFull:    "every packaged tool",
+		app.ProfileCustom:       "mark packages one by one",
 	}
 	lines := []string{bold("Choose a profile")}
 	for i, p := range profileChoices {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const catalogPath = "/repo/manifest/packages.toml"
@@ -17,8 +18,8 @@ func newPackages(probe *fakeProbe, in *fakeInspector, r Runner) *Packages {
 		Inspector:   in,
 		Runner:      r,
 		CatalogPath: catalogPath,
-		Catalog:     []domain.Package{{Name: "hyprland", Source: domain.SourcePacman, Profiles: []string{"minimal"}}},
-		Drivers:     []domain.Driver{{ID: "nvidia", VendorID: "10de", Packages: []string{"nvidia-utils"}}},
+		Catalog:     []manifest.Package{{Name: "hyprland", Source: manifest.SourcePacman, Profiles: []string{"minimal"}}},
+		Drivers:     []manifest.Driver{{ID: "nvidia", VendorID: "10de", Packages: []string{"nvidia-utils"}}},
 	}
 }
 
@@ -67,7 +68,7 @@ func TestPackages_ListUnregisteredReturnsTheQueryErrorWithoutAList(t *testing.T)
 func TestPackages_AddPackageRunsAppendStepAndReturnsTheRunnerResult(t *testing.T) {
 	wouldApply := domain.StepResult{Status: domain.StepWouldApply, Detail: "would append htop"}
 	r := &fakeRunner{result: func(domain.Step) domain.StepResult { return wouldApply }}
-	pkg := domain.Package{Name: "htop", Source: domain.SourcePacman, Profiles: []string{"full"}, Group: "tools"}
+	pkg := manifest.Package{Name: "htop", Source: manifest.SourcePacman, Profiles: []string{"full"}, Group: "tools"}
 
 	res, err := newPackages(&fakeProbe{}, &fakeInspector{}, r).AddPackage(context.Background(), pkg)
 
@@ -93,7 +94,7 @@ func TestPackages_AddPackageUpdatesTheCatalogOnlyAfterARealWrite(t *testing.T) {
 		{"dry-run", domain.StepWouldApply, false},
 		{"failed", domain.StepFailed, false},
 	}
-	pkg := domain.Package{Name: "htop", Source: domain.SourcePacman, Profiles: []string{"full"}}
+	pkg := manifest.Package{Name: "htop", Source: manifest.SourcePacman, Profiles: []string{"full"}}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &fakeRunner{result: func(domain.Step) domain.StepResult { return domain.StepResult{Status: tc.status} }}
@@ -103,11 +104,11 @@ func TestPackages_AddPackageUpdatesTheCatalogOnlyAfterARealWrite(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if got := slices.ContainsFunc(p.Catalog, func(c domain.Package) bool { return c.Name == "htop" }); got != tc.wantInList {
+			if got := slices.ContainsFunc(p.Catalog, func(c manifest.Package) bool { return c.Name == "htop" }); got != tc.wantInList {
 				t.Errorf("htop in catalog = %v, want %v", got, tc.wantInList)
 			}
 			if tc.wantInList {
-				if _, err := p.AddPackage(context.Background(), pkg); !errors.Is(err, domain.ErrDuplicatePackage) {
+				if _, err := p.AddPackage(context.Background(), pkg); !errors.Is(err, manifest.ErrDuplicatePackage) {
 					t.Errorf("second add err = %v, want ErrDuplicatePackage", err)
 				}
 			}
@@ -118,9 +119,9 @@ func TestPackages_AddPackageUpdatesTheCatalogOnlyAfterARealWrite(t *testing.T) {
 func TestPackages_AddPackageWithoutSourceIsRejectedBeforeAnyWrite(t *testing.T) {
 	r := &fakeRunner{}
 
-	_, err := newPackages(&fakeProbe{}, &fakeInspector{}, r).AddPackage(context.Background(), domain.Package{Name: "htop", Profiles: []string{"full"}})
+	_, err := newPackages(&fakeProbe{}, &fakeInspector{}, r).AddPackage(context.Background(), manifest.Package{Name: "htop", Profiles: []string{"full"}})
 
-	if !errors.Is(err, domain.ErrUnknownSource) {
+	if !errors.Is(err, manifest.ErrUnknownSource) {
 		t.Errorf("err = %v, want ErrUnknownSource", err)
 	}
 	if len(r.steps) != 0 {

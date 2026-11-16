@@ -4,14 +4,14 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 var forbiddenFlags = []string{"-a", "--archive", "--inplace", "-K", "--keep-dirlinks", "--safe-links", "--delete-excluded"}
 
 func dirRequest() Request {
 	return Request{Src: "/repo/cfg", Dst: "/home/u/.config/cfg", Dir: true,
-		Filter: domain.Filter{Excludes: []string{"/identities.json", "/cache"}}}
+		Filter: manifest.Filter{Excludes: []string{"/identities.json", "/cache"}}}
 }
 
 func assertNone(t *testing.T, args []string, flags []string) {

@@ -19,6 +19,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/tomlx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const (
@@ -92,7 +93,7 @@ func sentinelInstaller(t *testing.T, home string, runner app.Runner, dryRun bool
 		Preview: dryrun.Recorder{},
 		Now:     now,
 		DryRun:  dryRun,
-		Catalog: []domain.Package{{Name: "git", Source: domain.SourcePacman, Profiles: []string{"minimal"}}},
+		Catalog: []manifest.Package{{Name: "git", Source: manifest.SourcePacman, Profiles: []string{"minimal"}}},
 		Home:    home,
 		User:    "tester",
 	}

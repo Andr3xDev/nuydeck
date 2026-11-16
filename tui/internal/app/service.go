@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 // repoTimesFileKey is the key gitx.RepoTimes uses for a file entry: the entry
@@ -29,7 +30,7 @@ type Service struct {
 
 // ItemKey identifies a plan item: the managed root and the root-relative path.
 type ItemKey struct {
-	Root domain.Root
+	Root manifest.Root
 	Path string
 }
 
@@ -41,7 +42,7 @@ type Selection map[ItemKey]bool
 // file paths and Change.Path is the file's base name, as rsync itemizes it.
 type PlanItem struct {
 	Change   domain.Change
-	Resolved domain.ResolvedEntry
+	Resolved manifest.ResolvedEntry
 	Src, Dst string
 	Blocked  bool
 	// RepoTime and PCTime are zero for the side that does not have the file.
@@ -108,9 +109,9 @@ type ApplyResult struct {
 	Err      error
 }
 
-func (s *Service) PlanSync(ctx context.Context, dir domain.Direction, entries []domain.ResolvedEntry) (SyncPlan, error) {
+func (s *Service) PlanSync(ctx context.Context, dir domain.Direction, entries []manifest.ResolvedEntry) (SyncPlan, error) {
 	state, warning := s.Inspector.LoadState(ctx)
-	managed := make([]domain.Entry, len(entries))
+	managed := make([]manifest.Entry, len(entries))
 	for i, e := range entries {
 		managed[i] = e.Entry
 	}
@@ -141,7 +142,7 @@ func ignoreKey(k ItemKey) string { return string(k.Root) + ":" + k.Path }
 var errSourceMissing = errors.New("source missing")
 
 // planEntry diffs one entry and turns the changes into plan items.
-func (s *Service) planEntry(ctx context.Context, dir domain.Direction, e domain.ResolvedEntry, src, dst string, managed []domain.Entry) ([]PlanItem, error) {
+func (s *Service) planEntry(ctx context.Context, dir domain.Direction, e manifest.ResolvedEntry, src, dst string, managed []manifest.Entry) ([]PlanItem, error) {
 	srcKind, err := s.Inspector.PathKind(src)
 	if err != nil {
 		return nil, fmt.Errorf("%s/%s: %w", e.Root, e.Path, err)
@@ -156,7 +157,7 @@ func (s *Service) planEntry(ctx context.Context, dir domain.Direction, e domain.
 	fileEntry := srcKind == domain.KindFile || srcKind == domain.KindLink
 	kept := changes[:0:0]
 	for _, c := range changes {
-		if !domain.Excluded(c.Path, c.Kind == domain.KindDir, e.Filter) {
+		if !manifest.Excluded(c.Path, c.Kind == domain.KindDir, e.Filter) {
 			c.Entry = e.Entry
 			kept = append(kept, c)
 		}
@@ -204,12 +205,12 @@ func (s *Service) attachTimes(ctx context.Context, it *PlanItem, dir domain.Dire
 		if dir == domain.Pull {
 			pcPath = it.srcPath()
 		}
-		it.PCTime, _ = s.Inspector.NewestMTime(ctx, pcPath, domain.Filter{})
+		it.PCTime, _ = s.Inspector.NewestMTime(ctx, pcPath, manifest.Filter{})
 	}
 }
 
 // linkWarning classifies the source-side target of a created or updated link.
-func (s *Service) linkWarning(it PlanItem, managed []domain.Entry) domain.LinkWarning {
+func (s *Service) linkWarning(it PlanItem, managed []manifest.Entry) domain.LinkWarning {
 	if it.Change.Kind != domain.KindLink || it.Change.Type == domain.Delete {
 		return domain.NoLinkWarning
 	}
@@ -222,7 +223,7 @@ func (s *Service) linkWarning(it PlanItem, managed []domain.Entry) domain.LinkWa
 
 // PlanRestore plans a restore from the backup; roots come from the backup metadata and deletions are never offered.
 func (s *Service) PlanRestore(ctx context.Context, b domain.Backup) (SyncPlan, error) {
-	roots := make([]domain.Root, 0, len(b.Roots))
+	roots := make([]manifest.Root, 0, len(b.Roots))
 	for root := range b.Roots {
 		roots = append(roots, root)
 	}
@@ -230,7 +231,7 @@ func (s *Service) PlanRestore(ctx context.Context, b domain.Backup) (SyncPlan, e
 	plan := SyncPlan{Direction: domain.Restore, Selection: Selection{}}
 	for _, root := range roots {
 		src, dst := path.Join(b.Dir, string(root)), b.Roots[root]
-		e := domain.ResolvedEntry{Entry: domain.Entry{Root: root}, RepoPath: src, DestPath: dst}
+		e := manifest.ResolvedEntry{Entry: manifest.Entry{Root: root}, RepoPath: src, DestPath: dst}
 		items, err := s.planEntry(ctx, domain.Restore, e, src, dst, nil)
 		if err != nil {
 			return SyncPlan{}, err
@@ -389,7 +390,7 @@ func kindName(k domain.NodeKind) string {
 
 // backupStep backs up files at the destination side; the roots are the destination root directories.
 func backupStep(dir domain.Direction, files []PlanItem) domain.BackupStep {
-	step := domain.BackupStep{Direction: dir, Roots: map[domain.Root]string{}}
+	step := domain.BackupStep{Direction: dir, Roots: map[manifest.Root]string{}}
 	for _, it := range files {
 		step.Files = append(step.Files, domain.BackupFile{Root: it.Change.Entry.Root, Path: it.rel()})
 		step.Roots[it.Change.Entry.Root] = strings.TrimSuffix(it.Dst, "/"+it.Change.Entry.Path)
@@ -399,7 +400,7 @@ func backupStep(dir domain.Direction, files []PlanItem) domain.BackupStep {
 
 func groupByEntry(items []PlanItem) [][]PlanItem {
 	var groups [][]PlanItem
-	index := map[domain.Entry]int{}
+	index := map[manifest.Entry]int{}
 	for _, it := range items {
 		i, ok := index[it.Change.Entry]
 		if !ok {
@@ -464,7 +465,7 @@ const (
 const DriftConcurrency = 4
 
 type DriftResult struct {
-	Entry      domain.ResolvedEntry
+	Entry      manifest.ResolvedEntry
 	Missing    Missing
 	State      DriftState
 	Changes    int
@@ -475,7 +476,7 @@ type DriftResult struct {
 }
 
 // Drift diffs repo to PC per entry and streams one result per entry; the channel closes when all are done.
-func (s *Service) Drift(ctx context.Context, entries []domain.ResolvedEntry) <-chan DriftResult {
+func (s *Service) Drift(ctx context.Context, entries []manifest.ResolvedEntry) <-chan DriftResult {
 	out := make(chan DriftResult, len(entries))
 	var lastBackup *domain.Backup
 	backupDone := make(chan struct{})
@@ -511,7 +512,7 @@ func (s *Service) Drift(ctx context.Context, entries []domain.ResolvedEntry) <-c
 	return out
 }
 
-func (s *Service) driftEntry(ctx context.Context, e domain.ResolvedEntry) DriftResult {
+func (s *Service) driftEntry(ctx context.Context, e manifest.ResolvedEntry) DriftResult {
 	r := DriftResult{Entry: e}
 	repoKind, err := s.Inspector.PathKind(e.RepoPath)
 	if err != nil {

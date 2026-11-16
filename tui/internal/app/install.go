@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 // ProfileCustom selects exactly the packages named in Draft.Packages.
@@ -21,9 +22,9 @@ type Installer struct {
 	KeepaliveEvery time.Duration
 	DryRun         bool
 
-	Catalog []domain.Package
-	Drivers []domain.Driver
-	Entries []domain.ResolvedEntry
+	Catalog []manifest.Package
+	Drivers []manifest.Driver
+	Entries []manifest.ResolvedEntry
 	Home    string
 	User    string
 }

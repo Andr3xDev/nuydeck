@@ -10,6 +10,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -74,7 +75,7 @@ func TestRunnerBackupAndDeleteBackupDelegateToFsx(t *testing.T) {
 	res := r.Run(ctx, domain.BackupStep{
 		Direction: domain.Pull,
 		Files:     []domain.BackupFile{{Root: "home", Path: "f"}},
-		Roots:     map[domain.Root]string{"home": src},
+		Roots:     map[manifest.Root]string{"home": src},
 	}, nil)
 	if res.Status != domain.StepOK || res.Detail == "" {
 		t.Fatalf("backup: %+v", res)

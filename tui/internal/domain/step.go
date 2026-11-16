@@ -1,5 +1,7 @@
 package domain
 
+import "github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+
 // Step is a closed sum of every write the tool can perform; the marker
 // method keeps implementations inside this package.
 type Step interface {
@@ -8,7 +10,7 @@ type Step interface {
 
 // CopyStep runs rsync with --files-from for the selected paths of one entry.
 type CopyStep struct {
-	Entry     ResolvedEntry
+	Entry     manifest.ResolvedEntry
 	Direction Direction
 	Src, Dst  string
 	Paths     []string
@@ -25,11 +27,11 @@ type DeleteStep struct {
 type BackupStep struct {
 	Direction Direction
 	Files     []BackupFile
-	Roots     map[Root]string
+	Roots     map[manifest.Root]string
 }
 
 type BackupFile struct {
-	Root Root
+	Root manifest.Root
 	Path string
 }
 

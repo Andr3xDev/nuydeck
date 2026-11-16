@@ -6,14 +6,15 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
-func linkEntry(root domain.Root, path string) domain.Entry {
-	return domain.Entry{Root: root, Path: path}
+func linkEntry(root manifest.Root, path string) manifest.Entry {
+	return manifest.Entry{Root: root, Path: path}
 }
 
 func TestClassifyLink(t *testing.T) {
-	entries := []domain.Entry{
+	entries := []manifest.Entry{
 		linkEntry("config", "starship"), linkEntry("config", "starship.toml"),
 		linkEntry("config", "hypr"), linkEntry("config", "nvim"), linkEntry("config", "dunst"),
 	}
@@ -45,7 +46,7 @@ func TestClassifyLink(t *testing.T) {
 }
 
 func TestClassifyLinkIgnoresEntriesOfOtherRoots(t *testing.T) {
-	entries := []domain.Entry{linkEntry("home", "nvim")}
+	entries := []manifest.Entry{linkEntry("home", "nvim")}
 	if got := domain.ClassifyLink("config", "hypr", "../nvim/init.lua", entries); got != domain.WarnLeavesManagedSet {
 		t.Errorf("ClassifyLink() = %v, want WarnLeavesManagedSet", got)
 	}

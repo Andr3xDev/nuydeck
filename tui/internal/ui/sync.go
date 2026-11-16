@@ -14,12 +14,13 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 // Syncer is the sync use-case surface the screen needs; *app.Service implements it.
 type Syncer interface {
-	PlanSync(ctx context.Context, dir domain.Direction, entries []domain.ResolvedEntry) (app.SyncPlan, error)
+	PlanSync(ctx context.Context, dir domain.Direction, entries []manifest.ResolvedEntry) (app.SyncPlan, error)
 	NeedsBackup(plan app.SyncPlan, sel app.Selection) bool
 	Apply(ctx context.Context, plan app.SyncPlan, sel app.Selection, opts app.ApplyOptions, progress func(domain.StepProgress)) app.ApplyResult
 }
@@ -67,7 +68,7 @@ const (
 // Sync is the Plan -> Preview -> Apply screen.
 type Sync struct {
 	syncer  Syncer
-	entries []domain.ResolvedEntry
+	entries []manifest.ResolvedEntry
 	dryRun  bool
 	keys    KeyMap
 	palette theme.Palette

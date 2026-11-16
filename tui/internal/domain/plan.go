@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+)
 
 type Direction int
 
@@ -43,7 +47,7 @@ type Endpoint struct {
 
 // Change is one itemized difference for an entry.
 type Change struct {
-	Entry   Entry
+	Entry   manifest.Entry
 	Path    string // relative to the entry root
 	Type    ChangeType
 	Kind    NodeKind
@@ -68,7 +72,7 @@ type Backup struct {
 	Dir        string
 	Created    time.Time
 	Direction  Direction
-	Roots      map[Root]string
+	Roots      map[manifest.Root]string
 	Files      []string
 	Incomplete bool
 	Unreadable bool

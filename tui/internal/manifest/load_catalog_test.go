@@ -1,4 +1,4 @@
-package tomlx_test
+package manifest_test
 
 import (
 	"errors"
@@ -10,8 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/tomlx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 func writeTemp(t *testing.T, name, content string) string {
@@ -24,6 +23,8 @@ func writeTemp(t *testing.T, name, content string) string {
 }
 
 func lines(l ...string) string { return strings.Join(l, "\n") + "\n" }
+
+func ptr(s string) *string { return &s }
 
 func TestLoadPackages_ValidCatalogWithOptionalFieldsAbsent(t *testing.T) {
 	path := writeTemp(t, "packages.toml", lines(
@@ -40,13 +41,13 @@ func TestLoadPackages_ValidCatalogWithOptionalFieldsAbsent(t *testing.T) {
 		`name = "htop"`,
 		`source = "aur"`,
 	))
-	got, err := tomlx.LoadPackages(path)
+	got, err := manifest.LoadPackages(path)
 	if err != nil {
 		t.Fatalf("LoadPackages() error = %v", err)
 	}
-	want := []domain.Package{
-		{Name: "hyprland", Source: domain.SourcePacman, Profiles: []string{"minimal", "full"}, Group: "desktop", Service: "ly.service"},
-		{Name: "htop", Source: domain.SourceAUR},
+	want := []manifest.Package{
+		{Name: "hyprland", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}, Group: "desktop", Service: "ly.service"},
+		{Name: "htop", Source: manifest.SourceAUR},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d packages, want %d: %+v", len(got), len(want), got)
@@ -75,7 +76,7 @@ func TestLoadPackages_ErrorsNameFileAndLine(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tomlx.LoadPackages(writeTemp(t, "packages.toml", tt.content))
+			_, err := manifest.LoadPackages(writeTemp(t, "packages.toml", tt.content))
 			if err == nil {
 				t.Fatal("LoadPackages() error = nil, want error")
 			}
@@ -92,7 +93,7 @@ func TestLoadPackages_ErrorsNameFileAndLine(t *testing.T) {
 }
 
 func TestLoadPackages_MissingFileIsAnError(t *testing.T) {
-	_, err := tomlx.LoadPackages(filepath.Join(t.TempDir(), "packages.toml"))
+	_, err := manifest.LoadPackages(filepath.Join(t.TempDir(), "packages.toml"))
 	if !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("error = %v, want fs.ErrNotExist", err)
 	}
@@ -113,7 +114,7 @@ func TestLoadHardware_ValidDriversWithOptionalServices(t *testing.T) {
 		`vendor_id = "8086"`,
 		`packages = ["vulkan-intel"]`,
 	))
-	got, err := tomlx.LoadHardware(path)
+	got, err := manifest.LoadHardware(path)
 	if err != nil {
 		t.Fatalf("LoadHardware() error = %v", err)
 	}
@@ -144,7 +145,7 @@ func TestLoadHardware_ErrorsNameFileAndLine(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tomlx.LoadHardware(writeTemp(t, "hardware.toml", tt.content))
+			_, err := manifest.LoadHardware(writeTemp(t, "hardware.toml", tt.content))
 			if err == nil {
 				t.Fatal("LoadHardware() error = nil, want error")
 			}
@@ -177,7 +178,7 @@ func TestLoadSecrets_NamesOnlyAndAbsentOrEmptyMeansNoNames(t *testing.T) {
 			if tt.content != nil {
 				path = writeTemp(t, "secrets.toml", *tt.content)
 			}
-			got, err := tomlx.LoadSecrets(path)
+			got, err := manifest.LoadSecrets(path)
 			if err != nil {
 				t.Fatalf("LoadSecrets() error = %v", err)
 			}
@@ -191,7 +192,7 @@ func TestLoadSecrets_NamesOnlyAndAbsentOrEmptyMeansNoNames(t *testing.T) {
 func TestLoadSecrets_ValueKeyIsRejectedWithFileLineAndNoValue(t *testing.T) {
 	const sentinel = "SENTINEL-secret-value-7f3a"
 	path := writeTemp(t, "secrets.toml", lines(`version = 1`, ``, `[[secret]]`, `name = "API_KEY"`, `value = "`+sentinel+`"`))
-	_, err := tomlx.LoadSecrets(path)
+	_, err := manifest.LoadSecrets(path)
 	if err == nil {
 		t.Fatal("LoadSecrets() error = nil, want error")
 	}
@@ -215,7 +216,7 @@ func TestLoadSecrets_UnsafeOrDuplicateNamesAreRejectedWithFileAndLine(t *testing
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tomlx.LoadSecrets(writeTemp(t, "secrets.toml", tt.content))
+			_, err := manifest.LoadSecrets(writeTemp(t, "secrets.toml", tt.content))
 			if err == nil || !strings.HasPrefix(err.Error(), tt.prefix) {
 				t.Errorf("error = %v, want prefix %q", err, tt.prefix)
 			}

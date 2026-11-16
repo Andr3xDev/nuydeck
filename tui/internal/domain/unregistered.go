@@ -1,9 +1,13 @@
 package domain
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+)
 
 // Unregistered lists explicit packages absent from the catalog, driver packages, paru prerequisites and the ignored list.
-func Unregistered(explicit []string, catalog []Package, drivers []Driver, paruPrerequisites, ignored []string) []string {
+func Unregistered(explicit []string, catalog []manifest.Package, drivers []manifest.Driver, paruPrerequisites, ignored []string) []string {
 	known := make(map[string]bool)
 	for _, p := range catalog {
 		known[p.Name] = true

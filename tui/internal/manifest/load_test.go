@@ -1,22 +1,21 @@
-package tomlx_test
+package manifest_test
 
 import (
 	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/tomlx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
 const home = "/home/test"
 
 func TestLoadManifestExpandsTilde(t *testing.T) {
-	m, err := tomlx.LoadManifest("testdata/valid/paths.toml", home)
+	m, err := manifest.LoadManifest("testdata/valid/paths.toml", home)
 	if err != nil {
 		t.Fatalf("LoadManifest() error = %v", err)
 	}
-	want := map[domain.Root]string{domain.RootConfig: home + "/.config", domain.RootHome: home}
+	want := map[manifest.Root]string{manifest.RootConfig: home + "/.config", manifest.RootHome: home}
 	for root, dest := range want {
 		if m.Roots[root] != dest {
 			t.Errorf("Roots[%s] = %q, want %q", root, m.Roots[root], dest)
@@ -42,7 +41,7 @@ func TestLoadManifestErrorsNameFileAndLine(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := tomlx.LoadManifest("testdata/"+tt.fixture+"/paths.toml", home)
+			_, err := manifest.LoadManifest("testdata/"+tt.fixture+"/paths.toml", home)
 			if err == nil {
 				t.Fatal("LoadManifest() error = nil, want error")
 			}
@@ -60,7 +59,7 @@ func TestLoadManifestErrorsNameFileAndLine(t *testing.T) {
 
 // Inline arrays have no [[entry]] header to map an entry index to.
 func TestLoadManifestValidationErrorWithoutHeaderLinesDoesNotPanic(t *testing.T) {
-	_, err := tomlx.LoadManifest("testdata/inline_entries/paths.toml", home)
+	_, err := manifest.LoadManifest("testdata/inline_entries/paths.toml", home)
 	if err == nil {
 		t.Fatal("LoadManifest() error = nil, want error")
 	}
@@ -70,14 +69,14 @@ func TestLoadManifestValidationErrorWithoutHeaderLinesDoesNotPanic(t *testing.T)
 }
 
 func TestLoadManifestMissingFile(t *testing.T) {
-	if _, err := tomlx.LoadManifest("testdata/absent/paths.toml", home); err == nil {
+	if _, err := manifest.LoadManifest("testdata/absent/paths.toml", home); err == nil {
 		t.Fatal("LoadManifest() error = nil, want error")
 	}
 }
 
 // Guards the repo manifest's invariants without pinning its full inventory, so adding a path stays free.
 func TestRepoManifestKeepsSpecInvariants(t *testing.T) {
-	m, err := tomlx.LoadManifest("../../../../manifest/paths.toml", home)
+	m, err := manifest.LoadManifest("../../../manifest/paths.toml", home)
 	if err != nil {
 		t.Fatalf("LoadManifest() error = %v", err)
 	}
