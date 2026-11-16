@@ -9,8 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -26,8 +26,8 @@ func (f *fakeBackups) ListBackups(context.Context) ([]backup.Backup, error) {
 	return f.list, nil
 }
 
-func (f *fakeBackups) PlanRestore(context.Context, backup.Backup) (app.SyncPlan, error) {
-	return app.SyncPlan{Direction: plan.Restore, Items: []app.PlanItem{planItem("a", false)}}, nil
+func (f *fakeBackups) PlanRestore(context.Context, backup.Backup) (cfgsync.SyncPlan, error) {
+	return cfgsync.SyncPlan{Direction: plan.Restore, Items: []cfgsync.PlanItem{planItem("a", false)}}, nil
 }
 
 func (f *fakeBackups) DeleteBackup(_ context.Context, dir string, confirmed bool) (plan.StepResult, bool) {

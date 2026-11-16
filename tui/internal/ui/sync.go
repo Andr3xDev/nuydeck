@@ -12,7 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
@@ -20,14 +20,14 @@ import (
 
 // Syncer is the sync use-case surface the screen needs; *app.Service implements it.
 type Syncer interface {
-	PlanSync(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (app.SyncPlan, error)
-	NeedsBackup(plan app.SyncPlan, sel app.Selection) bool
-	Apply(ctx context.Context, plan app.SyncPlan, sel app.Selection, opts app.ApplyOptions, progress func(plan.StepProgress)) app.ApplyResult
+	PlanSync(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.SyncPlan, error)
+	NeedsBackup(plan cfgsync.SyncPlan, sel cfgsync.Selection) bool
+	Apply(ctx context.Context, plan cfgsync.SyncPlan, sel cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult
 }
 
 type planMsg struct {
 	gen  int
-	plan app.SyncPlan
+	plan cfgsync.SyncPlan
 	err  error
 }
 
@@ -44,13 +44,13 @@ type progressMsg struct {
 
 type applyDoneMsg struct {
 	gen    int
-	result app.ApplyResult
+	result cfgsync.ApplyResult
 }
 
 // applyEvent is either one progress path or, last, the final result.
 type applyEvent struct {
 	path string
-	done *app.ApplyResult
+	done *cfgsync.ApplyResult
 }
 
 type syncPhase int
@@ -76,14 +76,14 @@ type Sync struct {
 	gen       int
 	phase     syncPhase
 	direction plan.Direction
-	plan      app.SyncPlan
-	sel       app.Selection
+	plan      cfgsync.SyncPlan
+	sel       cfgsync.Selection
 	cursor    int
 	err       error
 	backup    bool
 	stream    <-chan applyEvent
 	progress  int
-	result    app.ApplyResult
+	result    cfgsync.ApplyResult
 	notice    string
 	cancel    context.CancelFunc
 }
@@ -139,7 +139,7 @@ func (s *Sync) startPlan(dir plan.Direction) tea.Cmd {
 }
 
 // showPlan opens the preview on a plan computed elsewhere (restore).
-func (s *Sync) showPlan(plan app.SyncPlan) {
+func (s *Sync) showPlan(plan cfgsync.SyncPlan) {
 	if s.busy() {
 		return
 	}
@@ -149,9 +149,9 @@ func (s *Sync) showPlan(plan app.SyncPlan) {
 	s.loadPlan(plan)
 }
 
-func (s *Sync) loadPlan(plan app.SyncPlan) {
+func (s *Sync) loadPlan(plan cfgsync.SyncPlan) {
 	s.plan, s.cursor, s.phase = plan, 0, phasePreview
-	s.sel = app.Selection{}
+	s.sel = cfgsync.Selection{}
 	maps.Copy(s.sel, plan.Selection)
 }
 
@@ -163,7 +163,7 @@ func (s *Sync) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 		if msg.err != nil {
 			s.err, s.phase = msg.err, phaseResult
-			s.result = app.ApplyResult{}
+			s.result = cfgsync.ApplyResult{}
 			return s, nil
 		}
 		s.loadPlan(msg.plan)
@@ -274,7 +274,7 @@ func (s *Sync) selectedCount() int {
 func (s *Sync) confirm() tea.Cmd {
 	switch {
 	case s.selectedCount() == 0:
-		s.err, s.result, s.phase = nil, app.ApplyResult{Nothing: true}, phaseResult
+		s.err, s.result, s.phase = nil, cfgsync.ApplyResult{Nothing: true}, phaseResult
 		return nil
 	case s.syncer.NeedsBackup(s.plan, s.sel):
 		s.phase = phaseBackupDialog
@@ -291,7 +291,7 @@ func (s *Sync) startApply() tea.Cmd {
 	s.phase, s.progress, s.notice = phaseApplying, 0, ""
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
-	gen, syncer, syncPlan, opts := s.gen, s.syncer, s.plan, app.ApplyOptions{Backup: s.backup, DryRun: s.dryRun}
+	gen, syncer, syncPlan, opts := s.gen, s.syncer, s.plan, cfgsync.ApplyOptions{Backup: s.backup, DryRun: s.dryRun}
 	sel := maps.Clone(s.sel)
 	return func() tea.Msg {
 		ch := make(chan applyEvent)
@@ -319,7 +319,7 @@ func waitProgress(gen int, ch <-chan applyEvent) tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-ch
 		if !ok || ev.done != nil {
-			var res app.ApplyResult
+			var res cfgsync.ApplyResult
 			if ev.done != nil {
 				res = *ev.done
 			}
@@ -379,7 +379,7 @@ func (s *Sync) previewView(height int) string {
 	return strings.Join(lines, "\n")
 }
 
-func (s *Sync) itemLine(i int, it app.PlanItem) string {
+func (s *Sync) itemLine(i int, it cfgsync.PlanItem) string {
 	box := "[ ]"
 	switch {
 	case it.Blocked:
@@ -418,7 +418,7 @@ func (s *Sync) resultView(width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
-func resultLines(res app.ApplyResult) []string {
+func resultLines(res cfgsync.ApplyResult) []string {
 	var lines []string
 	for _, o := range res.Outcomes {
 		if o.Result.Status == plan.StepWouldApply {
@@ -458,7 +458,7 @@ func changeLabel(t plan.ChangeType) string {
 	return "update"
 }
 
-func badges(it app.PlanItem) []string {
+func badges(it cfgsync.PlanItem) []string {
 	var out []string
 	switch it.Change.Warning {
 	case plan.WarnAbsoluteLink:

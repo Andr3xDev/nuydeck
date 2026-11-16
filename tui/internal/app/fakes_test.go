@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
@@ -106,7 +107,10 @@ func resolved(root manifest.Root, p string, excludes ...string) manifest.Resolve
 
 func newService(t *testing.T, in *fakeInspector, r plan.Runner) *Service {
 	t.Helper()
-	return &Service{Inspector: in, Runner: r, RepoDir: testRepo, Now: func() time.Time { return testNow }}
+	return &Service{
+		Service:   &cfgsync.Service{Inspector: in, LoadState: in.LoadState, Runner: r, RepoDir: testRepo, Now: func() time.Time { return testNow }},
+		Inspector: in,
+	}
 }
 
 func diffReturning(changes ...plan.Change) func(manifest.ResolvedEntry, plan.Endpoint, plan.Endpoint) ([]plan.Change, error) {
@@ -119,24 +123,12 @@ func change(p string, t plan.ChangeType, k plan.NodeKind) plan.Change {
 	return plan.Change{Path: p, Type: t, Kind: k}
 }
 
-func selectAll(plan SyncPlan) Selection {
-	sel := Selection{}
+func selectAll(plan cfgsync.SyncPlan) cfgsync.Selection {
+	sel := cfgsync.Selection{}
 	for _, it := range plan.Items {
 		sel[it.Key()] = true
 	}
 	return sel
-}
-
-func planOf(t *testing.T, dir plan.Direction, entries []manifest.ResolvedEntry, byEntry map[string][]plan.Change) SyncPlan {
-	t.Helper()
-	in := &fakeInspector{diff: func(e manifest.ResolvedEntry, _, _ plan.Endpoint) ([]plan.Change, error) {
-		return byEntry[e.Path], nil
-	}}
-	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), dir, entries)
-	if err != nil {
-		t.Fatalf("PlanSync: %v", err)
-	}
-	return plan
 }
 
 func stepsOfType[T plan.Step](steps []plan.Step) []T {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
@@ -148,7 +149,7 @@ func (d *Dashboard) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 // recordSync adopts the last-sync stamp of a really applied sync; a dry-run
 // only reports StepWouldApply, so it never changes the shown stamp.
-func (d *Dashboard) recordSync(res app.ApplyResult) {
+func (d *Dashboard) recordSync(res cfgsync.ApplyResult) {
 	for _, o := range res.Outcomes {
 		if st, ok := o.Step.(plan.SaveStateStep); ok && o.Result.Status == plan.StepOK {
 			d.state.lastSync = st.State.LastSync

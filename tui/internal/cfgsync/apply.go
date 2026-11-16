@@ -1,4 +1,4 @@
-package app
+package cfgsync
 
 import (
 	"cmp"
@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, opts ApplyOptions, progress func(plan.StepProgress)) ApplyResult {
-	items := selectedItems(syncPlan, sel)
+	items := SelectedItems(syncPlan, sel)
 	if len(items) == 0 {
 		return ApplyResult{Nothing: true}
 	}
@@ -35,17 +35,17 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 	}
 
 	func() {
-		if files := backupFiles(items); opts.Backup && len(files) > 0 {
-			if _, ok := run(backupStep(syncPlan.Direction, files)); !ok {
+		if files := BackupFiles(items); opts.Backup && len(files) > 0 {
+			if _, ok := run(BackupStep(syncPlan.Direction, files)); !ok {
 				return
 			}
 		}
-		for _, g := range groupByEntry(items) {
-			paths, group := copyPaths(g)
+		for _, g := range GroupByEntry(items) {
+			paths, group := CopyPaths(g)
 			if len(paths) == 0 {
 				continue
 			}
-			r, ok := run(plan.CopyStep{Entry: g[0].Resolved, Direction: syncPlan.Direction, Src: g[0].Src, Dst: g[0].Dst, Paths: paths, Dir: !g[0].fileEntry})
+			r, ok := run(plan.CopyStep{Entry: g[0].Resolved, Direction: syncPlan.Direction, Src: g[0].Src, Dst: g[0].Dst, Paths: paths, Dir: !g[0].FileEntry})
 			for _, it := range group {
 				if ok || slices.Contains(r.Applied, it.Change.Path) {
 					applied[it.Key()] = true
@@ -56,7 +56,7 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 			}
 		}
 		for _, it := range orderedDeletes(items) {
-			if _, ok := run(plan.DeleteStep{Path: it.dstPath(), Root: it.Dst}); !ok {
+			if _, ok := run(plan.DeleteStep{Path: it.DstPath(), Root: it.Dst}); !ok {
 				return
 			}
 			applied[it.Key()] = true
@@ -81,7 +81,7 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 
 func (s *Service) syncedState(ctx context.Context, dir plan.Direction) state.State {
 	// Re-read so ignores and state saved since planning are not overwritten.
-	current, _ := s.Inspector.LoadState(ctx)
+	current, _ := s.LoadState(ctx)
 	current.RepoPath = s.RepoDir
 	current.LastSync = &state.LastSync{Time: s.Now(), Direction: directionName(dir)}
 	return current

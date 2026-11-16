@@ -1,4 +1,4 @@
-package app
+package cfgsync
 
 import (
 	"sort"
@@ -28,8 +28,8 @@ func kindName(k plan.NodeKind) string {
 	return "file"
 }
 
-// backupStep backs up files at the destination side; the roots are the destination root directories.
-func backupStep(dir plan.Direction, files []PlanItem) plan.BackupStep {
+// BackupStep backs up files at the destination side; the roots are the destination root directories.
+func BackupStep(dir plan.Direction, files []PlanItem) plan.BackupStep {
 	step := plan.BackupStep{Direction: dir, Roots: map[manifest.Root]string{}}
 	for _, it := range files {
 		step.Files = append(step.Files, plan.BackupFile{Root: it.Change.Entry.Root, Path: it.rel()})
@@ -38,7 +38,7 @@ func backupStep(dir plan.Direction, files []PlanItem) plan.BackupStep {
 	return step
 }
 
-func groupByEntry(items []PlanItem) [][]PlanItem {
+func GroupByEntry(items []PlanItem) [][]PlanItem {
 	var groups [][]PlanItem
 	index := map[manifest.Entry]int{}
 	for _, it := range items {
@@ -53,8 +53,8 @@ func groupByEntry(items []PlanItem) [][]PlanItem {
 	return groups
 }
 
-// copyPaths returns the paths to transfer and the items they cover.
-func copyPaths(group []PlanItem) ([]string, []PlanItem) {
+// CopyPaths returns the paths to transfer and the items they cover.
+func CopyPaths(group []PlanItem) ([]string, []PlanItem) {
 	var paths []string
 	var copied []PlanItem
 	for _, it := range group {

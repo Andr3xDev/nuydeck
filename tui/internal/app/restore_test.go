@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -58,7 +59,7 @@ func TestApply_RestoreCopiesFromBackupAndOffersBackupForOverwrite(t *testing.T) 
 		t.Error("restore overwriting a file must offer a backup")
 	}
 	r := &fakeRunner{}
-	newService(t, in, r).Apply(context.Background(), syncPlan, sel, ApplyOptions{Backup: true}, nil)
+	newService(t, in, r).Apply(context.Background(), syncPlan, sel, cfgsync.ApplyOptions{Backup: true}, nil)
 
 	copies := stepsOfType[plan.CopyStep](r.steps)
 	if len(copies) != 1 || copies[0].Direction != plan.Restore || copies[0].Src != b.Dir+"/config" ||

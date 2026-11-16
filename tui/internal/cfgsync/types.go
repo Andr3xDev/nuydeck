@@ -1,4 +1,4 @@
-package app
+package cfgsync
 
 import (
 	"path"
@@ -27,22 +27,22 @@ type PlanItem struct {
 	Blocked  bool
 	// RepoTime and PCTime are zero for the side that does not have the file.
 	RepoTime, PCTime time.Time
-	fileEntry        bool
+	FileEntry        bool
 }
 
 // rel is the root-relative path of the item.
 func (i PlanItem) rel() string {
-	if i.fileEntry {
+	if i.FileEntry {
 		return i.Change.Entry.Path
 	}
 	return path.Join(i.Change.Entry.Path, i.Change.Path)
 }
 
 func (i PlanItem) srcPath() string { return i.endpoint(i.Src) }
-func (i PlanItem) dstPath() string { return i.endpoint(i.Dst) }
+func (i PlanItem) DstPath() string { return i.endpoint(i.Dst) }
 
 func (i PlanItem) endpoint(entryPath string) string {
-	if i.fileEntry {
+	if i.FileEntry {
 		return entryPath
 	}
 	return path.Join(entryPath, i.Change.Path)

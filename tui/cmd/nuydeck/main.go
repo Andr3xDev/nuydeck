@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
@@ -76,7 +77,10 @@ func run(dryRun bool, repoFlag string) error {
 	if dryRun {
 		runner = dryrun.Recorder{}
 	}
-	svc := &app.Service{Inspector: inspector, Runner: runner, RepoDir: repo, Now: time.Now}
+	svc := &app.Service{
+		Service:   &cfgsync.Service{Inspector: inspector, LoadState: inspector.LoadState, Runner: runner, RepoDir: repo, Now: time.Now},
+		Inspector: inspector,
+	}
 
 	deps := ui.Deps{Drifter: svc, Syncer: svc, Backups: svc, StateWarning: stateWarning, LastSync: state.LastSync}
 	if repo == "" {

@@ -10,27 +10,27 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 type fakeSyncer struct {
-	plan          app.SyncPlan
+	plan          cfgsync.SyncPlan
 	needsBackup   bool
 	progressPaths []string
 	blockUntilCtx bool
-	opts          app.ApplyOptions
+	opts          cfgsync.ApplyOptions
 	applyCalls    int
 }
 
-func (f *fakeSyncer) PlanSync(context.Context, plan.Direction, []manifest.ResolvedEntry) (app.SyncPlan, error) {
+func (f *fakeSyncer) PlanSync(context.Context, plan.Direction, []manifest.ResolvedEntry) (cfgsync.SyncPlan, error) {
 	return f.plan, nil
 }
 
-func (f *fakeSyncer) NeedsBackup(app.SyncPlan, app.Selection) bool { return f.needsBackup }
+func (f *fakeSyncer) NeedsBackup(cfgsync.SyncPlan, cfgsync.Selection) bool { return f.needsBackup }
 
-func (f *fakeSyncer) Apply(ctx context.Context, _ app.SyncPlan, _ app.Selection, opts app.ApplyOptions, progress func(plan.StepProgress)) app.ApplyResult {
+func (f *fakeSyncer) Apply(ctx context.Context, _ cfgsync.SyncPlan, _ cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult {
 	f.applyCalls++
 	f.opts = opts
 	for _, p := range f.progressPaths {
@@ -39,12 +39,12 @@ func (f *fakeSyncer) Apply(ctx context.Context, _ app.SyncPlan, _ app.Selection,
 	if f.blockUntilCtx {
 		<-ctx.Done()
 	}
-	return app.ApplyResult{}
+	return cfgsync.ApplyResult{}
 }
 
-func selectedPlan() app.SyncPlan {
+func selectedPlan() cfgsync.SyncPlan {
 	item := planItem("a", false)
-	return app.SyncPlan{Items: []app.PlanItem{item}, Selection: app.Selection{item.Key(): true}}
+	return cfgsync.SyncPlan{Items: []cfgsync.PlanItem{item}, Selection: cfgsync.Selection{item.Key(): true}}
 }
 
 // runCmds feeds every command result back into the screen until no command is left.
@@ -54,8 +54,8 @@ func runCmds(s *Sync, cmd tea.Cmd) {
 	}
 }
 
-func planItem(path string, blocked bool) app.PlanItem {
-	return app.PlanItem{Change: plan.Change{Entry: manifest.Entry{Root: "home", Path: path}, Type: plan.Update}, Blocked: blocked}
+func planItem(path string, blocked bool) cfgsync.PlanItem {
+	return cfgsync.PlanItem{Change: plan.Change{Entry: manifest.Entry{Root: "home", Path: path}, Type: plan.Update}, Blocked: blocked}
 }
 
 func newPreview(f *fakeSyncer, dryRun bool) *Sync {
@@ -86,7 +86,7 @@ func TestSyncPreviewShowsPlanNotices(t *testing.T) {
 }
 
 func TestSyncToggleRespectsBlockedItems(t *testing.T) {
-	plan := app.SyncPlan{Items: []app.PlanItem{planItem("a", false), planItem("b", true)}, Selection: app.Selection{}}
+	plan := cfgsync.SyncPlan{Items: []cfgsync.PlanItem{planItem("a", false), planItem("b", true)}, Selection: cfgsync.Selection{}}
 	plan.Selection[plan.Items[0].Key()] = true
 	s := newPreview(&fakeSyncer{plan: plan}, false)
 
@@ -111,7 +111,7 @@ func TestSyncToggleRespectsBlockedItems(t *testing.T) {
 
 func TestSyncEnterDialogsDeclineBackup(t *testing.T) {
 	item := planItem("a", false)
-	plan := app.SyncPlan{Items: []app.PlanItem{item}, Selection: app.Selection{item.Key(): true}}
+	plan := cfgsync.SyncPlan{Items: []cfgsync.PlanItem{item}, Selection: cfgsync.Selection{item.Key(): true}}
 	s := newPreview(&fakeSyncer{plan: plan, needsBackup: true}, false)
 
 	s.Update(keyPress(tea.KeyEnter))
@@ -133,7 +133,7 @@ func TestSyncDiscardsStalePlan(t *testing.T) {
 	s.startPlan(plan.Push)
 	stale := s.gen
 	s.startPlan(plan.Pull)
-	s.Update(planMsg{gen: stale, plan: app.SyncPlan{Items: []app.PlanItem{planItem("a", false)}}})
+	s.Update(planMsg{gen: stale, plan: cfgsync.SyncPlan{Items: []cfgsync.PlanItem{planItem("a", false)}}})
 	if s.phase != phasePlanning || len(s.plan.Items) != 0 {
 		t.Error("stale plan must be discarded")
 	}
@@ -162,7 +162,7 @@ func TestSyncApplyLoopForwardsOptions(t *testing.T) {
 			}
 			runCmds(s, cmd)
 
-			want := app.ApplyOptions{Backup: tt.wantBackup, DryRun: tt.dryRun}
+			want := cfgsync.ApplyOptions{Backup: tt.wantBackup, DryRun: tt.dryRun}
 			if f.opts != want || s.progress != 2 || s.phase != phaseResult {
 				t.Errorf("opts=%+v progress=%d phase=%v", f.opts, s.progress, s.phase)
 			}
@@ -171,7 +171,7 @@ func TestSyncApplyLoopForwardsOptions(t *testing.T) {
 }
 
 func TestSyncNothingSelectedDoesNotApply(t *testing.T) {
-	f := &fakeSyncer{plan: app.SyncPlan{Items: []app.PlanItem{planItem("a", false)}}}
+	f := &fakeSyncer{plan: cfgsync.SyncPlan{Items: []cfgsync.PlanItem{planItem("a", false)}}}
 	s := newPreview(f, false)
 
 	_, cmd := s.Update(keyPress(tea.KeyEnter))
@@ -231,14 +231,14 @@ func TestSyncResultView(t *testing.T) {
 	s := newPreview(&fakeSyncer{}, true)
 	view := func() string { return ansi.Strip(s.View(100, 20)) }
 
-	s.Update(applyDoneMsg{gen: s.gen, result: app.ApplyResult{Nothing: true}})
+	s.Update(applyDoneMsg{gen: s.gen, result: cfgsync.ApplyResult{Nothing: true}})
 	if !strings.Contains(view(), "Nothing was done") {
 		t.Errorf("missing nothing-done line:\n%s", view())
 	}
 
-	s.Update(applyDoneMsg{gen: s.gen, result: app.ApplyResult{
-		Outcomes: []app.StepOutcome{{Result: plan.StepResult{Status: plan.StepWouldApply, Detail: "would append log entry"}}},
-		Items:    []app.ItemResult{{Key: app.ItemKey{Root: "home", Path: "a"}, Result: app.ItemNotApplied}},
+	s.Update(applyDoneMsg{gen: s.gen, result: cfgsync.ApplyResult{
+		Outcomes: []cfgsync.StepOutcome{{Result: plan.StepResult{Status: plan.StepWouldApply, Detail: "would append log entry"}}},
+		Items:    []cfgsync.ItemResult{{Key: cfgsync.ItemKey{Root: "home", Path: "a"}, Result: cfgsync.ItemNotApplied}},
 		Err:      errors.New("boom"),
 	}})
 	for _, want := range []string{"would append log entry", "not applied: home:a", "Failed: boom"} {

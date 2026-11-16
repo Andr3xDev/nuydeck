@@ -1,11 +1,11 @@
-package domain_test
+package cfgsync_test
 
 import (
 	"errors"
 	"slices"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -39,7 +39,7 @@ func TestClassifyLink(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := domain.ClassifyLink("config", tt.linkDir, tt.target, entries); got != tt.want {
+			if got := cfgsync.ClassifyLink("config", tt.linkDir, tt.target, entries); got != tt.want {
 				t.Errorf("ClassifyLink() = %v, want %v", got, tt.want)
 			}
 		})
@@ -48,7 +48,7 @@ func TestClassifyLink(t *testing.T) {
 
 func TestClassifyLinkIgnoresEntriesOfOtherRoots(t *testing.T) {
 	entries := []manifest.Entry{linkEntry("home", "nvim")}
-	if got := domain.ClassifyLink("config", "hypr", "../nvim/init.lua", entries); got != plan.WarnLeavesManagedSet {
+	if got := cfgsync.ClassifyLink("config", "hypr", "../nvim/init.lua", entries); got != plan.WarnLeavesManagedSet {
 		t.Errorf("ClassifyLink() = %v, want WarnLeavesManagedSet", got)
 	}
 }
@@ -84,7 +84,7 @@ func TestPreflightBlocked(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := domain.PreflightBlocked(dest, tt.srcKind, tt.changes, kinds(tt.kinds))
+			got := cfgsync.PreflightBlocked(dest, tt.srcKind, tt.changes, kinds(tt.kinds))
 			if !slices.Equal(got, tt.want) {
 				t.Errorf("PreflightBlocked() = %q, want %q", got, tt.want)
 			}
@@ -94,7 +94,7 @@ func TestPreflightBlocked(t *testing.T) {
 
 func TestPreflightBlockedFailsClosedWhenPathCannotBeInspected(t *testing.T) {
 	kindOf := func(string) (plan.NodeKind, error) { return plan.KindNone, errors.New("permission denied") }
-	got := domain.PreflightBlocked("/d", plan.KindDir, []plan.Change{{Path: "a/x", Type: plan.Create}}, kindOf)
+	got := cfgsync.PreflightBlocked("/d", plan.KindDir, []plan.Change{{Path: "a/x", Type: plan.Create}}, kindOf)
 	if !slices.Equal(got, []string{"a/x"}) {
 		t.Errorf("PreflightBlocked() = %q, want [a/x]", got)
 	}

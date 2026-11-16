@@ -10,8 +10,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
@@ -19,7 +19,7 @@ import (
 // BackupManager is the backup use-case surface the screen needs; *app.Service implements it.
 type BackupManager interface {
 	ListBackups(ctx context.Context) ([]backup.Backup, error)
-	PlanRestore(ctx context.Context, b backup.Backup) (app.SyncPlan, error)
+	PlanRestore(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
 	DeleteBackup(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
 }
 
@@ -36,7 +36,7 @@ type deleteDoneMsg struct {
 
 // restorePlanMsg is intercepted by Root, which opens the Sync preview on success.
 type restorePlanMsg struct {
-	plan app.SyncPlan
+	plan cfgsync.SyncPlan
 	err  error
 }
 

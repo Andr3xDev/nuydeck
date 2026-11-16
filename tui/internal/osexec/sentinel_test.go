@@ -15,6 +15,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
@@ -132,7 +133,10 @@ func sentinelInstaller(t *testing.T, home string, runner plan.Runner, dryRun boo
 	inspector := sentinelInspector{Home: home}
 	now := func() time.Time { return time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC) }
 	return &app.Installer{
-		Service: &app.Service{Inspector: inspector, Runner: runner, RepoDir: filepath.Join(home, "repo"), Now: now},
+		Service: &app.Service{
+			Service:   &cfgsync.Service{Inspector: inspector, LoadState: inspector.LoadState, Runner: runner, RepoDir: filepath.Join(home, "repo"), Now: now},
+			Inspector: inspector,
+		},
 		Probe:   sentinelProbe{},
 		Runner:  runner,
 		Preview: dryrun.Recorder{},

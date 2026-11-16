@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
@@ -167,7 +168,7 @@ func TestDashboardRefreshesAfterApply(t *testing.T) {
 	gen := d.gen
 
 	stamp := &state.LastSync{Direction: "push"}
-	_, cmd := d.Update(applyDoneMsg{result: app.ApplyResult{Outcomes: []app.StepOutcome{
+	_, cmd := d.Update(applyDoneMsg{result: cfgsync.ApplyResult{Outcomes: []cfgsync.StepOutcome{
 		{Step: plan.SaveStateStep{State: state.State{LastSync: stamp}}, Result: plan.StepResult{Status: plan.StepOK}},
 	}}})
 	if cmd == nil || d.gen != gen+1 || len(f.ctxs) != 2 {
