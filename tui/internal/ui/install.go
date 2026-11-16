@@ -12,8 +12,7 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
@@ -26,13 +25,13 @@ var errInstallUnavailable = errors.New("install is not available")
 
 // Installer is the install use-case surface the screen needs; *app.Installer implements it.
 type Installer interface {
-	Plan(ctx context.Context, d app.Draft) (app.InstallPlan, error)
-	Run(ctx context.Context, p app.InstallPlan, events chan<- app.InstallEvent, ack <-chan struct{}) app.InstallResult
+	Plan(ctx context.Context, d install.Draft) (install.InstallPlan, error)
+	Run(ctx context.Context, p install.InstallPlan, events chan<- plan.InstallEvent, ack <-chan struct{}) install.InstallResult
 }
 
 // GPUDetector is the read-only GPU probe of the hardware page.
 type GPUDetector interface {
-	DetectGPUs(ctx context.Context) ([]domain.PCIDevice, error)
+	DetectGPUs(ctx context.Context) ([]install.PCIDevice, error)
 }
 
 // PathKinder checks whether a path exists without opening it.
@@ -64,7 +63,7 @@ const (
 	pageRun
 )
 
-var profileChoices = []string{manifest.ProfileMinimal, manifest.ProfileFull, app.ProfileCustom}
+var profileChoices = []string{manifest.ProfileMinimal, manifest.ProfileFull, install.ProfileCustom}
 
 type stepStatus int
 
@@ -83,13 +82,13 @@ type gpuDetectedMsg struct {
 
 type installPlanMsg struct {
 	gen  int
-	plan app.InstallPlan
+	plan install.InstallPlan
 	err  error
 }
 
 type installStream struct {
-	events <-chan app.InstallEvent
-	result <-chan app.InstallResult
+	events <-chan plan.InstallEvent
+	result <-chan install.InstallResult
 }
 
 type installStartedMsg struct {
@@ -99,12 +98,12 @@ type installStartedMsg struct {
 
 type installEventMsg struct {
 	gen   int
-	event app.InstallEvent
+	event plan.InstallEvent
 }
 
 type installDoneMsg struct {
 	gen    int
-	result app.InstallResult
+	result install.InstallResult
 }
 
 type selectionRow struct {
@@ -119,7 +118,7 @@ type Install struct {
 	palette theme.Palette
 
 	page   installPage
-	draft  app.Draft
+	draft  install.Draft
 	cursor int
 	gen    int
 	cancel context.CancelFunc
@@ -140,7 +139,7 @@ type Install struct {
 
 	planning bool
 	planErr  error
-	plan     app.InstallPlan
+	plan     install.InstallPlan
 	summary  viewport.Model
 
 	stream   installStream
@@ -163,7 +162,7 @@ func newInstall(deps InstallDeps, keys KeyMap, palette theme.Palette) *Install {
 		deps:        deps,
 		keys:        keys,
 		palette:     palette,
-		draft:       app.Draft{Profile: manifest.ProfileMinimal},
+		draft:       install.Draft{Profile: manifest.ProfileMinimal},
 		secretInput: input,
 		summary:     viewport.New(),
 		logView:     viewport.New(),
@@ -258,7 +257,7 @@ func (s *Install) moveCursor(msg tea.KeyPressMsg, n int) bool {
 func (s *Install) skipsPage(p installPage) bool {
 	switch p {
 	case pageSelection:
-		return s.draft.Profile != app.ProfileCustom
+		return s.draft.Profile != install.ProfileCustom
 	case pageSecrets:
 		return len(s.deps.SecretNames) == 0
 	}
@@ -304,12 +303,12 @@ func (s *Install) enterPage() tea.Cmd {
 
 func detectGPUs(gpus GPUDetector, drivers []manifest.Driver) tea.Cmd {
 	return func() tea.Msg {
-		var devices []domain.PCIDevice
+		var devices []install.PCIDevice
 		if gpus != nil {
 			// A failed probe leaves devices empty, which proposes every driver with detected=false.
 			devices, _ = gpus.DetectGPUs(context.Background())
 		}
-		ids, detected := domain.ProposeDrivers(devices, drivers)
+		ids, detected := install.ProposeDrivers(devices, drivers)
 		return gpuDetectedMsg{ids: ids, detected: detected}
 	}
 }
@@ -457,12 +456,12 @@ func (s *Install) submitSecret() tea.Cmd {
 }
 
 // draftSnapshot is what the plan sees; slices are copied because the plan runs on another goroutine.
-func (s *Install) draftSnapshot() app.Draft {
+func (s *Install) draftSnapshot() install.Draft {
 	d := s.draft
 	d.Drivers = slices.Clone(d.Drivers)
 	d.Secrets = slices.Clone(d.Secrets)
 	d.Packages = nil
-	if d.Profile == app.ProfileCustom {
+	if d.Profile == install.ProfileCustom {
 		for _, p := range s.deps.Catalog {
 			if s.selected[p.Name] {
 				d.Packages = append(d.Packages, p.Name)
@@ -475,7 +474,7 @@ func (s *Install) draftSnapshot() app.Draft {
 func (s *Install) startPlan() tea.Cmd {
 	s.cancelWork()
 	s.gen++
-	s.plan, s.planErr, s.planning = app.InstallPlan{}, nil, true
+	s.plan, s.planErr, s.planning = install.InstallPlan{}, nil, true
 	s.showSummary()
 	if s.deps.Installer == nil {
 		s.planning, s.planErr = false, errInstallUnavailable
@@ -523,17 +522,17 @@ func (s *Install) startRun() tea.Cmd {
 	s.cancel = cancel
 	ack := make(chan struct{}, 1)
 	s.ack = ack
-	gen, installer, plan := s.gen, s.deps.Installer, s.plan
+	gen, installer, installPlan := s.gen, s.deps.Installer, s.plan
 	// The plan snapshot carries the values Run needs; the draft must not keep them.
 	s.draft.Secrets = nil
 	runDone := make(chan struct{})
 	s.runDone = runDone
 	return func() tea.Msg {
-		events := make(chan app.InstallEvent)
-		result := make(chan app.InstallResult, 1)
+		events := make(chan plan.InstallEvent)
+		result := make(chan install.InstallResult, 1)
 		go func() {
 			defer close(runDone)
-			result <- installer.Run(ctx, plan, events, ack)
+			result <- installer.Run(ctx, installPlan, events, ack)
 		}()
 		return installStartedMsg{gen: gen, stream: installStream{events: events, result: result}}
 	}
@@ -549,8 +548,8 @@ func waitInstall(gen int, st installStream) tea.Cmd {
 	}
 }
 
-func (s *Install) applyEvent(ev app.InstallEvent) {
-	if ev.Kind == app.EventLine {
+func (s *Install) applyEvent(ev plan.InstallEvent) {
+	if ev.Kind == plan.EventLine {
 		s.appendLog(ev.Line)
 		return
 	}
@@ -559,14 +558,14 @@ func (s *Install) applyEvent(ev app.InstallEvent) {
 	}
 	s.current = ev.Index
 	switch ev.Kind {
-	case app.EventStarted, app.EventAwaitAck:
+	case plan.EventStarted, plan.EventAwaitAck:
 		s.statuses[ev.Index] = statusRunning
-		s.awaitAck = ev.Kind == app.EventAwaitAck
-	case app.EventDone:
+		s.awaitAck = ev.Kind == plan.EventAwaitAck
+	case plan.EventDone:
 		s.statuses[ev.Index] = statusDone
-	case app.EventSkipped:
+	case plan.EventSkipped:
 		s.statuses[ev.Index] = statusSkipped
-	case app.EventFailed:
+	case plan.EventFailed:
 		s.statuses[ev.Index] = statusFailed
 		s.runErr = ev.Err
 	}
@@ -581,7 +580,7 @@ func (s *Install) appendLog(line string) {
 }
 
 // finishRun does not depend on trailing events: after a cancel they may have been dropped.
-func (s *Install) finishRun(result app.InstallResult) {
+func (s *Install) finishRun(result install.InstallResult) {
 	s.running, s.finished, s.awaitAck = false, true, false
 	if s.runErr == nil {
 		s.runErr = result.Err
@@ -591,7 +590,7 @@ func (s *Install) finishRun(result app.InstallResult) {
 }
 
 // withoutSecretValues keeps the step list for the run page but drops the secret values.
-func withoutSecretValues(installPlan app.InstallPlan) app.InstallPlan {
+func withoutSecretValues(installPlan install.InstallPlan) install.InstallPlan {
 	installPlan.Steps = slices.Clone(installPlan.Steps)
 	for i, ps := range installPlan.Steps {
 		if w, ok := ps.Step.(plan.WriteSecretsStep); ok {

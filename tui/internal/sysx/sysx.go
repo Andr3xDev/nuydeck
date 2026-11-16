@@ -12,8 +12,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 )
 
 const (
@@ -50,12 +50,12 @@ func (p Probe) output(ctx context.Context, name string, args ...string) (string,
 	return out.String(), nil
 }
 
-func (p Probe) DetectGPUs(ctx context.Context) ([]domain.PCIDevice, error) {
+func (p Probe) DetectGPUs(ctx context.Context) ([]install.PCIDevice, error) {
 	out, err := p.output(ctx, "lspci", "-vmmnn")
 	if err != nil {
 		return nil, err
 	}
-	return domain.ParseLspci(out), nil
+	return install.ParseLspci(out), nil
 }
 
 func (p Probe) InstalledPackages(ctx context.Context) (map[string]bool, error) {

@@ -1,4 +1,4 @@
-package app
+package install
 
 import (
 	"cmp"
@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
@@ -25,7 +24,7 @@ var (
 
 // Run executes the plan in order and closes events when it returns.
 // It stops at the first failure; the Record step still runs, the Reboot step never does after a failure, cancel or in dry-run.
-func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- InstallEvent, ack <-chan struct{}) InstallResult {
+func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- plan.InstallEvent, ack <-chan struct{}) InstallResult {
 	defer close(events)
 	if len(p.Blocking) > 0 {
 		return InstallResult{Err: errors.Join(p.Blocking...)}
@@ -40,7 +39,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 	var sudoExpired atomic.Bool
 	var items []state.LogItem
 	scrub := secretScrubber(p.Steps)
-	emit := func(e InstallEvent) {
+	emit := func(e plan.InstallEvent) {
 		select {
 		case events <- e:
 		case <-ctx.Done():
@@ -49,36 +48,36 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 	progress := func(index int) func(plan.StepProgress) {
 		return func(sp plan.StepProgress) {
 			if sp.Line != "" {
-				emit(InstallEvent{Index: index, Kind: EventLine, Line: scrub.Replace(sp.Line)})
+				emit(plan.InstallEvent{Index: index, Kind: plan.EventLine, Line: scrub.Replace(sp.Line)})
 			}
 		}
 	}
-	runStep := func(runCtx context.Context, index int, ps domain.PlannedStep) error {
+	runStep := func(runCtx context.Context, index int, ps PlannedStep) error {
 		label, kind := describeStep(ps.Step)
 		logItem := func(result string) {
-			if ps.Phase < domain.PhaseRecord {
+			if ps.Phase < PhaseRecord {
 				items = append(items, state.LogItem{Path: label, Kind: kind, Result: result})
 			}
 		}
 		fail := func(err error) error {
 			logItem("failed")
 			err = scrubError(scrub, fmt.Errorf("%s: %w", label, err))
-			emit(InstallEvent{Index: index, Kind: EventFailed, Err: err})
+			emit(plan.InstallEvent{Index: index, Kind: plan.EventFailed, Err: err})
 			return err
 		}
 		if ps.Skip != "" {
 			logItem("skipped")
-			emit(InstallEvent{Index: index, Kind: EventSkipped})
+			emit(plan.InstallEvent{Index: index, Kind: plan.EventSkipped})
 			return nil
 		}
 		if needsSudo(ps.Step) && sudoExpired.Load() {
 			return fail(errSudoExpired)
 		}
-		emit(InstallEvent{Index: index, Kind: EventStarted})
+		emit(plan.InstallEvent{Index: index, Kind: plan.EventStarted})
 		res := i.Runner.Run(runCtx, ps.Step, progress(index))
 		if res.Status != plan.StepFailed {
 			logItem("done")
-			emit(InstallEvent{Index: index, Kind: EventDone})
+			emit(plan.InstallEvent{Index: index, Kind: plan.EventDone})
 			return nil
 		}
 		err := cmp.Or(res.Err, errors.New(cmp.Or(res.Detail, "step failed")))
@@ -90,7 +89,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 
 	var runErr error
 	for index, ps := range p.Steps {
-		if ps.Phase >= domain.PhaseRecord {
+		if ps.Phase >= PhaseRecord {
 			break
 		}
 		if runErr = ctx.Err(); runErr != nil {
@@ -109,7 +108,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 
 	// The record is persisted even when the run was cancelled.
 	for index, ps := range p.Steps {
-		if entry, ok := ps.Step.(plan.AppendLogStep); ok && ps.Phase == domain.PhaseRecord {
+		if entry, ok := ps.Step.(plan.AppendLogStep); ok && ps.Phase == PhaseRecord {
 			ps.Step = plan.AppendLogStep{Entry: i.finishedEntry(entry.Entry, items, runErr)}
 			if err := runStep(context.WithoutCancel(ctx), index, ps); err != nil && runErr == nil {
 				runErr = err
@@ -121,14 +120,14 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 	}
 
 	for index, ps := range p.Steps {
-		if ps.Phase != domain.PhaseReboot {
+		if ps.Phase != PhaseReboot {
 			continue
 		}
 		if i.DryRun {
-			emit(InstallEvent{Index: index, Kind: EventSkipped})
+			emit(plan.InstallEvent{Index: index, Kind: plan.EventSkipped})
 			break
 		}
-		emit(InstallEvent{Index: index, Kind: EventAwaitAck})
+		emit(plan.InstallEvent{Index: index, Kind: plan.EventAwaitAck})
 		select {
 		case <-ack:
 		case <-ctx.Done():
@@ -188,13 +187,13 @@ func needsSudo(s plan.Step) bool {
 }
 
 // isVerificationProbe is the quiet `sudo -n -v` that follows the handoff in the privilege phase.
-func isVerificationProbe(ps domain.PlannedStep) bool {
+func isVerificationProbe(ps PlannedStep) bool {
 	c, ok := ps.Step.(plan.CommandStep)
-	return ok && ps.Phase == domain.PhasePrivilege && c.Quiet && slices.Equal(c.Argv, sudoProbeStep("").Argv)
+	return ok && ps.Phase == PhasePrivilege && c.Quiet && slices.Equal(c.Argv, plan.SudoProbeStep("").Argv)
 }
 
 // secretScrubber masks every secret value of the plan; values never reach argv or output by design, this is the second line.
-func secretScrubber(steps []domain.PlannedStep) *strings.Replacer {
+func secretScrubber(steps []PlannedStep) *strings.Replacer {
 	var values []string
 	for _, ps := range steps {
 		if w, ok := ps.Step.(plan.WriteSecretsStep); ok {

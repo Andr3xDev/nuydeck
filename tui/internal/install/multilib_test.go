@@ -1,10 +1,10 @@
-package domain_test
+package install_test
 
 import (
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 )
 
 // Excerpt of the stock Arch /etc/pacman.conf; multilib-testing sits right above multilib and must stay untouched.
@@ -47,7 +47,7 @@ func TestEnableMultilib(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			in := pacmanConfHead + tc.multilib
-			out, changed, err := domain.EnableMultilib([]byte(in))
+			out, changed, err := install.EnableMultilib([]byte(in))
 
 			if tc.wantErr {
 				if err == nil || !strings.Contains(err.Error(), "pacman.conf") {
@@ -76,7 +76,7 @@ func TestEnableMultilib(t *testing.T) {
 
 func TestEnableMultilibUncommentsOnlyTheTwoLines(t *testing.T) {
 	in := pacmanConfHead + "#[multilib]\n#Include = /etc/pacman.d/mirrorlist\n"
-	out, _, err := domain.EnableMultilib([]byte(in))
+	out, _, err := install.EnableMultilib([]byte(in))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

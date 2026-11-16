@@ -1,9 +1,9 @@
-package domain_test
+package install_test
 
 import (
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -17,10 +17,10 @@ var (
 
 // The order comes from the spec, not from the manifest, so the enum itself must encode it.
 func TestPhaseOrderMatchesSpec(t *testing.T) {
-	want := []domain.Phase{
-		domain.PhasePrivilege, domain.PhasePacmanConf, domain.PhasePacman, domain.PhaseParuBootstrap,
-		domain.PhaseAur, domain.PhaseSystem, domain.PhaseConfigs, domain.PhaseFonts, domain.PhaseEnv,
-		domain.PhaseShell, domain.PhaseServices, domain.PhaseTheme, domain.PhaseRecord, domain.PhaseReboot,
+	want := []install.Phase{
+		install.PhasePrivilege, install.PhasePacmanConf, install.PhasePacman, install.PhaseParuBootstrap,
+		install.PhaseAur, install.PhaseSystem, install.PhaseConfigs, install.PhaseFonts, install.PhaseEnv,
+		install.PhaseShell, install.PhaseServices, install.PhaseTheme, install.PhaseRecord, install.PhaseReboot,
 	}
 	for i, p := range want {
 		if int(p) != i {
@@ -31,9 +31,9 @@ func TestPhaseOrderMatchesSpec(t *testing.T) {
 
 func TestPlannedStepCarriesPhaseStepAndSkipReason(t *testing.T) {
 	step := plan.CommandStep{Label: "install pacman packages (1)", Argv: []string{"pacman", "-Syu"}, Sudo: true}
-	planned := domain.PlannedStep{Phase: domain.PhasePacman, Step: step, Skip: "already installed"}
+	planned := install.PlannedStep{Phase: install.PhasePacman, Step: step, Skip: "already installed"}
 
-	if planned.Phase != domain.PhasePacman || planned.Skip != "already installed" {
+	if planned.Phase != install.PhasePacman || planned.Skip != "already installed" {
 		t.Fatalf("PlannedStep = %+v", planned)
 	}
 	var _ plan.Step = plan.WriteFileStep{}

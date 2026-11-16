@@ -1,4 +1,4 @@
-package domain
+package install
 
 import "github.com/Andr3xDev/nuydeck/tui/internal/plan"
 

@@ -9,7 +9,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -82,7 +82,7 @@ func (s *Install) profileView() string {
 	descriptions := map[string]string{
 		manifest.ProfileMinimal: "the essential packages",
 		manifest.ProfileFull:    "every packaged tool",
-		app.ProfileCustom:       "mark packages one by one",
+		install.ProfileCustom:   "mark packages one by one",
 	}
 	lines := []string{bold("Choose a profile")}
 	for i, p := range profileChoices {

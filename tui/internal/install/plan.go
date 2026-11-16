@@ -1,4 +1,4 @@
-package app
+package install
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"slices"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
@@ -15,8 +14,8 @@ import (
 
 type planBuilder struct{ plan InstallPlan }
 
-func (b *planBuilder) add(phase domain.Phase, step plan.Step, skip string) {
-	b.plan.Steps = append(b.plan.Steps, domain.PlannedStep{Phase: phase, Step: step, Skip: skip})
+func (b *planBuilder) add(phase Phase, step plan.Step, skip string) {
+	b.plan.Steps = append(b.plan.Steps, PlannedStep{Phase: phase, Step: step, Skip: skip})
 }
 
 // Plan reads the machine and builds the ordered steps for the draft; it mutates nothing.
@@ -28,14 +27,14 @@ func (i *Installer) Plan(ctx context.Context, d Draft) (InstallPlan, error) {
 	pacman, aur := i.selectedPackages(d)
 
 	b := &planBuilder{}
-	for _, s := range PrivilegeSteps() {
-		b.add(domain.PhasePrivilege, s, "")
+	for _, s := range plan.PrivilegeSteps() {
+		b.add(PhasePrivilege, s, "")
 	}
 
 	i.planMultilib(b)
 	if len(pacman) > 0 {
 		argv := slices.Concat(pacmanInstallArgs, pacman)
-		b.add(domain.PhasePacman, plan.CommandStep{Label: fmt.Sprintf("install pacman packages (%d)", len(pacman)), Argv: argv, Sudo: true}, skipIfInstalled(pacman, installed))
+		b.add(PhasePacman, plan.CommandStep{Label: fmt.Sprintf("install pacman packages (%d)", len(pacman)), Argv: argv, Sudo: true}, skipIfInstalled(pacman, installed))
 	}
 	if err := i.planAUR(b, aur, installed); err != nil {
 		return InstallPlan{}, err
@@ -53,8 +52,8 @@ func (i *Installer) Plan(ctx context.Context, d Draft) (InstallPlan, error) {
 	i.planServices(b, d)
 	i.planTheme(b, d)
 
-	b.add(domain.PhaseRecord, plan.AppendLogStep{Entry: state.LogEntry{Op: "install"}}, "")
-	b.add(domain.PhaseReboot, plan.CommandStep{Label: "reboot", Argv: []string{"systemctl", "reboot"}, Sudo: true}, "")
+	b.add(PhaseRecord, plan.AppendLogStep{Entry: state.LogEntry{Op: "install"}}, "")
+	b.add(PhaseReboot, plan.CommandStep{Label: "reboot", Argv: []string{"systemctl", "reboot"}, Sudo: true}, "")
 	return b.plan, nil
 }
 

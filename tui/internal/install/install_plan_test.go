@@ -1,4 +1,4 @@
-package app
+package install
 
 import (
 	"bytes"
@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -127,8 +126,8 @@ func (f *planFixture) plan(t *testing.T) InstallPlan {
 	return installPlan
 }
 
-func phaseSteps(installPlan InstallPlan, phase domain.Phase) []domain.PlannedStep {
-	var out []domain.PlannedStep
+func phaseSteps(installPlan InstallPlan, phase Phase) []PlannedStep {
+	var out []PlannedStep
 	for _, ps := range installPlan.Steps {
 		if ps.Phase == phase {
 			out = append(out, ps)
@@ -137,8 +136,8 @@ func phaseSteps(installPlan InstallPlan, phase domain.Phase) []domain.PlannedSte
 	return out
 }
 
-func runnable(steps []domain.PlannedStep) []domain.PlannedStep {
-	var out []domain.PlannedStep
+func runnable(steps []PlannedStep) []PlannedStep {
+	var out []PlannedStep
 	for _, ps := range steps {
 		if ps.Skip == "" {
 			out = append(out, ps)
@@ -147,7 +146,7 @@ func runnable(steps []domain.PlannedStep) []domain.PlannedStep {
 	return out
 }
 
-func rawSteps(steps []domain.PlannedStep) []plan.Step {
+func rawSteps(steps []PlannedStep) []plan.Step {
 	out := make([]plan.Step, len(steps))
 	for i, ps := range steps {
 		out[i] = ps.Step
@@ -155,7 +154,7 @@ func rawSteps(steps []domain.PlannedStep) []plan.Step {
 	return out
 }
 
-func runnableCommands(installPlan InstallPlan, phase domain.Phase) []plan.CommandStep {
+func runnableCommands(installPlan InstallPlan, phase Phase) []plan.CommandStep {
 	return stepsOfType[plan.CommandStep](rawSteps(runnable(phaseSteps(installPlan, phase))))
 }
 
@@ -183,14 +182,14 @@ func TestPlan_PhasesFollowFixedOrderWhateverTheManifestOrder(t *testing.T) {
 	f := newPlanFixture(t)
 	installPlan := f.plan(t)
 
-	var phases []domain.Phase
+	var phases []Phase
 	for _, ps := range installPlan.Steps {
 		phases = append(phases, ps.Phase)
 	}
 	if !slices.IsSorted(phases) {
 		t.Errorf("phases are not in execution order: %v", phases)
 	}
-	for phase := domain.PhasePrivilege; phase <= domain.PhaseReboot; phase++ {
+	for phase := PhasePrivilege; phase <= PhaseReboot; phase++ {
 		if len(phaseSteps(installPlan, phase)) == 0 {
 			t.Errorf("phase %d has no step in a full install on a fresh machine", phase)
 		}
@@ -200,7 +199,7 @@ func TestPlan_PhasesFollowFixedOrderWhateverTheManifestOrder(t *testing.T) {
 	slices.Reverse(reversed.inst.Catalog)
 	slices.Reverse(reversed.inst.Drivers)
 	slices.Reverse(reversed.draft.Drivers)
-	var reversedPhases []domain.Phase
+	var reversedPhases []Phase
 	for _, ps := range reversed.plan(t).Steps {
 		reversedPhases = append(reversedPhases, ps.Phase)
 	}
@@ -214,7 +213,7 @@ func TestPlan_PhasesFollowFixedOrderWhateverTheManifestOrder(t *testing.T) {
 	if got := f.runner.steps; len(got) != 0 {
 		t.Errorf("Plan ran steps before confirmation: %v", got)
 	}
-	logs := stepsOfType[plan.AppendLogStep](rawSteps(phaseSteps(installPlan, domain.PhaseRecord)))
+	logs := stepsOfType[plan.AppendLogStep](rawSteps(phaseSteps(installPlan, PhaseRecord)))
 	if len(logs) != 1 || logs[0].Entry.Op != "install" {
 		t.Errorf("record phase = %+v, want one AppendLogStep with op install", logs)
 	}
@@ -238,7 +237,7 @@ func TestPlan_OnlySudoHandoffIsInteractiveAndRebootIsLast(t *testing.T) {
 
 	last := installPlan.Steps[len(installPlan.Steps)-1]
 	reboot, ok := last.Step.(plan.CommandStep)
-	if !ok || last.Phase != domain.PhaseReboot || last.Skip != "" ||
+	if !ok || last.Phase != PhaseReboot || last.Skip != "" ||
 		!slices.Equal(reboot.Argv, []string{"systemctl", "reboot"}) || !reboot.Sudo {
 		t.Fatalf("last step = %+v, want a never-skipped sudo systemctl reboot", last)
 	}
@@ -292,7 +291,7 @@ func TestPlan_PacmanStepUpgradesAndInstallsSelection(t *testing.T) {
 			f.draft = tc.draft
 			installPlan := f.plan(t)
 
-			pacman := runnableCommands(installPlan, domain.PhasePacman)
+			pacman := runnableCommands(installPlan, PhasePacman)
 			if len(pacman) != 1 {
 				t.Fatalf("runnable pacman steps = %d, want 1", len(pacman))
 			}
@@ -304,7 +303,7 @@ func TestPlan_PacmanStepUpgradesAndInstallsSelection(t *testing.T) {
 				t.Errorf("pacman packages = %v, want %v", got, tc.wantPacman)
 			}
 
-			aur := runnableCommands(installPlan, domain.PhaseAur)
+			aur := runnableCommands(installPlan, PhaseAur)
 			if len(tc.wantAur) == 0 {
 				if len(aur) != 0 {
 					t.Errorf("AUR step planned without AUR packages: %+v", aur)
@@ -341,7 +340,7 @@ func TestPlan_ParuBootstrapOnlyWhenNeededAndUnattended(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPlanFixture(t)
 			tc.mutate(f)
-			steps := runnableCommands(f.plan(t), domain.PhaseParuBootstrap)
+			steps := runnableCommands(f.plan(t), PhaseParuBootstrap)
 
 			var clones, makepkgs []plan.CommandStep
 			for _, c := range steps {
@@ -373,7 +372,7 @@ func TestPlan_ParuBootstrapOnlyWhenNeededAndUnattended(t *testing.T) {
 }
 
 func TestPlan_MultilibEditRunsOnlyForTheExpectedCommentedLines(t *testing.T) {
-	enabled, _, err := domain.EnableMultilib([]byte(commentedPacmanConf))
+	enabled, _, err := EnableMultilib([]byte(commentedPacmanConf))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -446,7 +445,7 @@ func TestPlan_LogindDropInIsPlannedAfterAurAndBackedUpWhenDifferent(t *testing.T
 			if (w.BackupTo != "") != tc.wantBackup {
 				t.Errorf("BackupTo = %q, want backup=%v", w.BackupTo, tc.wantBackup)
 			}
-			if got := phaseSteps(installPlan, domain.PhaseSystem); len(got) == 0 {
+			if got := phaseSteps(installPlan, PhaseSystem); len(got) == 0 {
 				t.Error("drop-in is not in the system phase")
 			}
 		})
@@ -456,7 +455,7 @@ func TestPlan_LogindDropInIsPlannedAfterAurAndBackedUpWhenDifferent(t *testing.T
 func TestPlan_ConfigsAndFontsReuseThePushPlanWithoutDeletes(t *testing.T) {
 	installPlan := newPlanFixture(t).plan(t)
 
-	configSteps := rawSteps(phaseSteps(installPlan, domain.PhaseConfigs))
+	configSteps := rawSteps(phaseSteps(installPlan, PhaseConfigs))
 	copies := stepsOfType[plan.CopyStep](configSteps)
 	if len(copies) != 1 || !slices.Equal(copies[0].Paths, []string{"a.conf", "b.conf"}) || copies[0].Direction != plan.Push {
 		t.Fatalf("config copies = %+v, want one push copy of a.conf and b.conf", copies)
@@ -474,11 +473,11 @@ func TestPlan_ConfigsAndFontsReuseThePushPlanWithoutDeletes(t *testing.T) {
 		t.Errorf("backup index %d, copy index %d: an overwrite needs a backup step first", backupAt, copyAt)
 	}
 
-	fontSteps := rawSteps(phaseSteps(installPlan, domain.PhaseFonts))
+	fontSteps := rawSteps(phaseSteps(installPlan, PhaseFonts))
 	if got := stepsOfType[plan.CopyStep](fontSteps); len(got) != 1 || !slices.Equal(got[0].Paths, []string{"a.ttf"}) {
 		t.Errorf("font copies = %+v, want one copy of a.ttf", got)
 	}
-	if got := runnableCommands(installPlan, domain.PhaseFonts); len(got) != 1 || !slices.Equal(got[0].Argv, []string{"fc-cache", "-f"}) {
+	if got := runnableCommands(installPlan, PhaseFonts); len(got) != 1 || !slices.Equal(got[0].Argv, []string{"fc-cache", "-f"}) {
 		t.Errorf("font phase commands = %+v, want fc-cache -f", got)
 	}
 	if got := stepsOfType[plan.DeleteStep](rawSteps(installPlan.Steps)); len(got) != 0 {
@@ -513,7 +512,7 @@ func TestPlan_GPUEnvLinkTargetsTheFileOfTheSelectedDrivers(t *testing.T) {
 		t.Run(tc.want, func(t *testing.T) {
 			f := newPlanFixture(t)
 			f.draft.Drivers = tc.drivers
-			links := stepsOfType[plan.SymlinkStep](rawSteps(runnable(phaseSteps(f.plan(t), domain.PhaseEnv))))
+			links := stepsOfType[plan.SymlinkStep](rawSteps(runnable(phaseSteps(f.plan(t), PhaseEnv))))
 			if len(links) != 1 || links[0].Path != gpuEnvLinkPath || links[0].Target != tc.want {
 				t.Fatalf("links = %+v, want %s -> %s", links, gpuEnvLinkPath, tc.want)
 			}
@@ -672,7 +671,7 @@ func TestPlan_ShellStepsCloneOnlyWhatIsMissingAndChangeShellOnlyWhenNotZsh(t *te
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPlanFixture(t)
 			tc.mutate(f)
-			commands := runnableCommands(f.plan(t), domain.PhaseShell)
+			commands := runnableCommands(f.plan(t), PhaseShell)
 
 			if got := cloneDestinations(commands); !slices.Equal(got, tc.wantClones) {
 				t.Errorf("clone destinations = %v, want %v", got, tc.wantClones)
@@ -738,7 +737,7 @@ func TestPlan_ServicesAreEnabledOnlyForSelectedPackagesAndDrivers(t *testing.T) 
 			installPlan := f.plan(t)
 
 			var units []string
-			for _, c := range runnableCommands(installPlan, domain.PhaseServices) {
+			for _, c := range runnableCommands(installPlan, PhaseServices) {
 				if len(c.Argv) < 2 || c.Argv[0] != "systemctl" || c.Argv[1] != "enable" || !c.Sudo {
 					t.Errorf("services command = %+v, want sudo systemctl enable", c)
 					continue
@@ -761,7 +760,7 @@ func TestPlan_ServicesAreEnabledOnceEach(t *testing.T) {
 	f.draft = Draft{Profile: manifest.ProfileFull}
 
 	var units []string
-	for _, c := range runnableCommands(f.plan(t), domain.PhaseServices) {
+	for _, c := range runnableCommands(f.plan(t), PhaseServices) {
 		units = append(units, c.Argv[2:]...)
 	}
 
@@ -784,7 +783,7 @@ func TestPlan_ThemeStateWritesNameAndVariantWithNadirDefault(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPlanFixture(t)
 			f.draft.ThemeVariant = tc.variant
-			steps := phaseSteps(f.plan(t), domain.PhaseTheme)
+			steps := phaseSteps(f.plan(t), PhaseTheme)
 
 			writes := stepsOfType[plan.WriteFileStep](rawSteps(steps))
 			if len(steps) != 2 || len(writes) != 2 {

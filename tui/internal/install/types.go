@@ -1,9 +1,9 @@
-package app
+package install
 
 import (
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -14,7 +14,7 @@ const ProfileCustom = "custom"
 // Installer plans and runs the guided install.
 // Plan uses Service, Probe, Now and the catalog fields; Run uses only Runner, Now, KeepaliveEvery and DryRun.
 type Installer struct {
-	Service *Service
+	Service *cfgsync.Service
 	Probe   SystemProbe
 	Runner  plan.Runner
 	// Preview is always a Recorder; it renders the summary over the plan that Run executes.
@@ -45,7 +45,7 @@ type Draft struct {
 
 // InstallPlan is the ordered step list plus what the summary must show besides it.
 type InstallPlan struct {
-	Steps   []domain.PlannedStep
+	Steps   []PlannedStep
 	Notices []string
 	// Blocking errors forbid running the plan.
 	Blocking []error

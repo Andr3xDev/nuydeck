@@ -1,4 +1,4 @@
-package app
+package install
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -20,7 +19,7 @@ type fakeProbe struct {
 	root         bool
 }
 
-func (p *fakeProbe) DetectGPUs(context.Context) ([]domain.PCIDevice, error) { return nil, nil }
+func (p *fakeProbe) DetectGPUs(context.Context) ([]PCIDevice, error) { return nil, nil }
 
 func (p *fakeProbe) InstalledPackages(context.Context) (map[string]bool, error) {
 	return p.installed, p.installedErr

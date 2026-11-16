@@ -1,11 +1,11 @@
-package domain_test
+package install_test
 
 import (
 	"slices"
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
 
@@ -33,8 +33,8 @@ var testDrivers = []manifest.Driver{
 }
 
 func TestLspciParse(t *testing.T) {
-	got := domain.ParseLspci(lspciHostBridge + lspciIntelGPU + lspciNvidiaGPU + lspciAMDGPU)
-	want := []domain.PCIDevice{
+	got := install.ParseLspci(lspciHostBridge + lspciIntelGPU + lspciNvidiaGPU + lspciAMDGPU)
+	want := []install.PCIDevice{
 		{Slot: "00:00.0", ClassID: "0600", VendorID: "8086"},
 		{Slot: "00:02.0", ClassID: "0300", VendorID: "8086"},
 		{Slot: "01:00.0", ClassID: "0302", VendorID: "10de"},
@@ -46,7 +46,7 @@ func TestLspciParse(t *testing.T) {
 }
 
 func TestLspciParseGarbageYieldsNoUsableDevice(t *testing.T) {
-	if devices := domain.ParseLspci(lspciGarbage); len(devices) != 0 {
+	if devices := install.ParseLspci(lspciGarbage); len(devices) != 0 {
 		t.Errorf("garbage produced devices: %+v", devices)
 	}
 }
@@ -71,7 +71,7 @@ func TestProposeDrivers(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ids, detected := domain.ProposeDrivers(domain.ParseLspci(tc.lspci), testDrivers)
+			ids, detected := install.ProposeDrivers(install.ParseLspci(tc.lspci), testDrivers)
 			slices.Sort(ids)
 			if detected != tc.wantDetected || !slices.Equal(ids, tc.want) {
 				t.Fatalf("ProposeDrivers() = %v, %v; want %v, %v", ids, detected, tc.want, tc.wantDetected)
@@ -81,7 +81,7 @@ func TestProposeDrivers(t *testing.T) {
 }
 
 func TestProposeDriversMatchesVendorCaseInsensitively(t *testing.T) {
-	ids, detected := domain.ProposeDrivers(domain.ParseLspci(lspciNvidiaGPU), []manifest.Driver{{ID: "nvidia", VendorID: "10DE"}})
+	ids, detected := install.ProposeDrivers(install.ParseLspci(lspciNvidiaGPU), []manifest.Driver{{ID: "nvidia", VendorID: "10DE"}})
 	if !detected || !slices.Equal(ids, []string{"nvidia"}) {
 		t.Fatalf("ProposeDrivers() = %v, %v", ids, detected)
 	}
@@ -100,12 +100,12 @@ func TestGPUEnvFileName(t *testing.T) {
 		{[]string{"intel", "amd"}, "gpu_env_amd_intel.lua"},
 		{[]string{"nvidia", "intel", "amd"}, "gpu_env_amd_intel_nvidia.lua"},
 	}
-	if got := domain.GPUEnvFileName(nil); got != "" {
+	if got := install.GPUEnvFileName(nil); got != "" {
 		t.Errorf("GPUEnvFileName(nil) = %q, want empty", got)
 	}
 	seen := map[string]bool{}
 	for _, tc := range tests {
-		got := domain.GPUEnvFileName(tc.ids)
+		got := install.GPUEnvFileName(tc.ids)
 		if got != tc.want {
 			t.Errorf("GPUEnvFileName(%v) = %q, want %q", tc.ids, got, tc.want)
 		}
@@ -118,7 +118,7 @@ func TestGPUEnvFileName(t *testing.T) {
 
 func TestGPUEnvFileNameDoesNotReorderCallerSlice(t *testing.T) {
 	ids := []string{"nvidia", "amd"}
-	domain.GPUEnvFileName(ids)
+	install.GPUEnvFileName(ids)
 	if strings.Join(ids, ",") != "nvidia,amd" {
 		t.Fatalf("input mutated: %v", ids)
 	}

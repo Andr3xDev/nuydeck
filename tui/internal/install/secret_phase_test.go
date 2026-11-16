@@ -1,4 +1,4 @@
-package domain_test
+package install_test
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -22,7 +22,7 @@ func sentinelStep() plan.WriteSecretsStep {
 
 func TestSecretNeverPrintsItsValue(t *testing.T) {
 	step := sentinelStep()
-	planned := domain.PlannedStep{Phase: domain.PhaseEnv, Step: step}
+	planned := install.PlannedStep{Phase: install.PhaseEnv, Step: step}
 
 	outputs := map[string]string{
 		"%v secret":   fmt.Sprintf("%v", step.Entries[0].Value),

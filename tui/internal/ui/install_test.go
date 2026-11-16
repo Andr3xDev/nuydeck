@@ -11,8 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -20,28 +19,28 @@ import (
 const waitTimeout = 2 * time.Second
 
 type fakeInstaller struct {
-	plan    app.InstallPlan
+	plan    install.InstallPlan
 	runs    atomic.Int32
-	run     func(ctx context.Context, events chan<- app.InstallEvent, ack <-chan struct{}) app.InstallResult
-	drafted []app.Draft
+	run     func(ctx context.Context, events chan<- plan.InstallEvent, ack <-chan struct{}) install.InstallResult
+	drafted []install.Draft
 }
 
-func (f *fakeInstaller) Plan(_ context.Context, d app.Draft) (app.InstallPlan, error) {
+func (f *fakeInstaller) Plan(_ context.Context, d install.Draft) (install.InstallPlan, error) {
 	f.drafted = append(f.drafted, d)
 	return f.plan, nil
 }
 
-func (f *fakeInstaller) Run(ctx context.Context, _ app.InstallPlan, events chan<- app.InstallEvent, ack <-chan struct{}) app.InstallResult {
+func (f *fakeInstaller) Run(ctx context.Context, _ install.InstallPlan, events chan<- plan.InstallEvent, ack <-chan struct{}) install.InstallResult {
 	f.runs.Add(1)
 	defer close(events)
 	if f.run == nil {
-		return app.InstallResult{}
+		return install.InstallResult{}
 	}
 	return f.run(ctx, events, ack)
 }
 
-func onePlan() app.InstallPlan {
-	return app.InstallPlan{Steps: []domain.PlannedStep{{Phase: domain.PhaseReboot, Step: plan.CommandStep{Label: "reboot"}}}}
+func onePlan() install.InstallPlan {
+	return install.InstallPlan{Steps: []install.PlannedStep{{Phase: install.PhaseReboot, Step: plan.CommandStep{Label: "reboot"}}}}
 }
 
 func newTestRoot(f *fakeInstaller, secretNames ...string) (Root, *Install) {
@@ -147,15 +146,15 @@ func TestInstallRunsNothingBeforeExplicitConfirm(t *testing.T) {
 func awaitingAck(t *testing.T) (root Root, in *Install, acked, cancelled chan struct{}) {
 	t.Helper()
 	acked, cancelled = make(chan struct{}, 1), make(chan struct{}, 1)
-	f := &fakeInstaller{plan: onePlan(), run: func(ctx context.Context, events chan<- app.InstallEvent, ack <-chan struct{}) app.InstallResult {
-		events <- app.InstallEvent{Index: 0, Kind: app.EventAwaitAck}
+	f := &fakeInstaller{plan: onePlan(), run: func(ctx context.Context, events chan<- plan.InstallEvent, ack <-chan struct{}) install.InstallResult {
+		events <- plan.InstallEvent{Index: 0, Kind: plan.EventAwaitAck}
 		select {
 		case <-ack:
 			acked <- struct{}{}
 		case <-ctx.Done():
 			cancelled <- struct{}{}
 		}
-		return app.InstallResult{}
+		return install.InstallResult{}
 	}}
 	root, in = newTestRoot(f)
 	toSummary(in)
@@ -221,7 +220,7 @@ func TestInstallRebootAckAcceptsEnterOnly(t *testing.T) {
 
 func TestInstallForgetsSecretValuesAfterTheRun(t *testing.T) {
 	const sentinel = "hunter2-sentinel"
-	plan := app.InstallPlan{Steps: []domain.PlannedStep{{Phase: domain.PhaseEnv, Step: plan.WriteSecretsStep{
+	plan := install.InstallPlan{Steps: []install.PlannedStep{{Phase: install.PhaseEnv, Step: plan.WriteSecretsStep{
 		Path: "/home/u/.secrets", Entries: []plan.SecretEntry{{Name: "TOKEN", Value: sentinel}},
 	}}}}
 	f := &fakeInstaller{plan: plan}

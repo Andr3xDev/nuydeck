@@ -1,4 +1,4 @@
-package app
+package install
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
@@ -25,25 +24,17 @@ var rootDirs = map[manifest.Root]string{
 	manifest.RootHome:   testHome,
 }
 
-type diffCall struct{ src, dst string }
-
 type fakeInspector struct {
-	mu          sync.Mutex
 	diff        func(e manifest.ResolvedEntry, src, dst plan.Endpoint) ([]plan.Change, error)
-	diffCalls   []diffCall
 	linkTargets map[string]string
 	kinds       map[string]plan.NodeKind
 	mtimes      map[string]time.Time
 	repoTimes   map[string]plan.RepoTimes
-	backups     []backup.Backup
 	state       state.State
 	stateWarn   string
 }
 
 func (f *fakeInspector) Diff(_ context.Context, e manifest.ResolvedEntry, src, dst plan.Endpoint) ([]plan.Change, error) {
-	f.mu.Lock()
-	f.diffCalls = append(f.diffCalls, diffCall{src.Path, dst.Path})
-	f.mu.Unlock()
 	return f.diff(e, src, dst)
 }
 
@@ -62,10 +53,6 @@ func (f *fakeInspector) NewestMTime(_ context.Context, p string, _ manifest.Filt
 
 func (f *fakeInspector) RepoTimes(_ context.Context, _, rel string) (plan.RepoTimes, error) {
 	return f.repoTimes[rel], nil
-}
-
-func (f *fakeInspector) ListBackups(context.Context) ([]backup.Backup, error) {
-	return f.backups, nil
 }
 
 func (f *fakeInspector) LoadState(context.Context) (state.State, string) {
@@ -100,12 +87,9 @@ func resolved(root manifest.Root, p string, excludes ...string) manifest.Resolve
 	}
 }
 
-func newService(t *testing.T, in *fakeInspector, r plan.Runner) *Service {
+func newService(t *testing.T, in *fakeInspector, r plan.Runner) *cfgsync.Service {
 	t.Helper()
-	return &Service{
-		Service:   &cfgsync.Service{Inspector: in, LoadState: in.LoadState, Runner: r, RepoDir: testRepo, Now: func() time.Time { return testNow }},
-		Inspector: in,
-	}
+	return &cfgsync.Service{Inspector: in, LoadState: in.LoadState, Runner: r, RepoDir: testRepo, Now: func() time.Time { return testNow }}
 }
 
 func diffReturning(changes ...plan.Change) func(manifest.ResolvedEntry, plan.Endpoint, plan.Endpoint) ([]plan.Change, error) {
@@ -116,14 +100,6 @@ func diffReturning(changes ...plan.Change) func(manifest.ResolvedEntry, plan.End
 
 func change(p string, t plan.ChangeType, k plan.NodeKind) plan.Change {
 	return plan.Change{Path: p, Type: t, Kind: k}
-}
-
-func selectAll(plan cfgsync.SyncPlan) cfgsync.Selection {
-	sel := cfgsync.Selection{}
-	for _, it := range plan.Items {
-		sel[it.Key()] = true
-	}
-	return sel
 }
 
 func stepsOfType[T plan.Step](steps []plan.Step) []T {

@@ -13,12 +13,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
@@ -80,13 +80,10 @@ func run(dryRun bool, repoFlag string) error {
 	if dryRun {
 		runner = dryrun.Recorder{}
 	}
-	svc := &app.Service{
-		Service:   &cfgsync.Service{Inspector: inspector, LoadState: inspector.LoadState, Runner: runner, RepoDir: repo, Now: time.Now},
-		Inspector: inspector,
-	}
+	svc := &cfgsync.Service{Inspector: inspector, LoadState: inspector.LoadState, Runner: runner, RepoDir: repo, Now: time.Now}
 
-	backups := &backup.Service{Service: svc.Service, Lister: inspector}
-	drifter := &drift.Service{Service: svc.Service, Inspector: inspector}
+	backups := &backup.Service{Service: svc, Lister: inspector}
+	drifter := &drift.Service{Service: svc, Inspector: inspector}
 
 	deps := ui.Deps{Drifter: drifter, Syncer: svc, Backups: backups, StateWarning: stateWarning, LastSync: state.LastSync}
 	if repo == "" {
@@ -107,7 +104,7 @@ func run(dryRun bool, repoFlag string) error {
 
 // wireCatalog loads the package, hardware and secret-name manifests and builds the install and packages use cases.
 // A bad manifest only sets CatalogError, so sync and backups keep working.
-func wireCatalog(deps *ui.Deps, svc *app.Service, repo, home, username string, dryRun bool, runner plan.Runner, inspector app.Inspector) {
+func wireCatalog(deps *ui.Deps, svc *cfgsync.Service, repo, home, username string, dryRun bool, runner plan.Runner, inspector Inspector) {
 	catalog, err := manifest.LoadPackages(filepath.Join(repo, packagesRelPath))
 	if err != nil {
 		deps.CatalogError = err
@@ -127,7 +124,7 @@ func wireCatalog(deps *ui.Deps, svc *app.Service, repo, home, username string, d
 	probe := sysx.Probe{User: username}
 	preview := dryrun.Recorder{}
 	deps.Install = ui.InstallDeps{
-		Installer: &app.Installer{
+		Installer: &install.Installer{
 			Service: svc, Probe: probe, Runner: runner, Preview: preview, Now: time.Now, DryRun: dryRun,
 			Catalog: catalog, Drivers: drivers, Entries: deps.Entries, Home: home, User: username,
 		},

@@ -1,4 +1,4 @@
-package app
+package plan
 
 type InstallEventKind int
 

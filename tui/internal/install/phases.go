@@ -1,4 +1,4 @@
-package app
+package install
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -50,7 +49,7 @@ func (i *Installer) planMultilib(b *planBuilder) {
 	if !ok {
 		return
 	}
-	enabled, changed, err := domain.EnableMultilib(content)
+	enabled, changed, err := EnableMultilib(content)
 	if err != nil {
 		b.plan.Blocking = append(b.plan.Blocking, err)
 		return
@@ -60,7 +59,7 @@ func (i *Installer) planMultilib(b *planBuilder) {
 	if !changed {
 		skip = "multilib already active"
 	}
-	b.add(domain.PhasePacmanConf, step, skip)
+	b.add(PhasePacmanConf, step, skip)
 }
 
 func (i *Installer) planAUR(b *planBuilder, aur []string, installed map[string]bool) error {
@@ -82,9 +81,9 @@ func (i *Installer) planAUR(b *planBuilder, aur []string, installed map[string]b
 			cloneSkip = "clone already present"
 		}
 	}
-	b.add(domain.PhaseParuBootstrap, plan.CommandStep{Label: "clone paru", Argv: []string{"git", "clone", paruRepoURL, cacheDir}}, cloneSkip)
-	b.add(domain.PhaseParuBootstrap, plan.CommandStep{Label: "build and install paru", Argv: []string{"makepkg", "-si", "--noconfirm"}, Dir: cacheDir, UsesSudo: true}, paruSkip)
-	b.add(domain.PhaseAur, plan.CommandStep{Label: fmt.Sprintf("install AUR packages (%d)", len(aur)), Argv: slices.Concat(aurInstallArgs, aur), UsesSudo: true}, skipIfInstalled(aur, installed))
+	b.add(PhaseParuBootstrap, plan.CommandStep{Label: "clone paru", Argv: []string{"git", "clone", paruRepoURL, cacheDir}}, cloneSkip)
+	b.add(PhaseParuBootstrap, plan.CommandStep{Label: "build and install paru", Argv: []string{"makepkg", "-si", "--noconfirm"}, Dir: cacheDir, UsesSudo: true}, paruSkip)
+	b.add(PhaseAur, plan.CommandStep{Label: fmt.Sprintf("install AUR packages (%d)", len(aur)), Argv: slices.Concat(aurInstallArgs, aur), UsesSudo: true}, skipIfInstalled(aur, installed))
 	return nil
 }
 
@@ -101,7 +100,7 @@ func (i *Installer) planLogind(b *planBuilder) {
 	case len(existing) > 0:
 		step.BackupTo = logindDropInFile + i.backupSuffix()
 	}
-	b.add(domain.PhaseSystem, step, skip)
+	b.add(PhaseSystem, step, skip)
 }
 
 func (i *Installer) planSync(ctx context.Context, b *planBuilder) error {
@@ -114,9 +113,9 @@ func (i *Installer) planSync(ctx context.Context, b *planBuilder) error {
 		}
 	}
 	for _, group := range []struct {
-		phase   domain.Phase
+		phase   Phase
 		entries []manifest.ResolvedEntry
-	}{{domain.PhaseConfigs, configs}, {domain.PhaseFonts, fonts}} {
+	}{{PhaseConfigs, configs}, {PhaseFonts, fonts}} {
 		steps, notices, blocking, err := i.pushSteps(ctx, group.entries)
 		if err != nil {
 			return err
@@ -126,12 +125,12 @@ func (i *Installer) planSync(ctx context.Context, b *planBuilder) error {
 		}
 		b.plan.Notices = append(b.plan.Notices, notices...)
 		b.plan.Blocking = append(b.plan.Blocking, blocking...)
-		if group.phase == domain.PhaseFonts {
+		if group.phase == PhaseFonts {
 			skip := ""
 			if len(steps) == 0 {
 				skip = "no fonts to copy"
 			}
-			b.add(domain.PhaseFonts, plan.CommandStep{Label: "refresh font cache", Argv: []string{"fc-cache", "-f"}}, skip)
+			b.add(PhaseFonts, plan.CommandStep{Label: "refresh font cache", Argv: []string{"fc-cache", "-f"}}, skip)
 		}
 	}
 	return nil
@@ -159,7 +158,7 @@ func (i *Installer) planEnv(b *planBuilder, d Draft) error {
 			step.Entries = append(step.Entries, e)
 		}
 	}
-	b.add(domain.PhaseEnv, step, skip)
+	b.add(PhaseEnv, step, skip)
 	return nil
 }
 
@@ -168,13 +167,13 @@ func (i *Installer) planGPUEnvLink(b *planBuilder, d Draft) error {
 	for _, dr := range i.selectedDrivers(d) {
 		ids = append(ids, dr.ID)
 	}
-	target := domain.GPUEnvFileName(ids)
+	target := GPUEnvFileName(ids)
 	if target == "" {
 		return nil
 	}
 	link := plan.SymlinkStep{Path: path.Join(i.Home, homeGPUEnvDir, gpuEnvLinkName), Target: target}
 	if d.SkipGPUEnvLink {
-		b.add(domain.PhaseEnv, link, "GPU env link skipped by owner")
+		b.add(PhaseEnv, link, "GPU env link skipped by owner")
 		return nil
 	}
 	in := i.Service.Inspector
@@ -192,17 +191,17 @@ func (i *Installer) planGPUEnvLink(b *planBuilder, d Draft) error {
 	}
 	switch kind {
 	case plan.KindNone:
-		b.add(domain.PhaseEnv, link, "")
+		b.add(PhaseEnv, link, "")
 	case plan.KindLink:
 		current, _ := in.LinkTarget(link.Path)
 		skip := ""
 		if current == target {
 			skip = "already linked"
 		}
-		b.add(domain.PhaseEnv, link, skip)
+		b.add(PhaseEnv, link, skip)
 	default:
 		b.plan.Notices = append(b.plan.Notices, fmt.Sprintf("%s is a regular file and was left as is", link.Path))
-		b.add(domain.PhaseEnv, link, "regular file kept")
+		b.add(PhaseEnv, link, "regular file kept")
 	}
 	return nil
 }
@@ -223,7 +222,7 @@ func (i *Installer) planShell(ctx context.Context, b *planBuilder) error {
 		if kind != plan.KindNone {
 			skip = "already present"
 		}
-		b.add(domain.PhaseShell, plan.CommandStep{Label: "clone " + path.Base(c.dest), Argv: []string{"git", "clone", "--depth", "1", c.url, c.dest}}, skip)
+		b.add(PhaseShell, plan.CommandStep{Label: "clone " + path.Base(c.dest), Argv: []string{"git", "clone", "--depth", "1", c.url, c.dest}}, skip)
 	}
 	shell, err := i.Probe.LoginShell(ctx)
 	if err != nil {
@@ -233,7 +232,7 @@ func (i *Installer) planShell(ctx context.Context, b *planBuilder) error {
 	if strings.HasSuffix(shell, "zsh") {
 		skip = "shell is zsh"
 	}
-	b.add(domain.PhaseShell, plan.CommandStep{Label: "set login shell to zsh", Argv: []string{"chsh", "-s", zshBinary, i.User}, Sudo: true}, skip)
+	b.add(PhaseShell, plan.CommandStep{Label: "set login shell to zsh", Argv: []string{"chsh", "-s", zshBinary, i.User}, Sudo: true}, skip)
 	return nil
 }
 
@@ -255,7 +254,7 @@ func (i *Installer) planServices(b *planBuilder, d Draft) {
 		b.plan.Notices = append(b.plan.Notices, fmt.Sprintf("%s is the enabled display manager: %s was not enabled", path.Base(current), lyUnit))
 	}
 	if len(units) > 0 {
-		b.add(domain.PhaseServices, plan.CommandStep{Label: fmt.Sprintf("enable services (%d)", len(units)), Argv: slices.Concat([]string{"systemctl", "enable"}, units), Sudo: true}, "")
+		b.add(PhaseServices, plan.CommandStep{Label: fmt.Sprintf("enable services (%d)", len(units)), Argv: slices.Concat([]string{"systemctl", "enable"}, units), Sudo: true}, "")
 	}
 }
 
@@ -265,6 +264,6 @@ func (i *Installer) planTheme(b *planBuilder, d Draft) {
 		variant = defaultVariant
 	}
 	dir := path.Join(i.Home, themeFilesDir)
-	b.add(domain.PhaseTheme, plan.WriteFileStep{Path: path.Join(dir, "name"), Content: []byte(themeName + "\n"), Mode: installedFileMode}, "")
-	b.add(domain.PhaseTheme, plan.WriteFileStep{Path: path.Join(dir, "variant"), Content: []byte(variant + "\n"), Mode: installedFileMode}, "")
+	b.add(PhaseTheme, plan.WriteFileStep{Path: path.Join(dir, "name"), Content: []byte(themeName + "\n"), Mode: installedFileMode}, "")
+	b.add(PhaseTheme, plan.WriteFileStep{Path: path.Join(dir, "variant"), Content: []byte(variant + "\n"), Mode: installedFileMode}, "")
 }

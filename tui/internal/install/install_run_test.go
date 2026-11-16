@@ -1,4 +1,4 @@
-package app
+package install
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
@@ -31,28 +30,28 @@ func newRunInstaller(r plan.Runner) *Installer {
 	return &Installer{Runner: r, Preview: r, Now: func() time.Time { return testNow }, KeepaliveEvery: time.Hour}
 }
 
-func planned(phase domain.Phase, s plan.Step) domain.PlannedStep {
-	return domain.PlannedStep{Phase: phase, Step: s}
+func planned(phase Phase, s plan.Step) PlannedStep {
+	return PlannedStep{Phase: phase, Step: s}
 }
 
-func command(label string) domain.PlannedStep {
-	return planned(domain.PhasePacman, plan.CommandStep{Label: label, Argv: []string{label}})
+func command(label string) PlannedStep {
+	return planned(PhasePacman, plan.CommandStep{Label: label, Argv: []string{label}})
 }
 
-func sudoHandoff() domain.PlannedStep {
-	return planned(domain.PhasePrivilege, plan.CommandStep{Label: handoffLabel, Argv: []string{"sudo", "-v"}, Interactive: true})
+func sudoHandoff() PlannedStep {
+	return planned(PhasePrivilege, plan.CommandStep{Label: handoffLabel, Argv: []string{"sudo", "-v"}, Interactive: true})
 }
 
-func sudoProbe() domain.PlannedStep {
-	return planned(domain.PhasePrivilege, plan.CommandStep{Label: probeLabel, Argv: []string{"sudo", "-n", "-v"}, Quiet: true})
+func sudoProbe() PlannedStep {
+	return planned(PhasePrivilege, plan.CommandStep{Label: probeLabel, Argv: []string{"sudo", "-n", "-v"}, Quiet: true})
 }
 
-func recordStep() domain.PlannedStep {
-	return planned(domain.PhaseRecord, plan.AppendLogStep{Entry: state.LogEntry{Op: "install"}})
+func recordStep() PlannedStep {
+	return planned(PhaseRecord, plan.AppendLogStep{Entry: state.LogEntry{Op: "install"}})
 }
 
-func rebootStep() domain.PlannedStep {
-	return planned(domain.PhaseReboot, plan.CommandStep{Label: "reboot", Argv: []string{"systemctl", "reboot"}, Sudo: true})
+func rebootStep() PlannedStep {
+	return planned(PhaseReboot, plan.CommandStep{Label: "reboot", Argv: []string{"systemctl", "reboot"}, Sudo: true})
 }
 
 func isSudoProbe(s plan.Step) bool {
@@ -65,14 +64,14 @@ func labelOf(s plan.Step) string {
 	return c.Label
 }
 
-func runInstallCtx(t *testing.T, ctx context.Context, inst *Installer, steps []domain.PlannedStep, ack <-chan struct{}) (InstallResult, []InstallEvent) {
+func runInstallCtx(t *testing.T, ctx context.Context, inst *Installer, steps []PlannedStep, ack <-chan struct{}) (InstallResult, []plan.InstallEvent) {
 	t.Helper()
-	events := make(chan InstallEvent, eventBuffer)
+	events := make(chan plan.InstallEvent, eventBuffer)
 	done := make(chan InstallResult, 1)
 	go func() { done <- inst.Run(ctx, InstallPlan{Steps: steps}, events, ack) }()
 	select {
 	case res := <-done:
-		var collected []InstallEvent
+		var collected []plan.InstallEvent
 		for {
 			select {
 			case e, ok := <-events:
@@ -90,29 +89,29 @@ func runInstallCtx(t *testing.T, ctx context.Context, inst *Installer, steps []d
 	}
 }
 
-func runInstall(t *testing.T, inst *Installer, steps []domain.PlannedStep, ack <-chan struct{}) (InstallResult, []InstallEvent) {
+func runInstall(t *testing.T, inst *Installer, steps []PlannedStep, ack <-chan struct{}) (InstallResult, []plan.InstallEvent) {
 	t.Helper()
 	return runInstallCtx(t, context.Background(), inst, steps, ack)
 }
 
-var eventNames = map[InstallEventKind]string{
-	EventStarted: "started", EventLine: "line", EventDone: "done",
-	EventSkipped: "skipped", EventFailed: "failed", EventAwaitAck: "await-ack",
+var eventNames = map[plan.InstallEventKind]string{
+	plan.EventStarted: "started", plan.EventLine: "line", plan.EventDone: "done",
+	plan.EventSkipped: "skipped", plan.EventFailed: "failed", plan.EventAwaitAck: "await-ack",
 }
 
-func describe(events []InstallEvent) []string {
+func describe(events []plan.InstallEvent) []string {
 	out := make([]string, len(events))
 	for i, e := range events {
 		out[i] = fmt.Sprintf("%s:%d", eventNames[e.Kind], e.Index)
-		if e.Kind == EventLine {
+		if e.Kind == plan.EventLine {
 			out[i] += ":" + e.Line
 		}
 	}
 	return out
 }
 
-func hasEvent(events []InstallEvent, kind InstallEventKind, index int) bool {
-	return slices.ContainsFunc(events, func(e InstallEvent) bool { return e.Kind == kind && e.Index == index })
+func hasEvent(events []plan.InstallEvent, kind plan.InstallEventKind, index int) bool {
+	return slices.ContainsFunc(events, func(e plan.InstallEvent) bool { return e.Kind == kind && e.Index == index })
 }
 
 // waitUntil reports a timeout with t.Errorf because it is also called from the runner goroutine, where FailNow is not allowed.
@@ -128,7 +127,7 @@ func waitUntil(t *testing.T, cond func() bool) {
 	}
 }
 
-func awaitEvent(t *testing.T, events <-chan InstallEvent, kind InstallEventKind) {
+func awaitEvent(t *testing.T, events <-chan plan.InstallEvent, kind plan.InstallEventKind) {
 	t.Helper()
 	timeout := time.After(runTimeout)
 	for {
@@ -151,9 +150,9 @@ func TestRun_EmitsEventsInOrderAndSkipsWithoutCallingTheRunner(t *testing.T) {
 		}
 		return plan.StepResult{Status: plan.StepOK}
 	}
-	steps := []domain.PlannedStep{
+	steps := []PlannedStep{
 		command("first"),
-		{Phase: domain.PhasePacman, Step: plan.CommandStep{Label: "skipped", Argv: []string{"skipped"}}, Skip: "already installed"},
+		{Phase: PhasePacman, Step: plan.CommandStep{Label: "skipped", Argv: []string{"skipped"}}, Skip: "already installed"},
 		command("third"),
 	}
 
@@ -182,7 +181,7 @@ func TestRun_FailureStopsLaterStepsRecordsTheFailureAndNeverReboots(t *testing.T
 	ack := make(chan struct{}, 1)
 	ack <- struct{}{}
 
-	res, events := runInstall(t, newRunInstaller(r), []domain.PlannedStep{
+	res, events := runInstall(t, newRunInstaller(r), []PlannedStep{
 		command("one"), command("two"), command("three"), recordStep(), rebootStep(),
 	}, ack)
 
@@ -196,7 +195,7 @@ func TestRun_FailureStopsLaterStepsRecordsTheFailureAndNeverReboots(t *testing.T
 	if res.Err == nil || !strings.Contains(res.Err.Error(), "pacman exited 1") {
 		t.Errorf("Err = %v, want the command error", res.Err)
 	}
-	if !hasEvent(events, EventFailed, 1) || hasEvent(events, EventAwaitAck, 4) {
+	if !hasEvent(events, plan.EventFailed, 1) || hasEvent(events, plan.EventAwaitAck, 4) {
 		t.Errorf("events = %v, want failed:1 and no await-ack", describe(events))
 	}
 }
@@ -210,7 +209,7 @@ func TestRun_WrongPasswordStopsBeforeAnyStep(t *testing.T) {
 		return plan.StepResult{Status: plan.StepOK}
 	}
 
-	res, _ := runInstall(t, newRunInstaller(r), []domain.PlannedStep{
+	res, _ := runInstall(t, newRunInstaller(r), []PlannedStep{
 		sudoHandoff(), sudoProbe(), command("pacman"), recordStep(), rebootStep(),
 	}, nil)
 
@@ -231,7 +230,7 @@ func TestRun_FailedVerificationProbeStopsBeforeTheFirstMutatingStep(t *testing.T
 		return plan.StepResult{Status: plan.StepOK}
 	}
 
-	res, events := runInstall(t, newRunInstaller(r), []domain.PlannedStep{
+	res, events := runInstall(t, newRunInstaller(r), []PlannedStep{
 		sudoHandoff(), sudoProbe(), command("pacman"), recordStep(), rebootStep(),
 	}, nil)
 
@@ -242,7 +241,7 @@ func TestRun_FailedVerificationProbeStopsBeforeTheFirstMutatingStep(t *testing.T
 	if res.Err == nil || !strings.Contains(res.Err.Error(), want) {
 		t.Errorf("Err = %v, want message %q", res.Err, want)
 	}
-	if !hasEvent(events, EventFailed, 1) {
+	if !hasEvent(events, plan.EventFailed, 1) {
 		t.Errorf("events = %v, want failed:1", describe(events))
 	}
 }
@@ -281,7 +280,7 @@ func TestRun_KeepaliveStartsAfterTheHandoffAndStopsOnEveryExit(t *testing.T) {
 			inst := newRunInstaller(r)
 			inst.KeepaliveEvery = keepaliveTick
 
-			runInstallCtx(t, ctx, inst, []domain.PlannedStep{sudoHandoff(), sudoProbe(), command("long")}, nil)
+			runInstallCtx(t, ctx, inst, []PlannedStep{sudoHandoff(), sudoProbe(), command("long")}, nil)
 
 			if n := probesDuringHandoff.Load(); n != 0 {
 				t.Errorf("%d keepalive probes ran before the handoff finished", n)
@@ -331,7 +330,7 @@ func TestRun_FailedKeepaliveFailsTheNextSudoStepWithoutRunningIt(t *testing.T) {
 			inst := newRunInstaller(r)
 			inst.KeepaliveEvery = keepaliveTick
 
-			res, events := runInstall(t, inst, []domain.PlannedStep{sudoHandoff(), sudoProbe(), command("slow"), planned(domain.PhaseServices, tc.step), recordStep()}, nil)
+			res, events := runInstall(t, inst, []PlannedStep{sudoHandoff(), sudoProbe(), command("slow"), planned(PhaseServices, tc.step), recordStep()}, nil)
 
 			if slices.Contains(r.commandLabels(), "after") {
 				t.Error("sudo step ran with expired credentials")
@@ -339,7 +338,7 @@ func TestRun_FailedKeepaliveFailsTheNextSudoStepWithoutRunningIt(t *testing.T) {
 			if res.Err == nil || !strings.Contains(res.Err.Error(), wantSudoExpired) {
 				t.Errorf("Err = %v, want message %q", res.Err, wantSudoExpired)
 			}
-			if !hasEvent(events, EventDone, 2) || !hasEvent(events, EventFailed, 3) {
+			if !hasEvent(events, plan.EventDone, 2) || !hasEvent(events, plan.EventFailed, 3) {
 				t.Errorf("events = %v, want the running step to finish and the next sudo step to fail", describe(events))
 			}
 		})
@@ -353,7 +352,7 @@ func TestRun_RebootIsRefusedWhenTheSudoCredentialsExpired(t *testing.T) {
 	ack := make(chan struct{}, 1)
 	ack <- struct{}{}
 
-	res, _ := runInstall(t, inst, []domain.PlannedStep{sudoHandoff(), sudoProbe(), command("slow"), recordStep(), rebootStep()}, ack)
+	res, _ := runInstall(t, inst, []PlannedStep{sudoHandoff(), sudoProbe(), command("slow"), recordStep(), rebootStep()}, ack)
 
 	if slices.Contains(r.commandLabels(), "reboot") {
 		t.Error("rebooted with expired credentials")
@@ -375,12 +374,12 @@ func TestRun_DryRunNeverRebootsAwaitsAckOrStartsTheKeepalive(t *testing.T) {
 	inst.DryRun = true
 	inst.KeepaliveEvery = keepaliveTick
 
-	_, events := runInstall(t, inst, []domain.PlannedStep{sudoHandoff(), sudoProbe(), command("slow"), recordStep(), rebootStep()}, nil)
+	_, events := runInstall(t, inst, []PlannedStep{sudoHandoff(), sudoProbe(), command("slow"), recordStep(), rebootStep()}, nil)
 
 	if slices.Contains(r.commandLabels(), "reboot") {
 		t.Error("dry-run called the Runner for the reboot")
 	}
-	if slices.ContainsFunc(events, func(e InstallEvent) bool { return e.Kind == EventAwaitAck }) {
+	if slices.ContainsFunc(events, func(e plan.InstallEvent) bool { return e.Kind == plan.EventAwaitAck }) {
 		t.Errorf("dry-run emitted await-ack: %v", describe(events))
 	}
 	if n := r.quietCalls(); n > 1 {
@@ -391,14 +390,14 @@ func TestRun_DryRunNeverRebootsAwaitsAckOrStartsTheKeepalive(t *testing.T) {
 func TestRun_RebootWaitsForAcknowledgementAfterRecording(t *testing.T) {
 	r := &scriptedRunner{}
 	inst := newRunInstaller(r)
-	events := make(chan InstallEvent, eventBuffer)
+	events := make(chan plan.InstallEvent, eventBuffer)
 	ack := make(chan struct{})
 	done := make(chan InstallResult, 1)
 	go func() {
-		done <- inst.Run(context.Background(), InstallPlan{Steps: []domain.PlannedStep{command("one"), recordStep(), rebootStep()}}, events, ack)
+		done <- inst.Run(context.Background(), InstallPlan{Steps: []PlannedStep{command("one"), recordStep(), rebootStep()}}, events, ack)
 	}()
 
-	awaitEvent(t, events, EventAwaitAck)
+	awaitEvent(t, events, plan.EventAwaitAck)
 	time.Sleep(settle)
 
 	if slices.Contains(r.commandLabels(), "reboot") {
@@ -430,13 +429,13 @@ func TestRun_CancelWhileAwaitingAcknowledgementDoesNotReboot(t *testing.T) {
 	inst := newRunInstaller(r)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	events := make(chan InstallEvent, eventBuffer)
+	events := make(chan plan.InstallEvent, eventBuffer)
 	done := make(chan InstallResult, 1)
 	go func() {
-		done <- inst.Run(ctx, InstallPlan{Steps: []domain.PlannedStep{command("one"), recordStep(), rebootStep()}}, events, make(chan struct{}))
+		done <- inst.Run(ctx, InstallPlan{Steps: []PlannedStep{command("one"), recordStep(), rebootStep()}}, events, make(chan struct{}))
 	}()
 
-	awaitEvent(t, events, EventAwaitAck)
+	awaitEvent(t, events, plan.EventAwaitAck)
 	cancel()
 	select {
 	case <-done:
@@ -456,12 +455,12 @@ func TestRun_ScrubsSecretValuesFromProgressLines(t *testing.T) {
 		}
 		return plan.StepResult{Status: plan.StepOK}
 	}
-	secrets := planned(domain.PhaseEnv, plan.WriteSecretsStep{
+	secrets := planned(PhaseEnv, plan.WriteSecretsStep{
 		Path:    secretsPath,
 		Entries: []plan.SecretEntry{{Name: "API_KEY", Value: secretSentinel}},
 	})
 
-	_, events := runInstall(t, newRunInstaller(r), []domain.PlannedStep{secrets}, nil)
+	_, events := runInstall(t, newRunInstaller(r), []PlannedStep{secrets}, nil)
 
 	if !slices.Contains(describe(events), "line:0:wrote API_KEY=*** ok") {
 		t.Errorf("events = %v, want the value replaced by ***", describe(events))
@@ -481,12 +480,12 @@ func TestRun_ScrubsALongerSecretThatStartsWithAShorterOne(t *testing.T) {
 		}
 		return plan.StepResult{Status: plan.StepOK}
 	}
-	secrets := planned(domain.PhaseEnv, plan.WriteSecretsStep{
+	secrets := planned(PhaseEnv, plan.WriteSecretsStep{
 		Path:    secretsPath,
 		Entries: []plan.SecretEntry{{Name: "A", Value: "ab"}, {Name: "B", Value: "abc"}},
 	})
 
-	_, events := runInstall(t, newRunInstaller(r), []domain.PlannedStep{secrets}, nil)
+	_, events := runInstall(t, newRunInstaller(r), []PlannedStep{secrets}, nil)
 
 	if !slices.Contains(describe(events), "line:0:wrote ***") {
 		t.Errorf("events = %v, want the whole longer value replaced", describe(events))
@@ -501,12 +500,12 @@ func TestRun_ScrubsSecretValuesFromTheFailureEventResultAndLog(t *testing.T) {
 		}
 		return plan.StepResult{Status: plan.StepOK}
 	}
-	secrets := planned(domain.PhaseEnv, plan.WriteSecretsStep{
+	secrets := planned(PhaseEnv, plan.WriteSecretsStep{
 		Path:    secretsPath,
 		Entries: []plan.SecretEntry{{Name: "API_KEY", Value: secretSentinel}},
 	})
 
-	res, events := runInstall(t, newRunInstaller(r), []domain.PlannedStep{secrets, recordStep()}, nil)
+	res, events := runInstall(t, newRunInstaller(r), []PlannedStep{secrets, recordStep()}, nil)
 
 	if res.Err == nil || !strings.Contains(res.Err.Error(), "API_KEY=***") {
 		t.Errorf("Err = %v, want the value replaced by ***", res.Err)
@@ -529,9 +528,9 @@ func TestRun_ScrubsSecretValuesFromTheFailureEventResultAndLog(t *testing.T) {
 func TestRun_BlockingPlanErrorsForbidRunningAnyStep(t *testing.T) {
 	r := &scriptedRunner{}
 	blocked := errors.New("blocked by an existing path: /home/u/.config/hypr")
-	events := make(chan InstallEvent, eventBuffer)
+	events := make(chan plan.InstallEvent, eventBuffer)
 
-	res := newRunInstaller(r).Run(context.Background(), InstallPlan{Steps: []domain.PlannedStep{command("one"), recordStep()}, Blocking: []error{blocked}}, events, nil)
+	res := newRunInstaller(r).Run(context.Background(), InstallPlan{Steps: []PlannedStep{command("one"), recordStep()}, Blocking: []error{blocked}}, events, nil)
 
 	if !errors.Is(res.Err, blocked) {
 		t.Errorf("Err = %v, want the blocking error", res.Err)
@@ -554,10 +553,10 @@ func TestRun_LogsOneItemPerStepWithLabelKindAndResult(t *testing.T) {
 	}
 	skipped := command("skipped")
 	skipped.Skip = "already installed"
-	steps := []domain.PlannedStep{
+	steps := []PlannedStep{
 		command("one"),
 		skipped,
-		planned(domain.PhaseTheme, plan.WriteFileStep{Path: "/home/u/.config/nuydeck/theme/name"}),
+		planned(PhaseTheme, plan.WriteFileStep{Path: "/home/u/.config/nuydeck/theme/name"}),
 		command("bad"),
 		command("never"),
 		recordStep(),
@@ -583,10 +582,10 @@ func TestRun_LogsOneItemPerStepWithLabelKindAndResult(t *testing.T) {
 func TestRun_CancelRecordsAFailureUnderALiveContextAndStopsLaterSteps(t *testing.T) {
 	cases := []struct {
 		name  string
-		steps []domain.PlannedStep
+		steps []PlannedStep
 	}{
-		{"between steps", []domain.PlannedStep{command("one"), command("two"), recordStep()}},
-		{"after the last step", []domain.PlannedStep{command("one"), recordStep()}},
+		{"between steps", []PlannedStep{command("one"), command("two"), recordStep()}},
+		{"after the last step", []PlannedStep{command("one"), recordStep()}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -635,7 +634,7 @@ func TestRun_CancelDuringTheVerificationProbeReportsTheCancel(t *testing.T) {
 		return plan.StepResult{Status: plan.StepOK}
 	}
 
-	res, _ := runInstallCtx(t, ctx, newRunInstaller(r), []domain.PlannedStep{sudoHandoff(), sudoProbe(), command("pacman")}, nil)
+	res, _ := runInstallCtx(t, ctx, newRunInstaller(r), []PlannedStep{sudoHandoff(), sudoProbe(), command("pacman")}, nil)
 
 	if !errors.Is(res.Err, context.Canceled) || errors.Is(res.Err, errSudoNotVisible) {
 		t.Errorf("Err = %v, want the cancel and not the sudo visibility error", res.Err)
@@ -653,9 +652,9 @@ func TestRun_FailedRecordBlocksTheReboot(t *testing.T) {
 	ack := make(chan struct{}, 1)
 	ack <- struct{}{}
 
-	res, events := runInstall(t, newRunInstaller(r), []domain.PlannedStep{command("one"), recordStep(), rebootStep()}, ack)
+	res, events := runInstall(t, newRunInstaller(r), []PlannedStep{command("one"), recordStep(), rebootStep()}, ack)
 
-	if slices.Contains(r.commandLabels(), "reboot") || hasEvent(events, EventAwaitAck, 2) {
+	if slices.Contains(r.commandLabels(), "reboot") || hasEvent(events, plan.EventAwaitAck, 2) {
 		t.Errorf("reboot reached after a failed record: %v", describe(events))
 	}
 	if res.Err == nil || !strings.Contains(res.Err.Error(), "disk full") {
@@ -667,9 +666,9 @@ func TestRun_DryRunReportsTheRebootAsSkipped(t *testing.T) {
 	inst := newRunInstaller(&scriptedRunner{})
 	inst.DryRun = true
 
-	_, events := runInstall(t, inst, []domain.PlannedStep{command("one"), recordStep(), rebootStep()}, nil)
+	_, events := runInstall(t, inst, []PlannedStep{command("one"), recordStep(), rebootStep()}, nil)
 
-	if !hasEvent(events, EventSkipped, 2) {
+	if !hasEvent(events, plan.EventSkipped, 2) {
 		t.Errorf("events = %v, want skipped:2", describe(events))
 	}
 }

@@ -13,13 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/gitx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
@@ -76,7 +75,7 @@ const (
 
 type sentinelProbe struct{}
 
-func (sentinelProbe) DetectGPUs(context.Context) ([]domain.PCIDevice, error) { return nil, nil }
+func (sentinelProbe) DetectGPUs(context.Context) ([]install.PCIDevice, error) { return nil, nil }
 func (sentinelProbe) InstalledPackages(context.Context) (map[string]bool, error) {
 	return map[string]bool{}, nil
 }
@@ -123,20 +122,17 @@ type sentinelRun struct {
 	preview  []string
 	events   []string
 	results  []string
-	plan     app.InstallPlan
-	result   app.InstallResult
+	plan     install.InstallPlan
+	result   install.InstallResult
 	outcomes []plan.StepResult
 }
 
-func sentinelInstaller(t *testing.T, home string, runner plan.Runner, dryRun bool) *app.Installer {
+func sentinelInstaller(t *testing.T, home string, runner plan.Runner, dryRun bool) *install.Installer {
 	t.Helper()
 	inspector := sentinelInspector{Home: home}
 	now := func() time.Time { return time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC) }
-	return &app.Installer{
-		Service: &app.Service{
-			Service:   &cfgsync.Service{Inspector: inspector, LoadState: inspector.LoadState, Runner: runner, RepoDir: filepath.Join(home, "repo"), Now: now},
-			Inspector: inspector,
-		},
+	return &install.Installer{
+		Service: &cfgsync.Service{Inspector: inspector, LoadState: inspector.LoadState, Runner: runner, RepoDir: filepath.Join(home, "repo"), Now: now},
 		Probe:   sentinelProbe{},
 		Runner:  runner,
 		Preview: dryrun.Recorder{},
@@ -149,9 +145,9 @@ func sentinelInstaller(t *testing.T, home string, runner plan.Runner, dryRun boo
 }
 
 // executeSentinelInstall plans, renders the preview and runs; beforeRun lets a test sabotage the target after Plan has read it.
-func executeSentinelInstall(t *testing.T, inst *app.Installer, capture *capturingRunner, beforeRun func()) sentinelRun {
+func executeSentinelInstall(t *testing.T, inst *install.Installer, capture *capturingRunner, beforeRun func()) sentinelRun {
 	t.Helper()
-	plan, err := inst.Plan(context.Background(), app.Draft{
+	installPlan, err := inst.Plan(context.Background(), install.Draft{
 		Profile: "minimal",
 		Secrets: []plan.SecretEntry{{Name: "API_TOKEN", Value: plan.Secret(secretSentinel)}},
 	})
@@ -159,13 +155,13 @@ func executeSentinelInstall(t *testing.T, inst *app.Installer, capture *capturin
 		t.Fatalf("Plan: %v", err)
 	}
 
-	out := sentinelRun{plan: plan}
-	for _, ps := range plan.Steps {
+	out := sentinelRun{plan: installPlan}
+	for _, ps := range installPlan.Steps {
 		out.preview = append(out.preview, inst.Preview.Run(context.Background(), ps.Step, nil).Detail)
 	}
 
 	beforeRun()
-	events := make(chan app.InstallEvent, 256)
+	events := make(chan plan.InstallEvent, 256)
 	collected := make(chan struct{})
 	go func() {
 		defer close(collected)
@@ -177,7 +173,7 @@ func executeSentinelInstall(t *testing.T, inst *app.Installer, capture *capturin
 			out.events = append(out.events, line)
 		}
 	}()
-	out.result = inst.Run(context.Background(), plan, events, nil)
+	out.result = inst.Run(context.Background(), installPlan, events, nil)
 	<-collected
 
 	capture.mu.Lock()

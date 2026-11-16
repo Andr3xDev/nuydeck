@@ -1,4 +1,4 @@
-package app
+package install
 
 import (
 	"cmp"
@@ -17,7 +17,7 @@ const defaultKeepaliveEvery = 60 * time.Second
 // it only fails the next step that needs sudo.
 func (i *Installer) startKeepalive(ctx context.Context, wg *sync.WaitGroup, expired *atomic.Bool) {
 	ticker := time.NewTicker(cmp.Or(i.KeepaliveEvery, defaultKeepaliveEvery))
-	probe := sudoProbeStep("keep sudo alive")
+	probe := plan.SudoProbeStep("keep sudo alive")
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
