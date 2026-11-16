@@ -26,6 +26,25 @@ func exists(path string) bool {
 	return err == nil
 }
 
+func TestDeleteStep_DanglingSymlinkParentFailsAndDeletesNothing(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "root")
+	_ = os.MkdirAll(root, 0o755)
+	if err := os.Symlink(filepath.Join(base, "missing"), filepath.Join(root, "dangling")); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "dangling", "f")
+
+	res := osfs.Runner{Home: base}.Run(context.Background(), plan.DeleteStep{Path: path, Root: root}, nil)
+
+	if res.Status != plan.StepFailed || res.Err == nil {
+		t.Fatalf("result = %+v, want failure", res)
+	}
+	if !exists(filepath.Join(root, "dangling")) {
+		t.Fatal("dangling symlink was deleted")
+	}
+}
+
 func TestDeleteStep(t *testing.T) {
 	tests := []struct {
 		name       string
