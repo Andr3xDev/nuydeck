@@ -18,28 +18,6 @@ const (
 	rejectedSecretChars             = "\r\n\x00"
 )
 
-// WriteAtomic writes data to a temp file beside path, sets mode and renames it over path.
-func WriteAtomic(path string, data []byte, mode fs.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*.tmp")
-	if err != nil {
-		return err
-	}
-	_, err = tmp.Write(data)
-	if cerr := tmp.Close(); err == nil {
-		err = cerr
-	}
-	if err == nil {
-		err = os.Chmod(tmp.Name(), mode)
-	}
-	if err == nil {
-		err = os.Rename(tmp.Name(), path)
-	}
-	if err != nil {
-		_ = os.Remove(tmp.Name())
-	}
-	return err
-}
-
 func writeFile(s domain.WriteFileStep) domain.StepResult {
 	if s.Privileged {
 		return failed(fmt.Errorf("privileged write of %s needs the system runner", s.Path))

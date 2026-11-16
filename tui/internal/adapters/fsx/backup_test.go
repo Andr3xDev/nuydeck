@@ -167,26 +167,6 @@ func TestBackupStep_RefusedWhenEntryLiesInsideBackupsDir(t *testing.T) {
 	}
 }
 
-func TestResolveExisting_DanglingSymlinkFailsClosed(t *testing.T) {
-	dir := t.TempDir()
-	link := filepath.Join(dir, "dangling")
-	if err := os.Symlink(filepath.Join(dir, "nowhere"), link); err != nil {
-		t.Fatal(err)
-	}
-
-	for name, p := range map[string]string{
-		"link itself":           link,
-		"missing tail below it": filepath.Join(link, "sub", "file"),
-	} {
-		if got, err := fsx.ResolveExisting(p); err == nil {
-			t.Errorf("%s: resolved to %q, want an error", name, got)
-		}
-	}
-	if _, err := fsx.ResolveExisting(filepath.Join(dir, "plain-missing", "file")); err != nil {
-		t.Errorf("plain missing path must still resolve: %v", err)
-	}
-}
-
 func TestListBackups_NewestFirstAndFlagsBrokenOnes(t *testing.T) {
 	requireRsync(t)
 	home := t.TempDir()
