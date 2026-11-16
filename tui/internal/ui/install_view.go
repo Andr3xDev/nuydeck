@@ -185,24 +185,14 @@ func (s *Install) summaryView(width, height int) string {
 	return bold("Summary") + "\n" + s.summary.View() + "\n\n" + footer
 }
 
+// stepLabel prefixes the kind only where the label is a bare path or name.
 func stepLabel(step plan.Step) string {
-	switch s := step.(type) {
-	case plan.CommandStep:
-		return s.Label
-	case plan.WriteFileStep:
-		return "write " + s.Path
-	case plan.SymlinkStep:
-		return "link " + s.Path
-	case plan.WriteSecretsStep:
-		return "create " + s.Path
-	case plan.CopyStep:
-		return "copy " + string(s.Entry.Root) + ":" + s.Entry.Path
-	case plan.BackupStep:
-		return "back up overwritten files"
-	case plan.AppendLogStep:
-		return "record install log"
+	label, kind := plan.Describe(step)
+	switch kind {
+	case "file", "link", "secrets", "copy", "delete", "delete-backup", "package":
+		return kind + " " + label
 	}
-	return fmt.Sprintf("%T", step)
+	return label
 }
 
 func (s *Install) statusMark(st stepStatus) string {
