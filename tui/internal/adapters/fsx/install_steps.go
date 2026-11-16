@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 	rejectedSecretChars             = "\r\n\x00"
 )
 
-func writeFile(s domain.WriteFileStep) domain.StepResult {
+func writeFile(s plan.WriteFileStep) plan.StepResult {
 	if s.Privileged {
 		return failed(fmt.Errorf("privileged write of %s needs the system runner", s.Path))
 	}
@@ -30,12 +30,12 @@ func writeFile(s domain.WriteFileStep) domain.StepResult {
 	return done(fsutil.WriteAtomic(s.Path, s.Content, s.Mode))
 }
 
-func symlink(s domain.SymlinkStep) domain.StepResult {
+func symlink(s plan.SymlinkStep) plan.StepResult {
 	if err := os.MkdirAll(filepath.Dir(s.Path), userDirMode); err != nil {
 		return failed(err)
 	}
 	if info, err := os.Lstat(s.Path); err == nil && info.Mode()&fs.ModeSymlink == 0 {
-		return domain.StepResult{Status: domain.StepOK, Detail: keptNotSymlink}
+		return plan.StepResult{Status: plan.StepOK, Detail: keptNotSymlink}
 	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return failed(err)
 	}
@@ -48,11 +48,11 @@ func symlink(s domain.SymlinkStep) domain.StepResult {
 		_ = os.Remove(tmp)
 		return failed(err)
 	}
-	return domain.StepResult{Status: domain.StepOK}
+	return plan.StepResult{Status: plan.StepOK}
 }
 
 // writeSecrets never reports a value: errors carry the path, the variable name or the errno only.
-func writeSecrets(s domain.WriteSecretsStep) domain.StepResult {
+func writeSecrets(s plan.WriteSecretsStep) plan.StepResult {
 	names := make([]string, len(s.Entries))
 	for i, e := range s.Entries {
 		names[i] = e.Name
@@ -87,7 +87,7 @@ func writeSecrets(s domain.WriteSecretsStep) domain.StepResult {
 		_ = os.Remove(s.Path) // our own partial file would otherwise block the retry
 		return failed(fmt.Errorf("write %s: %w", s.Path, errnoOf(err)))
 	}
-	return domain.StepResult{Status: domain.StepOK}
+	return plan.StepResult{Status: plan.StepOK}
 }
 
 func errnoOf(err error) error {
@@ -98,9 +98,9 @@ func errnoOf(err error) error {
 	return err
 }
 
-func done(err error) domain.StepResult {
+func done(err error) plan.StepResult {
 	if err != nil {
 		return failed(err)
 	}
-	return domain.StepResult{Status: domain.StepOK}
+	return plan.StepResult{Status: plan.StepOK}
 }

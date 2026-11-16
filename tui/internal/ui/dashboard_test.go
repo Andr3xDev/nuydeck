@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
@@ -168,7 +168,7 @@ func TestDashboardRefreshesAfterApply(t *testing.T) {
 
 	stamp := &state.LastSync{Direction: "push"}
 	_, cmd := d.Update(applyDoneMsg{result: app.ApplyResult{Outcomes: []app.StepOutcome{
-		{Step: domain.SaveStateStep{State: state.State{LastSync: stamp}}, Result: domain.StepResult{Status: domain.StepOK}},
+		{Step: plan.SaveStateStep{State: state.State{LastSync: stamp}}, Result: plan.StepResult{Status: plan.StepOK}},
 	}}})
 	if cmd == nil || d.gen != gen+1 || len(f.ctxs) != 2 {
 		t.Errorf("apply must re-run drift: gen=%d runs=%d", d.gen, len(f.ctxs))
@@ -180,7 +180,7 @@ func TestDashboardRefreshesAfterApply(t *testing.T) {
 
 func TestDashboardPullPushRequestSync(t *testing.T) {
 	d := newTestDashboard(&fakeDrifter{}, resolved("a"))
-	for key, want := range map[rune]domain.Direction{'p': domain.Pull, 'P': domain.Push} {
+	for key, want := range map[rune]plan.Direction{'p': plan.Pull, 'P': plan.Push} {
 		_, cmd := d.Update(tea.KeyPressMsg{Code: key, Text: string(key)})
 		if got := cmd().(startSyncMsg).direction; got != want {
 			t.Errorf("%q: direction = %v, want %v", key, got, want)
@@ -190,10 +190,10 @@ func TestDashboardPullPushRequestSync(t *testing.T) {
 
 func TestRootOpensSyncOnStartSync(t *testing.T) {
 	r := NewRoot("", false, Deps{})
-	m, _ := r.Update(startSyncMsg{direction: domain.Push})
+	m, _ := r.Update(startSyncMsg{direction: plan.Push})
 	r = m.(Root)
 	sync := r.sections[syncSection].screen.(*Sync)
-	if r.selected != syncSection || sync.direction != domain.Push {
+	if r.selected != syncSection || sync.direction != plan.Push {
 		t.Errorf("selected=%d direction=%v", r.selected, sync.direction)
 	}
 }

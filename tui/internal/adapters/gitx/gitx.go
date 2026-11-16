@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 // commitMarker prefixes the commit-time line of git log output; names printed
@@ -39,16 +39,16 @@ func runGit(ctx context.Context, args ...string) ([]byte, error) {
 // RepoTimes returns last-updated times for the files under rel: mtime for
 // dirty or untracked files, last commit time otherwise. Files keys are
 // relative to rel. A git failure (e.g. not a repository) yields Unknown.
-func (r Reader) RepoTimes(ctx context.Context, repo, rel string) (domain.RepoTimes, error) {
+func (r Reader) RepoTimes(ctx context.Context, repo, rel string) (plan.RepoTimes, error) {
 	git := r.Git
 	if git == nil {
 		git = runGit
 	}
-	gitFailed := func() (domain.RepoTimes, error) {
+	gitFailed := func() (plan.RepoTimes, error) {
 		if ctx.Err() != nil {
-			return domain.RepoTimes{}, ctx.Err()
+			return plan.RepoTimes{}, ctx.Err()
 		}
-		return domain.RepoTimes{Unknown: true}, nil
+		return plan.RepoTimes{Unknown: true}, nil
 	}
 	statusOut, err := git(ctx, "-C", repo, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", rel)
 	if err != nil {
@@ -59,7 +59,7 @@ func (r Reader) RepoTimes(ctx context.Context, repo, rel string) (domain.RepoTim
 		return gitFailed()
 	}
 
-	times := domain.RepoTimes{Files: map[string]time.Time{}}
+	times := plan.RepoTimes{Files: map[string]time.Time{}}
 	var newestCommit, newestDirty time.Time
 	var commitTime time.Time
 	for _, line := range strings.Split(string(logOut), "\n") {
@@ -67,7 +67,7 @@ func (r Reader) RepoTimes(ctx context.Context, repo, rel string) (domain.RepoTim
 		case isCommit:
 			secs, err := strconv.ParseInt(ct, 10, 64)
 			if err != nil {
-				return domain.RepoTimes{Unknown: true}, nil
+				return plan.RepoTimes{Unknown: true}, nil
 			}
 			commitTime = time.Unix(secs, 0)
 			if newestCommit.IsZero() {

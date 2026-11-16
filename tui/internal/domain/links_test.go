@@ -7,6 +7,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 func linkEntry(root manifest.Root, path string) manifest.Entry {
@@ -22,19 +23,19 @@ func TestClassifyLink(t *testing.T) {
 		name    string
 		linkDir string
 		target  string
-		want    domain.LinkWarning
+		want    plan.LinkWarning
 	}{
-		{"absolute target", "", "/usr/share/starship.toml", domain.WarnAbsoluteLink},
-		{"absolute target pointing into the managed set", "hypr", "/home/test/.config/hypr/x", domain.WarnAbsoluteLink},
-		{"variant link stays inside a sibling entry", "", "starship/nuytek-nadir/starship.toml", domain.NoLinkWarning},
-		{"sibling file inside own entry", "dunst", "dunstrc-nadir", domain.NoLinkWarning},
-		{"climbs into another managed entry", "hypr", "../nvim/init.lua", domain.NoLinkWarning},
-		{"points at an entry itself", "hypr", "../nvim", domain.NoLinkWarning},
-		{"resolves to an unmanaged sibling", "hypr", "../btop/btop.conf", domain.WarnLeavesManagedSet},
-		{"resolves to unmanaged file at root", "hypr/theme", "../../foo", domain.WarnLeavesManagedSet},
-		{"resolves to the root itself", "hypr", "..", domain.WarnLeavesManagedSet},
-		{"climbs above the root", "hypr/theme", "../../../.ssh/config", domain.WarnLeavesManagedSet},
-		{"unclean relative target is cleaned first", "hypr", "./theme/../colors.conf", domain.NoLinkWarning},
+		{"absolute target", "", "/usr/share/starship.toml", plan.WarnAbsoluteLink},
+		{"absolute target pointing into the managed set", "hypr", "/home/test/.config/hypr/x", plan.WarnAbsoluteLink},
+		{"variant link stays inside a sibling entry", "", "starship/nuytek-nadir/starship.toml", plan.NoLinkWarning},
+		{"sibling file inside own entry", "dunst", "dunstrc-nadir", plan.NoLinkWarning},
+		{"climbs into another managed entry", "hypr", "../nvim/init.lua", plan.NoLinkWarning},
+		{"points at an entry itself", "hypr", "../nvim", plan.NoLinkWarning},
+		{"resolves to an unmanaged sibling", "hypr", "../btop/btop.conf", plan.WarnLeavesManagedSet},
+		{"resolves to unmanaged file at root", "hypr/theme", "../../foo", plan.WarnLeavesManagedSet},
+		{"resolves to the root itself", "hypr", "..", plan.WarnLeavesManagedSet},
+		{"climbs above the root", "hypr/theme", "../../../.ssh/config", plan.WarnLeavesManagedSet},
+		{"unclean relative target is cleaned first", "hypr", "./theme/../colors.conf", plan.NoLinkWarning},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -47,39 +48,39 @@ func TestClassifyLink(t *testing.T) {
 
 func TestClassifyLinkIgnoresEntriesOfOtherRoots(t *testing.T) {
 	entries := []manifest.Entry{linkEntry("home", "nvim")}
-	if got := domain.ClassifyLink("config", "hypr", "../nvim/init.lua", entries); got != domain.WarnLeavesManagedSet {
+	if got := domain.ClassifyLink("config", "hypr", "../nvim/init.lua", entries); got != plan.WarnLeavesManagedSet {
 		t.Errorf("ClassifyLink() = %v, want WarnLeavesManagedSet", got)
 	}
 }
 
 func TestPreflightBlocked(t *testing.T) {
 	const dest = "/home/test/.config/hypr"
-	kinds := func(m map[string]domain.NodeKind) func(string) (domain.NodeKind, error) {
-		return func(p string) (domain.NodeKind, error) { return m[p], nil } // missing path = KindNone
+	kinds := func(m map[string]plan.NodeKind) func(string) (plan.NodeKind, error) {
+		return func(p string) (plan.NodeKind, error) { return m[p], nil } // missing path = KindNone
 	}
-	changes := []domain.Change{
-		{Path: "a/b/new.lua", Type: domain.Create},
-		{Path: "a/old.lua", Type: domain.Update},
-		{Path: "c/other.lua", Type: domain.Update},
+	changes := []plan.Change{
+		{Path: "a/b/new.lua", Type: plan.Create},
+		{Path: "a/old.lua", Type: plan.Update},
+		{Path: "c/other.lua", Type: plan.Update},
 	}
 	tests := []struct {
 		name    string
-		srcKind domain.NodeKind
-		kinds   map[string]domain.NodeKind
-		changes []domain.Change
+		srcKind plan.NodeKind
+		kinds   map[string]plan.NodeKind
+		changes []plan.Change
 		want    []string
 	}{
-		{"real dirs are fine", domain.KindDir, map[string]domain.NodeKind{dest: domain.KindDir, dest + "/a": domain.KindDir, dest + "/c": domain.KindDir}, changes, nil},
-		{"missing parents are fine", domain.KindDir, map[string]domain.NodeKind{dest: domain.KindDir}, changes, nil},
-		{"destination root symlinked blocks everything", domain.KindDir, map[string]domain.NodeKind{dest: domain.KindLink}, changes,
+		{"real dirs are fine", plan.KindDir, map[string]plan.NodeKind{dest: plan.KindDir, dest + "/a": plan.KindDir, dest + "/c": plan.KindDir}, changes, nil},
+		{"missing parents are fine", plan.KindDir, map[string]plan.NodeKind{dest: plan.KindDir}, changes, nil},
+		{"destination root symlinked blocks everything", plan.KindDir, map[string]plan.NodeKind{dest: plan.KindLink}, changes,
 			[]string{"a/b/new.lua", "a/old.lua", "c/other.lua"}},
-		{"symlinked parent blocks only items below it", domain.KindDir, map[string]domain.NodeKind{dest: domain.KindDir, dest + "/a": domain.KindLink}, changes,
+		{"symlinked parent blocks only items below it", plan.KindDir, map[string]plan.NodeKind{dest: plan.KindDir, dest + "/a": plan.KindLink}, changes,
 			[]string{"a/b/new.lua", "a/old.lua"}},
-		{"deep symlinked parent blocks only its subtree", domain.KindDir, map[string]domain.NodeKind{dest: domain.KindDir, dest + "/a": domain.KindDir, dest + "/a/b": domain.KindLink}, changes,
+		{"deep symlinked parent blocks only its subtree", plan.KindDir, map[string]plan.NodeKind{dest: plan.KindDir, dest + "/a": plan.KindDir, dest + "/a/b": plan.KindLink}, changes,
 			[]string{"a/b/new.lua"}},
-		{"file entry over a destination link is replaced, not followed", domain.KindFile, map[string]domain.NodeKind{dest: domain.KindLink}, changes, nil},
-		{"deletes are not write targets", domain.KindDir, map[string]domain.NodeKind{dest: domain.KindDir, dest + "/a": domain.KindLink},
-			[]domain.Change{{Path: "a/gone.lua", Type: domain.Delete}}, nil},
+		{"file entry over a destination link is replaced, not followed", plan.KindFile, map[string]plan.NodeKind{dest: plan.KindLink}, changes, nil},
+		{"deletes are not write targets", plan.KindDir, map[string]plan.NodeKind{dest: plan.KindDir, dest + "/a": plan.KindLink},
+			[]plan.Change{{Path: "a/gone.lua", Type: plan.Delete}}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -92,8 +93,8 @@ func TestPreflightBlocked(t *testing.T) {
 }
 
 func TestPreflightBlockedFailsClosedWhenPathCannotBeInspected(t *testing.T) {
-	kindOf := func(string) (domain.NodeKind, error) { return domain.KindNone, errors.New("permission denied") }
-	got := domain.PreflightBlocked("/d", domain.KindDir, []domain.Change{{Path: "a/x", Type: domain.Create}}, kindOf)
+	kindOf := func(string) (plan.NodeKind, error) { return plan.KindNone, errors.New("permission denied") }
+	got := domain.PreflightBlocked("/d", plan.KindDir, []plan.Change{{Path: "a/x", Type: plan.Create}}, kindOf)
 	if !slices.Equal(got, []string{"a/x"}) {
 		t.Errorf("PreflightBlocked() = %q, want [a/x]", got)
 	}

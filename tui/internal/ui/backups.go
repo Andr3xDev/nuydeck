@@ -12,6 +12,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
@@ -19,7 +20,7 @@ import (
 type BackupManager interface {
 	ListBackups(ctx context.Context) ([]domain.Backup, error)
 	PlanRestore(ctx context.Context, b domain.Backup) (app.SyncPlan, error)
-	DeleteBackup(ctx context.Context, dir string, confirmed bool) (domain.StepResult, bool)
+	DeleteBackup(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
 }
 
 type backupsMsg struct {
@@ -149,9 +150,9 @@ func (b *Backups) delete() tea.Cmd {
 	return func() tea.Msg {
 		res, _ := manager.DeleteBackup(context.Background(), sel.Dir, true)
 		switch res.Status {
-		case domain.StepFailed:
+		case plan.StepFailed:
 			return deleteDoneMsg{err: fmt.Errorf("delete failed: %s", res.Detail)}
-		case domain.StepWouldApply:
+		case plan.StepWouldApply:
 			return deleteDoneMsg{notice: res.Detail}
 		}
 		return deleteDoneMsg{}

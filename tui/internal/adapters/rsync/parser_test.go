@@ -6,7 +6,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 func fixture(t *testing.T, name string) string {
@@ -24,18 +24,18 @@ func TestParseItemize_MixedOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Item{
-		{"gone/inner/f.txt", domain.Delete, domain.KindFile},
-		{"gone/inner", domain.Delete, domain.KindDir},
-		{"gone", domain.Delete, domain.KindDir},
-		{"only.txt", domain.Delete, domain.KindFile},
-		{"lnk", domain.Create, domain.KindLink},
-		{"lnk2", domain.Update, domain.KindLink},
-		{"mode.sh", domain.Update, domain.KindFile},
-		{"new.txt", domain.Create, domain.KindFile},
-		{"tab\tname.txt", domain.Create, domain.KindFile},
-		{"upd.txt", domain.Update, domain.KindFile},
-		{"we ird#.txt", domain.Create, domain.KindFile},
-		{"sub/n.txt", domain.Create, domain.KindFile},
+		{"gone/inner/f.txt", plan.Delete, plan.KindFile},
+		{"gone/inner", plan.Delete, plan.KindDir},
+		{"gone", plan.Delete, plan.KindDir},
+		{"only.txt", plan.Delete, plan.KindFile},
+		{"lnk", plan.Create, plan.KindLink},
+		{"lnk2", plan.Update, plan.KindLink},
+		{"mode.sh", plan.Update, plan.KindFile},
+		{"new.txt", plan.Create, plan.KindFile},
+		{"tab\tname.txt", plan.Create, plan.KindFile},
+		{"upd.txt", plan.Update, plan.KindFile},
+		{"we ird#.txt", plan.Create, plan.KindFile},
+		{"sub/n.txt", plan.Create, plan.KindFile},
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
@@ -48,11 +48,11 @@ func TestParseItemize_DropsDirNoiseUnescapesNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []Item{
-		{"old", domain.Delete, domain.KindDir},
-		{`back\slash`, domain.Create, domain.KindFile},
-		{"nl\nname", domain.Create, domain.KindFile},
-		{"newdir/a", domain.Create, domain.KindFile},
-		{"olddir/b", domain.Create, domain.KindFile},
+		{"old", plan.Delete, plan.KindDir},
+		{`back\slash`, plan.Create, plan.KindFile},
+		{"nl\nname", plan.Create, plan.KindFile},
+		{"newdir/a", plan.Create, plan.KindFile},
+		{"olddir/b", plan.Create, plan.KindFile},
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)

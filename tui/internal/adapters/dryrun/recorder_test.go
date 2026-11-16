@@ -6,30 +6,29 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
-var _ app.Runner = Recorder{}
+var _ plan.Runner = Recorder{}
 
 func TestRecorderRendersEveryStepWithoutIO(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	cases := []struct {
-		step domain.Step
+		step plan.Step
 		want string
 	}{
-		{domain.CopyStep{Src: "/a", Dst: "/b", Paths: []string{"x"}}, "would copy /a -> /b: x"},
-		{domain.DeleteStep{Path: "/b/x"}, "would delete /b/x"},
-		{domain.BackupStep{Files: []domain.BackupFile{{Root: "config", Path: "hypr/a"}}}, "would back up config/hypr/a"},
-		{domain.DeleteBackupStep{Dir: "/bk/1"}, "would delete backup /bk/1"},
-		{domain.SaveStateStep{}, "would save state"},
-		{domain.AppendLogStep{Entry: state.LogEntry{Op: "push"}}, "would append log entry"},
+		{plan.CopyStep{Src: "/a", Dst: "/b", Paths: []string{"x"}}, "would copy /a -> /b: x"},
+		{plan.DeleteStep{Path: "/b/x"}, "would delete /b/x"},
+		{plan.BackupStep{Files: []plan.BackupFile{{Root: "config", Path: "hypr/a"}}}, "would back up config/hypr/a"},
+		{plan.DeleteBackupStep{Dir: "/bk/1"}, "would delete backup /bk/1"},
+		{plan.SaveStateStep{}, "would save state"},
+		{plan.AppendLogStep{Entry: state.LogEntry{Op: "push"}}, "would append log entry"},
 	}
 	for _, c := range cases {
 		res := Recorder{}.Run(context.Background(), c.step, nil)
-		if res.Status != domain.StepWouldApply || !strings.HasPrefix(res.Detail, c.want) {
+		if res.Status != plan.StepWouldApply || !strings.HasPrefix(res.Detail, c.want) {
 			t.Errorf("%T: got %+v, want prefix %q", c.step, res, c.want)
 		}
 	}

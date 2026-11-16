@@ -6,14 +6,14 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 const catalogPath = "/repo/manifest/packages.toml"
 
-func newPackages(probe *fakeProbe, in *fakeInspector, r Runner) *Packages {
+func newPackages(probe *fakeProbe, in *fakeInspector, r plan.Runner) *Packages {
 	return &Packages{
 		Probe:       probe,
 		Inspector:   in,
@@ -67,8 +67,8 @@ func TestPackages_ListUnregisteredReturnsTheQueryErrorWithoutAList(t *testing.T)
 }
 
 func TestPackages_AddPackageRunsAppendStepAndReturnsTheRunnerResult(t *testing.T) {
-	wouldApply := domain.StepResult{Status: domain.StepWouldApply, Detail: "would append htop"}
-	r := &fakeRunner{result: func(domain.Step) domain.StepResult { return wouldApply }}
+	wouldApply := plan.StepResult{Status: plan.StepWouldApply, Detail: "would append htop"}
+	r := &fakeRunner{result: func(plan.Step) plan.StepResult { return wouldApply }}
 	pkg := manifest.Package{Name: "htop", Source: manifest.SourcePacman, Profiles: []string{"full"}, Group: "tools"}
 
 	res, err := newPackages(&fakeProbe{}, &fakeInspector{}, r).AddPackage(context.Background(), pkg)
@@ -76,7 +76,7 @@ func TestPackages_AddPackageRunsAppendStepAndReturnsTheRunnerResult(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	steps := stepsOfType[domain.AppendPackageStep](r.steps)
+	steps := stepsOfType[plan.AppendPackageStep](r.steps)
 	if len(steps) != 1 || steps[0].Path != catalogPath || !slices.Equal(steps[0].Entry.Profiles, pkg.Profiles) || steps[0].Entry.Name != "htop" || steps[0].Entry.Group != "tools" {
 		t.Fatalf("steps = %+v, want one AppendPackageStep for htop at %s", r.steps, catalogPath)
 	}
@@ -88,17 +88,17 @@ func TestPackages_AddPackageRunsAppendStepAndReturnsTheRunnerResult(t *testing.T
 func TestPackages_AddPackageUpdatesTheCatalogOnlyAfterARealWrite(t *testing.T) {
 	cases := []struct {
 		name       string
-		status     domain.StepStatus
+		status     plan.StepStatus
 		wantInList bool
 	}{
-		{"written", domain.StepOK, true},
-		{"dry-run", domain.StepWouldApply, false},
-		{"failed", domain.StepFailed, false},
+		{"written", plan.StepOK, true},
+		{"dry-run", plan.StepWouldApply, false},
+		{"failed", plan.StepFailed, false},
 	}
 	pkg := manifest.Package{Name: "htop", Source: manifest.SourcePacman, Profiles: []string{"full"}}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r := &fakeRunner{result: func(domain.Step) domain.StepResult { return domain.StepResult{Status: tc.status} }}
+			r := &fakeRunner{result: func(plan.Step) plan.StepResult { return plan.StepResult{Status: tc.status} }}
 			p := newPackages(&fakeProbe{}, &fakeInspector{}, r)
 
 			if _, err := p.AddPackage(context.Background(), pkg); err != nil {
@@ -147,7 +147,7 @@ func TestPackages_IgnorePackageAppendsToIgnoredPackagesAndKeepsSyncState(t *test
 
 			newPackages(&fakeProbe{}, &fakeInspector{state: state}, r).IgnorePackage(context.Background(), "htop")
 
-			saves := stepsOfType[domain.SaveStateStep](r.steps)
+			saves := stepsOfType[plan.SaveStateStep](r.steps)
 			if len(saves) != 1 {
 				t.Fatalf("steps = %v, want one SaveStateStep", r.steps)
 			}

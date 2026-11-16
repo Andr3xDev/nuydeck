@@ -11,6 +11,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 type fakeBackups struct {
@@ -26,18 +27,18 @@ func (f *fakeBackups) ListBackups(context.Context) ([]domain.Backup, error) {
 }
 
 func (f *fakeBackups) PlanRestore(context.Context, domain.Backup) (app.SyncPlan, error) {
-	return app.SyncPlan{Direction: domain.Restore, Items: []app.PlanItem{planItem("a", false)}}, nil
+	return app.SyncPlan{Direction: plan.Restore, Items: []app.PlanItem{planItem("a", false)}}, nil
 }
 
-func (f *fakeBackups) DeleteBackup(_ context.Context, dir string, confirmed bool) (domain.StepResult, bool) {
+func (f *fakeBackups) DeleteBackup(_ context.Context, dir string, confirmed bool) (plan.StepResult, bool) {
 	if !confirmed {
-		return domain.StepResult{}, false
+		return plan.StepResult{}, false
 	}
 	f.deleted = append(f.deleted, dir)
 	if f.dryRun {
-		return domain.StepResult{Status: domain.StepWouldApply, Detail: "would delete " + dir}, true
+		return plan.StepResult{Status: plan.StepWouldApply, Detail: "would delete " + dir}, true
 	}
-	return domain.StepResult{}, true
+	return plan.StepResult{}, true
 }
 
 func TestBackupsDryRunDeleteShowsWouldDelete(t *testing.T) {
@@ -75,7 +76,7 @@ func loadedBackups(f *fakeBackups) *Backups {
 }
 
 func sampleBackup(dir string) domain.Backup {
-	return domain.Backup{Dir: dir, Created: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC), Direction: domain.Pull, Files: []string{"home/a"}}
+	return domain.Backup{Dir: dir, Created: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC), Direction: plan.Pull, Files: []string{"home/a"}}
 }
 
 func TestBackupsDeleteDeclineMakesNoCall(t *testing.T) {
@@ -120,7 +121,7 @@ func TestBackupsRestoreOpensSyncWithRestorePlan(t *testing.T) {
 	model, _ := r.Update(cmd())
 	r = model.(Root)
 	s := r.sections[syncSection].screen.(*Sync)
-	if r.selected != syncSection || s.phase != phasePreview || s.plan.Direction != domain.Restore {
+	if r.selected != syncSection || s.phase != phasePreview || s.plan.Direction != plan.Restore {
 		t.Errorf("selected=%d phase=%v direction=%v", r.selected, s.phase, s.plan.Direction)
 	}
 }

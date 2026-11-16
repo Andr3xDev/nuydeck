@@ -10,6 +10,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const (
@@ -48,28 +49,28 @@ type planFixture struct {
 // newPlanFixture is a fresh machine: nothing installed, multilib commented out, bash shell, all seven GPU env files in the repo copy.
 func newPlanFixture(t *testing.T) *planFixture {
 	t.Helper()
-	kinds := map[string]domain.NodeKind{
-		secretsPath:                             domain.KindNone,
-		ohMyZshPath:                             domain.KindNone,
-		pluginsDir + "/zsh-syntax-highlighting": domain.KindNone,
-		pluginsDir + "/zsh-autosuggestions":     domain.KindNone,
-		paruCacheDir:                            domain.KindNone,
-		gpuEnvLinkPath:                          domain.KindNone,
+	kinds := map[string]plan.NodeKind{
+		secretsPath:                             plan.KindNone,
+		ohMyZshPath:                             plan.KindNone,
+		pluginsDir + "/zsh-syntax-highlighting": plan.KindNone,
+		pluginsDir + "/zsh-autosuggestions":     plan.KindNone,
+		paruCacheDir:                            plan.KindNone,
+		gpuEnvLinkPath:                          plan.KindNone,
 	}
 	for _, name := range gpuEnvFiles {
-		kinds[gpuEnvRepoDir+"/"+name] = domain.KindFile
+		kinds[gpuEnvRepoDir+"/"+name] = plan.KindFile
 	}
 	in := &fakeInspector{
 		kinds:       kinds,
 		linkTargets: map[string]string{},
-		diff: func(e manifest.ResolvedEntry, _, _ domain.Endpoint) ([]domain.Change, error) {
+		diff: func(e manifest.ResolvedEntry, _, _ plan.Endpoint) ([]plan.Change, error) {
 			if e.Root == manifest.RootFonts {
-				return []domain.Change{change("a.ttf", domain.Create, domain.KindFile)}, nil
+				return []plan.Change{change("a.ttf", plan.Create, plan.KindFile)}, nil
 			}
-			return []domain.Change{
-				change("a.conf", domain.Create, domain.KindFile),
-				change("b.conf", domain.Update, domain.KindFile),
-				change("old.conf", domain.Delete, domain.KindFile),
+			return []plan.Change{
+				change("a.conf", plan.Create, plan.KindFile),
+				change("b.conf", plan.Update, plan.KindFile),
+				change("old.conf", plan.Delete, plan.KindFile),
 			}, nil
 		},
 	}
@@ -119,16 +120,16 @@ func newPlanFixture(t *testing.T) *planFixture {
 
 func (f *planFixture) plan(t *testing.T) InstallPlan {
 	t.Helper()
-	plan, err := f.inst.Plan(context.Background(), f.draft)
+	installPlan, err := f.inst.Plan(context.Background(), f.draft)
 	if err != nil {
 		t.Fatalf("Plan: %v", err)
 	}
-	return plan
+	return installPlan
 }
 
-func phaseSteps(plan InstallPlan, phase domain.Phase) []domain.PlannedStep {
+func phaseSteps(installPlan InstallPlan, phase domain.Phase) []domain.PlannedStep {
 	var out []domain.PlannedStep
-	for _, ps := range plan.Steps {
+	for _, ps := range installPlan.Steps {
 		if ps.Phase == phase {
 			out = append(out, ps)
 		}
@@ -146,21 +147,21 @@ func runnable(steps []domain.PlannedStep) []domain.PlannedStep {
 	return out
 }
 
-func rawSteps(steps []domain.PlannedStep) []domain.Step {
-	out := make([]domain.Step, len(steps))
+func rawSteps(steps []domain.PlannedStep) []plan.Step {
+	out := make([]plan.Step, len(steps))
 	for i, ps := range steps {
 		out[i] = ps.Step
 	}
 	return out
 }
 
-func runnableCommands(plan InstallPlan, phase domain.Phase) []domain.CommandStep {
-	return stepsOfType[domain.CommandStep](rawSteps(runnable(phaseSteps(plan, phase))))
+func runnableCommands(installPlan InstallPlan, phase domain.Phase) []plan.CommandStep {
+	return stepsOfType[plan.CommandStep](rawSteps(runnable(phaseSteps(installPlan, phase))))
 }
 
-func runnableWrites(plan InstallPlan, path string) []domain.WriteFileStep {
-	var out []domain.WriteFileStep
-	for _, w := range stepsOfType[domain.WriteFileStep](rawSteps(runnable(plan.Steps))) {
+func runnableWrites(installPlan InstallPlan, path string) []plan.WriteFileStep {
+	var out []plan.WriteFileStep
+	for _, w := range stepsOfType[plan.WriteFileStep](rawSteps(runnable(installPlan.Steps))) {
 		if w.Path == path {
 			out = append(out, w)
 		}
@@ -168,7 +169,7 @@ func runnableWrites(plan InstallPlan, path string) []domain.WriteFileStep {
 	return out
 }
 
-func cloneDestinations(commands []domain.CommandStep) []string {
+func cloneDestinations(commands []plan.CommandStep) []string {
 	var out []string
 	for _, c := range commands {
 		if len(c.Argv) > 1 && c.Argv[0] == "git" && c.Argv[1] == "clone" {
@@ -180,17 +181,17 @@ func cloneDestinations(commands []domain.CommandStep) []string {
 
 func TestPlan_PhasesFollowFixedOrderWhateverTheManifestOrder(t *testing.T) {
 	f := newPlanFixture(t)
-	plan := f.plan(t)
+	installPlan := f.plan(t)
 
 	var phases []domain.Phase
-	for _, ps := range plan.Steps {
+	for _, ps := range installPlan.Steps {
 		phases = append(phases, ps.Phase)
 	}
 	if !slices.IsSorted(phases) {
 		t.Errorf("phases are not in execution order: %v", phases)
 	}
 	for phase := domain.PhasePrivilege; phase <= domain.PhaseReboot; phase++ {
-		if len(phaseSteps(plan, phase)) == 0 {
+		if len(phaseSteps(installPlan, phase)) == 0 {
 			t.Errorf("phase %d has no step in a full install on a fresh machine", phase)
 		}
 	}
@@ -207,23 +208,23 @@ func TestPlan_PhasesFollowFixedOrderWhateverTheManifestOrder(t *testing.T) {
 		t.Errorf("phase sequence changed with manifest order: %v vs %v", phases, reversedPhases)
 	}
 
-	if len(plan.Notices) != 0 || len(plan.Blocking) != 0 {
-		t.Errorf("fresh machine plan has notices %v / blocking %v", plan.Notices, plan.Blocking)
+	if len(installPlan.Notices) != 0 || len(installPlan.Blocking) != 0 {
+		t.Errorf("fresh machine plan has notices %v / blocking %v", installPlan.Notices, installPlan.Blocking)
 	}
 	if got := f.runner.steps; len(got) != 0 {
 		t.Errorf("Plan ran steps before confirmation: %v", got)
 	}
-	logs := stepsOfType[domain.AppendLogStep](rawSteps(phaseSteps(plan, domain.PhaseRecord)))
+	logs := stepsOfType[plan.AppendLogStep](rawSteps(phaseSteps(installPlan, domain.PhaseRecord)))
 	if len(logs) != 1 || logs[0].Entry.Op != "install" {
 		t.Errorf("record phase = %+v, want one AppendLogStep with op install", logs)
 	}
 }
 
 func TestPlan_OnlySudoHandoffIsInteractiveAndRebootIsLast(t *testing.T) {
-	plan := newPlanFixture(t).plan(t)
+	installPlan := newPlanFixture(t).plan(t)
 
-	var interactive []domain.CommandStep
-	for _, c := range stepsOfType[domain.CommandStep](rawSteps(plan.Steps)) {
+	var interactive []plan.CommandStep
+	for _, c := range stepsOfType[plan.CommandStep](rawSteps(installPlan.Steps)) {
 		if c.Interactive {
 			interactive = append(interactive, c)
 		}
@@ -231,12 +232,12 @@ func TestPlan_OnlySudoHandoffIsInteractiveAndRebootIsLast(t *testing.T) {
 	if len(interactive) != 1 || !slices.Equal(interactive[0].Argv, []string{"sudo", "-v"}) {
 		t.Fatalf("interactive steps = %+v, want exactly sudo -v", interactive)
 	}
-	if first, ok := plan.Steps[0].Step.(domain.CommandStep); !ok || !first.Interactive {
-		t.Errorf("first step = %+v, want the sudo -v handoff", plan.Steps[0])
+	if first, ok := installPlan.Steps[0].Step.(plan.CommandStep); !ok || !first.Interactive {
+		t.Errorf("first step = %+v, want the sudo -v handoff", installPlan.Steps[0])
 	}
 
-	last := plan.Steps[len(plan.Steps)-1]
-	reboot, ok := last.Step.(domain.CommandStep)
+	last := installPlan.Steps[len(installPlan.Steps)-1]
+	reboot, ok := last.Step.(plan.CommandStep)
 	if !ok || last.Phase != domain.PhaseReboot || last.Skip != "" ||
 		!slices.Equal(reboot.Argv, []string{"systemctl", "reboot"}) || !reboot.Sudo {
 		t.Fatalf("last step = %+v, want a never-skipped sudo systemctl reboot", last)
@@ -244,8 +245,8 @@ func TestPlan_OnlySudoHandoffIsInteractiveAndRebootIsLast(t *testing.T) {
 }
 
 func TestPlan_NeverPlansPackageRemoval(t *testing.T) {
-	plan := newPlanFixture(t).plan(t)
-	for _, c := range stepsOfType[domain.CommandStep](rawSteps(plan.Steps)) {
+	installPlan := newPlanFixture(t).plan(t)
+	for _, c := range stepsOfType[plan.CommandStep](rawSteps(installPlan.Steps)) {
 		if c.Argv[0] != "pacman" && c.Argv[0] != "paru" {
 			continue
 		}
@@ -289,9 +290,9 @@ func TestPlan_PacmanStepUpgradesAndInstallsSelection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPlanFixture(t)
 			f.draft = tc.draft
-			plan := f.plan(t)
+			installPlan := f.plan(t)
 
-			pacman := runnableCommands(plan, domain.PhasePacman)
+			pacman := runnableCommands(installPlan, domain.PhasePacman)
 			if len(pacman) != 1 {
 				t.Fatalf("runnable pacman steps = %d, want 1", len(pacman))
 			}
@@ -303,7 +304,7 @@ func TestPlan_PacmanStepUpgradesAndInstallsSelection(t *testing.T) {
 				t.Errorf("pacman packages = %v, want %v", got, tc.wantPacman)
 			}
 
-			aur := runnableCommands(plan, domain.PhaseAur)
+			aur := runnableCommands(installPlan, domain.PhaseAur)
 			if len(tc.wantAur) == 0 {
 				if len(aur) != 0 {
 					t.Errorf("AUR step planned without AUR packages: %+v", aur)
@@ -333,7 +334,7 @@ func TestPlan_ParuBootstrapOnlyWhenNeededAndUnattended(t *testing.T) {
 	}{
 		{name: "paru absent", mutate: func(*planFixture) {}, wantClone: true, wantMakepkg: true},
 		{name: "paru present", mutate: func(f *planFixture) { f.probe.commands["paru"] = true }},
-		{name: "clone cache exists", mutate: func(f *planFixture) { f.in.kinds[paruCacheDir] = domain.KindDir }, wantMakepkg: true},
+		{name: "clone cache exists", mutate: func(f *planFixture) { f.in.kinds[paruCacheDir] = plan.KindDir }, wantMakepkg: true},
 		{name: "no AUR package", mutate: func(f *planFixture) { f.draft.Profile = manifest.ProfileMinimal }},
 	}
 	for _, tc := range cases {
@@ -342,7 +343,7 @@ func TestPlan_ParuBootstrapOnlyWhenNeededAndUnattended(t *testing.T) {
 			tc.mutate(f)
 			steps := runnableCommands(f.plan(t), domain.PhaseParuBootstrap)
 
-			var clones, makepkgs []domain.CommandStep
+			var clones, makepkgs []plan.CommandStep
 			for _, c := range steps {
 				switch c.Argv[0] {
 				case "git":
@@ -390,14 +391,14 @@ func TestPlan_MultilibEditRunsOnlyForTheExpectedCommentedLines(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPlanFixture(t)
 			f.probe.files[pacmanConfPath] = []byte(tc.conf)
-			plan := f.plan(t)
+			installPlan := f.plan(t)
 
-			writes := runnableWrites(plan, pacmanConfPath)
+			writes := runnableWrites(installPlan, pacmanConfPath)
 			if (len(writes) == 1) != tc.wantWrite || len(writes) > 1 {
 				t.Fatalf("runnable pacman.conf writes = %+v, want present=%v", writes, tc.wantWrite)
 			}
-			if (len(plan.Blocking) > 0) != tc.wantBlocking {
-				t.Errorf("blocking = %v, want blocking=%v", plan.Blocking, tc.wantBlocking)
+			if (len(installPlan.Blocking) > 0) != tc.wantBlocking {
+				t.Errorf("blocking = %v, want blocking=%v", installPlan.Blocking, tc.wantBlocking)
 			}
 			if !tc.wantWrite {
 				return
@@ -428,9 +429,9 @@ func TestPlan_LogindDropInIsPlannedAfterAurAndBackedUpWhenDifferent(t *testing.T
 			if tc.existing != nil {
 				f.probe.files[logindDropInPath] = tc.existing
 			}
-			plan := f.plan(t)
+			installPlan := f.plan(t)
 
-			writes := runnableWrites(plan, logindDropInPath)
+			writes := runnableWrites(installPlan, logindDropInPath)
 			if (len(writes) == 1) != tc.wantWrite || len(writes) > 1 {
 				t.Fatalf("runnable drop-in writes = %+v, want present=%v", writes, tc.wantWrite)
 			}
@@ -445,7 +446,7 @@ func TestPlan_LogindDropInIsPlannedAfterAurAndBackedUpWhenDifferent(t *testing.T
 			if (w.BackupTo != "") != tc.wantBackup {
 				t.Errorf("BackupTo = %q, want backup=%v", w.BackupTo, tc.wantBackup)
 			}
-			if got := phaseSteps(plan, domain.PhaseSystem); len(got) == 0 {
+			if got := phaseSteps(installPlan, domain.PhaseSystem); len(got) == 0 {
 				t.Error("drop-in is not in the system phase")
 			}
 		})
@@ -453,19 +454,19 @@ func TestPlan_LogindDropInIsPlannedAfterAurAndBackedUpWhenDifferent(t *testing.T
 }
 
 func TestPlan_ConfigsAndFontsReuseThePushPlanWithoutDeletes(t *testing.T) {
-	plan := newPlanFixture(t).plan(t)
+	installPlan := newPlanFixture(t).plan(t)
 
-	configSteps := rawSteps(phaseSteps(plan, domain.PhaseConfigs))
-	copies := stepsOfType[domain.CopyStep](configSteps)
-	if len(copies) != 1 || !slices.Equal(copies[0].Paths, []string{"a.conf", "b.conf"}) || copies[0].Direction != domain.Push {
+	configSteps := rawSteps(phaseSteps(installPlan, domain.PhaseConfigs))
+	copies := stepsOfType[plan.CopyStep](configSteps)
+	if len(copies) != 1 || !slices.Equal(copies[0].Paths, []string{"a.conf", "b.conf"}) || copies[0].Direction != plan.Push {
 		t.Fatalf("config copies = %+v, want one push copy of a.conf and b.conf", copies)
 	}
 	backupAt, copyAt := -1, -1
 	for i, s := range configSteps {
 		switch s.(type) {
-		case domain.BackupStep:
+		case plan.BackupStep:
 			backupAt = i
-		case domain.CopyStep:
+		case plan.CopyStep:
 			copyAt = i
 		}
 	}
@@ -473,24 +474,24 @@ func TestPlan_ConfigsAndFontsReuseThePushPlanWithoutDeletes(t *testing.T) {
 		t.Errorf("backup index %d, copy index %d: an overwrite needs a backup step first", backupAt, copyAt)
 	}
 
-	fontSteps := rawSteps(phaseSteps(plan, domain.PhaseFonts))
-	if got := stepsOfType[domain.CopyStep](fontSteps); len(got) != 1 || !slices.Equal(got[0].Paths, []string{"a.ttf"}) {
+	fontSteps := rawSteps(phaseSteps(installPlan, domain.PhaseFonts))
+	if got := stepsOfType[plan.CopyStep](fontSteps); len(got) != 1 || !slices.Equal(got[0].Paths, []string{"a.ttf"}) {
 		t.Errorf("font copies = %+v, want one copy of a.ttf", got)
 	}
-	if got := runnableCommands(plan, domain.PhaseFonts); len(got) != 1 || !slices.Equal(got[0].Argv, []string{"fc-cache", "-f"}) {
+	if got := runnableCommands(installPlan, domain.PhaseFonts); len(got) != 1 || !slices.Equal(got[0].Argv, []string{"fc-cache", "-f"}) {
 		t.Errorf("font phase commands = %+v, want fc-cache -f", got)
 	}
-	if got := stepsOfType[domain.DeleteStep](rawSteps(plan.Steps)); len(got) != 0 {
+	if got := stepsOfType[plan.DeleteStep](rawSteps(installPlan.Steps)); len(got) != 0 {
 		t.Errorf("install planned deletions: %+v", got)
 	}
 }
 
 func TestPlan_BlockedSyncItemIsABlockingError(t *testing.T) {
 	f := newPlanFixture(t)
-	f.in.diff = diffReturning(change("sub/a.conf", domain.Create, domain.KindFile))
-	f.in.kinds[testHome+"/.config/hypr/sub"] = domain.KindLink
+	f.in.diff = diffReturning(change("sub/a.conf", plan.Create, plan.KindFile))
+	f.in.kinds[testHome+"/.config/hypr/sub"] = plan.KindLink
 
-	if plan := f.plan(t); len(plan.Blocking) == 0 {
+	if installPlan := f.plan(t); len(installPlan.Blocking) == 0 {
 		t.Fatal("blocked push item produced no blocking error")
 	}
 }
@@ -512,7 +513,7 @@ func TestPlan_GPUEnvLinkTargetsTheFileOfTheSelectedDrivers(t *testing.T) {
 		t.Run(tc.want, func(t *testing.T) {
 			f := newPlanFixture(t)
 			f.draft.Drivers = tc.drivers
-			links := stepsOfType[domain.SymlinkStep](rawSteps(runnable(phaseSteps(f.plan(t), domain.PhaseEnv))))
+			links := stepsOfType[plan.SymlinkStep](rawSteps(runnable(phaseSteps(f.plan(t), domain.PhaseEnv))))
 			if len(links) != 1 || links[0].Path != gpuEnvLinkPath || links[0].Target != tc.want {
 				t.Fatalf("links = %+v, want %s -> %s", links, gpuEnvLinkPath, tc.want)
 			}
@@ -533,7 +534,7 @@ func TestPlan_GPUEnvLinkCases(t *testing.T) {
 		{
 			name: "same target already linked",
 			mutate: func(f *planFixture) {
-				f.in.kinds[gpuEnvLinkPath] = domain.KindLink
+				f.in.kinds[gpuEnvLinkPath] = plan.KindLink
 				f.in.linkTargets[gpuEnvLinkPath] = wantTarget
 			},
 			wantSteps: 1,
@@ -541,14 +542,14 @@ func TestPlan_GPUEnvLinkCases(t *testing.T) {
 		{
 			name: "other target is replaced",
 			mutate: func(f *planFixture) {
-				f.in.kinds[gpuEnvLinkPath] = domain.KindLink
+				f.in.kinds[gpuEnvLinkPath] = plan.KindLink
 				f.in.linkTargets[gpuEnvLinkPath] = "gpu_env_nvidia.lua"
 			},
 			wantSteps: 1, wantRunnable: true,
 		},
 		{
 			name:       "regular file is kept and warned about",
-			mutate:     func(f *planFixture) { f.in.kinds[gpuEnvLinkPath] = domain.KindFile },
+			mutate:     func(f *planFixture) { f.in.kinds[gpuEnvLinkPath] = plan.KindFile },
 			wantSteps:  1,
 			wantNotice: "gpu_env.lua",
 		},
@@ -567,7 +568,7 @@ func TestPlan_GPUEnvLinkCases(t *testing.T) {
 		},
 		{
 			name:       "no file for the combination",
-			mutate:     func(f *planFixture) { f.in.kinds[gpuEnvRepoDir+"/"+wantTarget] = domain.KindNone },
+			mutate:     func(f *planFixture) { f.in.kinds[gpuEnvRepoDir+"/"+wantTarget] = plan.KindNone },
 			wantNotice: wantTarget,
 		},
 	}
@@ -575,30 +576,30 @@ func TestPlan_GPUEnvLinkCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPlanFixture(t)
 			tc.mutate(f)
-			plan := f.plan(t)
+			installPlan := f.plan(t)
 
-			links := stepsOfType[domain.SymlinkStep](rawSteps(plan.Steps))
+			links := stepsOfType[plan.SymlinkStep](rawSteps(installPlan.Steps))
 			if len(links) != tc.wantSteps {
 				t.Fatalf("symlink steps = %d, want %d", len(links), tc.wantSteps)
 			}
-			if got := len(stepsOfType[domain.SymlinkStep](rawSteps(runnable(plan.Steps)))) == 1; got != tc.wantRunnable {
+			if got := len(stepsOfType[plan.SymlinkStep](rawSteps(runnable(installPlan.Steps)))) == 1; got != tc.wantRunnable {
 				t.Errorf("link runnable = %v, want %v", got, tc.wantRunnable)
 			}
-			joined := strings.Join(plan.Notices, "\n")
-			if tc.wantNotice == "" && len(plan.Notices) != 0 {
-				t.Errorf("unexpected notices: %v", plan.Notices)
+			joined := strings.Join(installPlan.Notices, "\n")
+			if tc.wantNotice == "" && len(installPlan.Notices) != 0 {
+				t.Errorf("unexpected notices: %v", installPlan.Notices)
 			}
 			if tc.wantNotice != "" && !strings.Contains(joined, tc.wantNotice) {
 				t.Errorf("notices = %q, want one naming %q", joined, tc.wantNotice)
 			}
-			if len(plan.Blocking) != 0 {
-				t.Errorf("blocking = %v, a GPU env problem must not block the install", plan.Blocking)
+			if len(installPlan.Blocking) != 0 {
+				t.Errorf("blocking = %v, a GPU env problem must not block the install", installPlan.Blocking)
 			}
-			for _, ps := range plan.Steps {
-				if _, isLink := ps.Step.(domain.SymlinkStep); isLink {
+			for _, ps := range installPlan.Steps {
+				if _, isLink := ps.Step.(plan.SymlinkStep); isLink {
 					continue
 				}
-				if c, ok := ps.Step.(domain.CommandStep); ok && strings.Contains(strings.Join(c.Argv, " "), "gpu_env.lua") {
+				if c, ok := ps.Step.(plan.CommandStep); ok && strings.Contains(strings.Join(c.Argv, " "), "gpu_env.lua") {
 					t.Errorf("command touches gpu_env.lua: %v", c.Argv)
 				}
 			}
@@ -607,7 +608,7 @@ func TestPlan_GPUEnvLinkCases(t *testing.T) {
 }
 
 func TestPlan_SecretsFileIsCreatedOnlyWhenMissingAndOmitsEmptyValues(t *testing.T) {
-	entries := []domain.SecretEntry{{Name: "API_KEY", Value: "k1"}, {Name: "EMPTY", Value: ""}}
+	entries := []plan.SecretEntry{{Name: "API_KEY", Value: "k1"}, {Name: "EMPTY", Value: ""}}
 	cases := []struct {
 		name      string
 		mutate    func(f *planFixture)
@@ -618,7 +619,7 @@ func TestPlan_SecretsFileIsCreatedOnlyWhenMissingAndOmitsEmptyValues(t *testing.
 		{name: "no names configured", mutate: func(*planFixture) {}, wantStep: true},
 		{
 			name:   "file exists",
-			mutate: func(f *planFixture) { f.in.kinds[secretsPath] = domain.KindFile; f.draft.Secrets = entries },
+			mutate: func(f *planFixture) { f.in.kinds[secretsPath] = plan.KindFile; f.draft.Secrets = entries },
 		},
 		{
 			name:   "owner skipped the page",
@@ -629,7 +630,7 @@ func TestPlan_SecretsFileIsCreatedOnlyWhenMissingAndOmitsEmptyValues(t *testing.
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPlanFixture(t)
 			tc.mutate(f)
-			steps := stepsOfType[domain.WriteSecretsStep](rawSteps(runnable(f.plan(t).Steps)))
+			steps := stepsOfType[plan.WriteSecretsStep](rawSteps(runnable(f.plan(t).Steps)))
 			if (len(steps) == 1) != tc.wantStep || len(steps) > 1 {
 				t.Fatalf("runnable secrets steps = %+v, want present=%v", steps, tc.wantStep)
 			}
@@ -659,8 +660,8 @@ func TestPlan_ShellStepsCloneOnlyWhatIsMissingAndChangeShellOnlyWhenNotZsh(t *te
 		{
 			name: "oh-my-zsh and one plugin exist",
 			mutate: func(f *planFixture) {
-				f.in.kinds[ohMyZshPath] = domain.KindDir
-				f.in.kinds[pluginsDir+"/zsh-syntax-highlighting"] = domain.KindDir
+				f.in.kinds[ohMyZshPath] = plan.KindDir
+				f.in.kinds[pluginsDir+"/zsh-syntax-highlighting"] = plan.KindDir
 			},
 			wantClones: []string{pluginsDir + "/zsh-autosuggestions"},
 			wantChsh:   true,
@@ -676,7 +677,7 @@ func TestPlan_ShellStepsCloneOnlyWhatIsMissingAndChangeShellOnlyWhenNotZsh(t *te
 			if got := cloneDestinations(commands); !slices.Equal(got, tc.wantClones) {
 				t.Errorf("clone destinations = %v, want %v", got, tc.wantClones)
 			}
-			var chsh []domain.CommandStep
+			var chsh []plan.CommandStep
 			for _, c := range commands {
 				if c.Argv[0] == "git" {
 					if !slices.Contains(c.Argv, "--depth") || c.Sudo || c.Interactive {
@@ -734,10 +735,10 @@ func TestPlan_ServicesAreEnabledOnlyForSelectedPackagesAndDrivers(t *testing.T) 
 			f := newPlanFixture(t)
 			f.draft = tc.draft
 			f.in.linkTargets[displayManagerLink] = tc.linkTarget
-			plan := f.plan(t)
+			installPlan := f.plan(t)
 
 			var units []string
-			for _, c := range runnableCommands(plan, domain.PhaseServices) {
+			for _, c := range runnableCommands(installPlan, domain.PhaseServices) {
 				if len(c.Argv) < 2 || c.Argv[0] != "systemctl" || c.Argv[1] != "enable" || !c.Sudo {
 					t.Errorf("services command = %+v, want sudo systemctl enable", c)
 					continue
@@ -747,8 +748,8 @@ func TestPlan_ServicesAreEnabledOnlyForSelectedPackagesAndDrivers(t *testing.T) 
 			if got := sorted(units...); !slices.Equal(got, tc.wantUnits) {
 				t.Errorf("enabled units = %v, want %v", got, tc.wantUnits)
 			}
-			if (len(plan.Notices) > 0) != tc.wantNotice {
-				t.Errorf("notices = %v, want notice=%v", plan.Notices, tc.wantNotice)
+			if (len(installPlan.Notices) > 0) != tc.wantNotice {
+				t.Errorf("notices = %v, want notice=%v", installPlan.Notices, tc.wantNotice)
 			}
 		})
 	}
@@ -785,7 +786,7 @@ func TestPlan_ThemeStateWritesNameAndVariantWithNadirDefault(t *testing.T) {
 			f.draft.ThemeVariant = tc.variant
 			steps := phaseSteps(f.plan(t), domain.PhaseTheme)
 
-			writes := stepsOfType[domain.WriteFileStep](rawSteps(steps))
+			writes := stepsOfType[plan.WriteFileStep](rawSteps(steps))
 			if len(steps) != 2 || len(writes) != 2 {
 				t.Fatalf("theme phase = %+v, want exactly two file writes", steps)
 			}
@@ -815,23 +816,23 @@ func TestPlan_RerunOnAnInstalledMachineSkipsCompletedEffects(t *testing.T) {
 	f.probe.files[logindDropInPath] = []byte("[Login]\nHandlePowerKey=ignore\nHandlePowerKeyLongPress=poweroff\n")
 	f.in.diff = diffReturning()
 	for _, p := range []string{secretsPath, ohMyZshPath, pluginsDir + "/zsh-syntax-highlighting", pluginsDir + "/zsh-autosuggestions", paruCacheDir} {
-		f.in.kinds[p] = domain.KindDir
+		f.in.kinds[p] = plan.KindDir
 	}
-	f.in.kinds[gpuEnvLinkPath] = domain.KindLink
+	f.in.kinds[gpuEnvLinkPath] = plan.KindLink
 	f.in.linkTargets[gpuEnvLinkPath] = "gpu_env_intel.lua"
 
 	for _, s := range rawSteps(runnable(f.plan(t).Steps)) {
 		switch v := s.(type) {
-		case domain.CommandStep:
+		case plan.CommandStep:
 			switch v.Argv[0] {
 			case "pacman", "paru", "makepkg", "git", "chsh":
 				t.Errorf("completed effect planned again: %v", v.Argv)
 			}
-		case domain.WriteFileStep:
+		case plan.WriteFileStep:
 			if strings.HasPrefix(v.Path, "/etc/") {
 				t.Errorf("completed /etc write planned again: %s", v.Path)
 			}
-		case domain.CopyStep, domain.BackupStep, domain.SymlinkStep, domain.WriteSecretsStep:
+		case plan.CopyStep, plan.BackupStep, plan.SymlinkStep, plan.WriteSecretsStep:
 			t.Errorf("completed effect planned again: %T", v)
 		}
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/sysx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui"
 )
 
@@ -71,7 +72,7 @@ func run(dryRun bool, repoFlag string) error {
 	repo := resolveRepo(repoFlag, state.RepoPath, cwd)
 
 	bridge := ui.NewTerminalBridge()
-	var runner app.Runner = system.Runner{Home: home, ConfigDir: configDir, Terminal: bridge}
+	var runner plan.Runner = system.Runner{Home: home, ConfigDir: configDir, Terminal: bridge}
 	if dryRun {
 		runner = dryrun.Recorder{}
 	}
@@ -96,7 +97,7 @@ func run(dryRun bool, repoFlag string) error {
 
 // wireCatalog loads the package, hardware and secret-name manifests and builds the install and packages use cases.
 // A bad manifest only sets CatalogError, so sync and backups keep working.
-func wireCatalog(deps *ui.Deps, svc *app.Service, repo, home, username string, dryRun bool, runner app.Runner, inspector app.Inspector) {
+func wireCatalog(deps *ui.Deps, svc *app.Service, repo, home, username string, dryRun bool, runner plan.Runner, inspector app.Inspector) {
 	catalog, err := manifest.LoadPackages(filepath.Join(repo, packagesRelPath))
 	if err != nil {
 		deps.CatalogError = err

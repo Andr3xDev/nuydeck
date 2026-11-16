@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 type fakeProbe struct {
@@ -47,21 +48,21 @@ func (p *fakeProbe) IsRoot() bool { return p.root }
 // scriptedRunner records every step; handle, when set, decides the result and may block or emit progress.
 type scriptedRunner struct {
 	mu     sync.Mutex
-	steps  []domain.Step
-	handle func(ctx context.Context, s domain.Step, progress func(domain.StepProgress)) domain.StepResult
+	steps  []plan.Step
+	handle func(ctx context.Context, s plan.Step, progress func(plan.StepProgress)) plan.StepResult
 }
 
-func (r *scriptedRunner) Run(ctx context.Context, s domain.Step, progress func(domain.StepProgress)) domain.StepResult {
+func (r *scriptedRunner) Run(ctx context.Context, s plan.Step, progress func(plan.StepProgress)) plan.StepResult {
 	r.mu.Lock()
 	r.steps = append(r.steps, s)
 	r.mu.Unlock()
 	if r.handle != nil {
 		return r.handle(ctx, s, progress)
 	}
-	return domain.StepResult{Status: domain.StepOK}
+	return plan.StepResult{Status: plan.StepOK}
 }
 
-func (r *scriptedRunner) ran() []domain.Step {
+func (r *scriptedRunner) ran() []plan.Step {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.steps)
@@ -70,7 +71,7 @@ func (r *scriptedRunner) ran() []domain.Step {
 // commandLabels lists the labels of every command step the runner received, quiet ones included.
 func (r *scriptedRunner) commandLabels() []string {
 	var labels []string
-	for _, c := range stepsOfType[domain.CommandStep](r.ran()) {
+	for _, c := range stepsOfType[plan.CommandStep](r.ran()) {
 		labels = append(labels, c.Label)
 	}
 	return labels
@@ -78,7 +79,7 @@ func (r *scriptedRunner) commandLabels() []string {
 
 func (r *scriptedRunner) quietCalls() int {
 	n := 0
-	for _, c := range stepsOfType[domain.CommandStep](r.ran()) {
+	for _, c := range stepsOfType[plan.CommandStep](r.ran()) {
 		if c.Quiet {
 			n++
 		}
@@ -86,8 +87,8 @@ func (r *scriptedRunner) quietCalls() int {
 	return n
 }
 
-func failedStep(message string) domain.StepResult {
-	return domain.StepResult{Status: domain.StepFailed, Err: errors.New(message)}
+func failedStep(message string) plan.StepResult {
+	return plan.StepResult{Status: plan.StepFailed, Err: errors.New(message)}
 }
 
 func sorted(items ...string) []string {

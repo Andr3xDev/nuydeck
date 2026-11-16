@@ -19,6 +19,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const (
@@ -44,29 +45,29 @@ type backupMeta struct {
 	Files     []string          `toml:"files"`
 }
 
-func failed(err error) domain.StepResult {
-	return domain.StepResult{Status: domain.StepFailed, Err: err}
+func failed(err error) plan.StepResult {
+	return plan.StepResult{Status: plan.StepFailed, Err: err}
 }
 
-func (r Runner) Run(ctx context.Context, s domain.Step, _ func(domain.StepProgress)) domain.StepResult {
+func (r Runner) Run(ctx context.Context, s plan.Step, _ func(plan.StepProgress)) plan.StepResult {
 	switch s := s.(type) {
-	case domain.DeleteStep:
+	case plan.DeleteStep:
 		return deletePath(s)
-	case domain.BackupStep:
+	case plan.BackupStep:
 		return r.backup(ctx, s)
-	case domain.DeleteBackupStep:
+	case plan.DeleteBackupStep:
 		return r.deleteBackup(s)
-	case domain.WriteFileStep:
+	case plan.WriteFileStep:
 		return writeFile(s)
-	case domain.SymlinkStep:
+	case plan.SymlinkStep:
 		return symlink(s)
-	case domain.WriteSecretsStep:
+	case plan.WriteSecretsStep:
 		return writeSecrets(s)
 	}
 	return failed(fmt.Errorf("fsx cannot run %T", s))
 }
 
-func deletePath(s domain.DeleteStep) domain.StepResult {
+func deletePath(s plan.DeleteStep) plan.StepResult {
 	root, target := filepath.Clean(s.Root), filepath.Clean(s.Path)
 	if !fsutil.StrictlyWithin(root, target) {
 		return failed(fmt.Errorf("refusing to delete %s: not inside %s", target, root))
@@ -78,7 +79,7 @@ func deletePath(s domain.DeleteStep) domain.StepResult {
 	}
 	realParent, err := filepath.EvalSymlinks(filepath.Dir(target))
 	if errors.Is(err, fs.ErrNotExist) {
-		return domain.StepResult{Status: domain.StepOK, Detail: "already absent"}
+		return plan.StepResult{Status: plan.StepOK, Detail: "already absent"}
 	}
 	if err != nil {
 		return failed(err)
@@ -88,11 +89,11 @@ func deletePath(s domain.DeleteStep) domain.StepResult {
 	}
 	switch err := os.Remove(target); {
 	case err == nil:
-		return domain.StepResult{Status: domain.StepOK}
+		return plan.StepResult{Status: plan.StepOK}
 	case errors.Is(err, fs.ErrNotExist):
-		return domain.StepResult{Status: domain.StepOK, Detail: "already absent"}
+		return plan.StepResult{Status: plan.StepOK, Detail: "already absent"}
 	case errors.Is(err, syscall.ENOTEMPTY):
-		return domain.StepResult{Status: domain.StepOK, Detail: keptNotEmpty}
+		return plan.StepResult{Status: plan.StepOK, Detail: keptNotEmpty}
 	default:
 		return failed(err)
 	}
@@ -105,7 +106,7 @@ func (r Runner) now() time.Time {
 	return time.Now()
 }
 
-func (r Runner) backup(ctx context.Context, s domain.BackupStep) domain.StepResult {
+func (r Runner) backup(ctx context.Context, s plan.BackupStep) plan.StepResult {
 	backupsDir := BackupsDir(r.Home)
 	realBackupsDir, err := fsutil.ResolveExisting(backupsDir)
 	if err != nil {
@@ -136,7 +137,7 @@ func (r Runner) backup(ctx context.Context, s domain.BackupStep) domain.StepResu
 		_ = os.RemoveAll(partial)
 		return failed(err)
 	}
-	return domain.StepResult{Status: domain.StepOK, Detail: final}
+	return plan.StepResult{Status: plan.StepOK, Detail: final}
 }
 
 // reserveBackupDir creates the .partial folder for the first free name among
@@ -161,7 +162,7 @@ func reserveBackupDir(backupsDir, ts string) (final, partial string, err error) 
 	}
 }
 
-func writeBackup(ctx context.Context, s domain.BackupStep, dir string, created time.Time) error {
+func writeBackup(ctx context.Context, s plan.BackupStep, dir string, created time.Time) error {
 	byRoot := map[manifest.Root][]string{}
 	meta := backupMeta{Created: created, Direction: int(s.Direction), Roots: map[string]string{}}
 	for _, f := range s.Files {
@@ -190,7 +191,7 @@ func writeBackup(ctx context.Context, s domain.BackupStep, dir string, created t
 	return os.WriteFile(filepath.Join(dir, metaFileName), data, 0o644)
 }
 
-func (r Runner) deleteBackup(s domain.DeleteBackupStep) domain.StepResult {
+func (r Runner) deleteBackup(s plan.DeleteBackupStep) plan.StepResult {
 	dir := filepath.Clean(s.Dir)
 	if filepath.Dir(dir) != BackupsDir(r.Home) {
 		return failed(fmt.Errorf("refusing to delete %s: not inside %s", dir, BackupsDir(r.Home)))
@@ -198,7 +199,7 @@ func (r Runner) deleteBackup(s domain.DeleteBackupStep) domain.StepResult {
 	if err := os.RemoveAll(dir); err != nil {
 		return failed(err)
 	}
-	return domain.StepResult{Status: domain.StepOK}
+	return plan.StepResult{Status: plan.StepOK}
 }
 
 func BackupsDir(home string) string { return filepath.Join(home, backupsDirName) }
@@ -226,7 +227,7 @@ func ListBackups(_ context.Context, home string) ([]domain.Backup, error) {
 		case err != nil:
 			b.Unreadable = true
 		default:
-			b.Created, b.Direction, b.Files = meta.Created, domain.Direction(meta.Direction), meta.Files
+			b.Created, b.Direction, b.Files = meta.Created, plan.Direction(meta.Direction), meta.Files
 			b.Roots = map[manifest.Root]string{}
 			for root, dest := range meta.Roots {
 				b.Roots[manifest.Root(root)] = dest
@@ -253,19 +254,19 @@ func readMeta(dir string) (backupMeta, error) {
 }
 
 // PathKind classifies p by Lstat; a missing path is KindNone, not an error.
-func PathKind(p string) (domain.NodeKind, error) {
+func PathKind(p string) (plan.NodeKind, error) {
 	info, err := os.Lstat(p)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return domain.KindNone, nil
+		return plan.KindNone, nil
 	case err != nil:
-		return domain.KindNone, err
+		return plan.KindNone, err
 	case info.Mode()&fs.ModeSymlink != 0:
-		return domain.KindLink, nil
+		return plan.KindLink, nil
 	case info.IsDir():
-		return domain.KindDir, nil
+		return plan.KindDir, nil
 	}
-	return domain.KindFile, nil
+	return plan.KindFile, nil
 }
 
 // ReadVariant returns the theme variant, "nadir" unless the file says "zenit".

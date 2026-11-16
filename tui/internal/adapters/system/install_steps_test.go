@@ -15,8 +15,8 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 type execCall struct {
@@ -101,9 +101,9 @@ func newRunner(f *fakeExec) system.Runner {
 
 func TestCommandStep_SudoUsesNonInteractiveSudoWithoutAShell(t *testing.T) {
 	f := &fakeExec{}
-	step := domain.CommandStep{Label: "upgrade", Argv: []string{"pacman", "-Syu", "--needed", "--noconfirm", "git"}, Sudo: true}
+	step := plan.CommandStep{Label: "upgrade", Argv: []string{"pacman", "-Syu", "--needed", "--noconfirm", "git"}, Sudo: true}
 	res := newRunner(f).Run(context.Background(), step, nil)
-	if res.Status != domain.StepOK {
+	if res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if len(f.calls) != 1 {
@@ -117,8 +117,8 @@ func TestCommandStep_SudoUsesNonInteractiveSudoWithoutAShell(t *testing.T) {
 
 func TestCommandStep_WithoutSudoRunsArgvDirectlyInDir(t *testing.T) {
 	f := &fakeExec{}
-	step := domain.CommandStep{Label: "build", Argv: []string{"makepkg", "-si", "--noconfirm"}, Dir: "/work/paru"}
-	if res := newRunner(f).Run(context.Background(), step, nil); res.Status != domain.StepOK {
+	step := plan.CommandStep{Label: "build", Argv: []string{"makepkg", "-si", "--noconfirm"}, Dir: "/work/paru"}
+	if res := newRunner(f).Run(context.Background(), step, nil); res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	c := f.calls[0]
@@ -130,9 +130,9 @@ func TestCommandStep_WithoutSudoRunsArgvDirectlyInDir(t *testing.T) {
 func TestCommandStep_OutputStreamsAsProgressLinesAndNonZeroExitFails(t *testing.T) {
 	f := &fakeExec{stdout: "resolving dependencies\n", failOn: map[string]bool{"pacman": true}}
 	var lines []string
-	res := newRunner(f).Run(context.Background(), domain.CommandStep{Argv: []string{"pacman", "-Syu"}},
-		func(p domain.StepProgress) { lines = append(lines, p.Line) })
-	if res.Status != domain.StepFailed || res.Err == nil {
+	res := newRunner(f).Run(context.Background(), plan.CommandStep{Argv: []string{"pacman", "-Syu"}},
+		func(p plan.StepProgress) { lines = append(lines, p.Line) })
+	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Errorf("result = %+v, want failure", res)
 	}
 	if !reflect.DeepEqual(lines, []string{"resolving dependencies"}) {
@@ -160,8 +160,8 @@ func TestCommandStep_PacmanAndParuRemovalIsRefusedBeforeAnyExec(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := &fakeExec{}
-			res := newRunner(f).Run(context.Background(), domain.CommandStep{Argv: tt.argv, Sudo: tt.sudo}, nil)
-			if res.Status != domain.StepFailed || res.Err == nil {
+			res := newRunner(f).Run(context.Background(), plan.CommandStep{Argv: tt.argv, Sudo: tt.sudo}, nil)
+			if res.Status != plan.StepFailed || res.Err == nil {
 				t.Errorf("result = %+v, want failure", res)
 			}
 			if len(f.calls) != 0 {
@@ -177,8 +177,8 @@ func TestCommandStep_InstallArgvIsNotMistakenForRemoval(t *testing.T) {
 		{"pacman", "-Syu", "--needed", "--noconfirm", "ripgrep"},
 		{"env", "pacman", "-S", "--refresh", "ripgrep"},
 	} {
-		step := domain.CommandStep{Argv: argv, Sudo: true}
-		if res := newRunner(f).Run(context.Background(), step, nil); res.Status != domain.StepOK {
+		step := plan.CommandStep{Argv: argv, Sudo: true}
+		if res := newRunner(f).Run(context.Background(), step, nil); res.Status != plan.StepOK {
 			t.Errorf("%v: result = %+v", argv, res)
 		}
 	}
@@ -188,8 +188,8 @@ func TestCommandStep_InteractiveGoesThroughTheTerminalPort(t *testing.T) {
 	f, term := &fakeExec{}, &fakeTerminal{}
 	r := newRunner(f)
 	r.Terminal = term
-	res := r.Run(context.Background(), domain.CommandStep{Label: "sudo", Argv: []string{"sudo", "-v"}, Interactive: true}, nil)
-	if res.Status != domain.StepOK {
+	res := r.Run(context.Background(), plan.CommandStep{Label: "sudo", Argv: []string{"sudo", "-v"}, Interactive: true}, nil)
+	if res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if len(term.cmds) != 1 || !reflect.DeepEqual(term.cmds[0].Args, []string{"sudo", "-v"}) {
@@ -204,16 +204,16 @@ func TestCommandStep_InteractiveFailureIsReported(t *testing.T) {
 	boom := errors.New("exit status 1")
 	r := newRunner(&fakeExec{})
 	r.Terminal = &fakeTerminal{err: boom}
-	res := r.Run(context.Background(), domain.CommandStep{Argv: []string{"sudo", "-v"}, Interactive: true}, nil)
-	if res.Status != domain.StepFailed || !errors.Is(res.Err, boom) {
+	res := r.Run(context.Background(), plan.CommandStep{Argv: []string{"sudo", "-v"}, Interactive: true}, nil)
+	if res.Status != plan.StepFailed || !errors.Is(res.Err, boom) {
 		t.Errorf("result = %+v, want failure wrapping the terminal error", res)
 	}
 }
 
 func TestCommandStep_InteractiveWithoutTerminalFails(t *testing.T) {
 	f := &fakeExec{}
-	res := newRunner(f).Run(context.Background(), domain.CommandStep{Argv: []string{"sudo", "-v"}, Interactive: true}, nil)
-	if res.Status != domain.StepFailed || res.Err == nil || !strings.Contains(res.Err.Error(), "interactive step needs a terminal") {
+	res := newRunner(f).Run(context.Background(), plan.CommandStep{Argv: []string{"sudo", "-v"}, Interactive: true}, nil)
+	if res.Status != plan.StepFailed || res.Err == nil || !strings.Contains(res.Err.Error(), "interactive step needs a terminal") {
 		t.Errorf("result = %+v, want %q", res, "interactive step needs a terminal")
 	}
 	if len(f.calls) != 0 {
@@ -242,9 +242,9 @@ func TestPrivilegedWriteFile_RunsBackupInstallThenAtomicMove(t *testing.T) {
 			r.TempDir = t.TempDir()
 			r.Lstat = lstatResult(exists)
 			backup := logindDropIn + ".nuydeck-bak-20260101-000000"
-			step := domain.WriteFileStep{Path: logindDropIn, Content: []byte("[Login]\nHandlePowerKey=ignore\n"), Mode: 0o644, Privileged: true, BackupTo: backup}
+			step := plan.WriteFileStep{Path: logindDropIn, Content: []byte("[Login]\nHandlePowerKey=ignore\n"), Mode: 0o644, Privileged: true, BackupTo: backup}
 
-			if res := r.Run(context.Background(), step, nil); res.Status != domain.StepOK {
+			if res := r.Run(context.Background(), step, nil); res.Status != plan.StepOK {
 				t.Fatalf("result = %+v", res)
 			}
 
@@ -292,8 +292,8 @@ func TestPrivilegedWriteFile_WithoutBackupPathNeverCopies(t *testing.T) {
 	f := &fakeExec{}
 	r := newRunner(f)
 	r.TempDir = t.TempDir()
-	step := domain.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}
-	if res := r.Run(context.Background(), step, nil); res.Status != domain.StepOK {
+	step := plan.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}
+	if res := r.Run(context.Background(), step, nil); res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	for _, c := range f.calls {
@@ -307,8 +307,8 @@ func TestPrivilegedWriteFile_InstallFailureSkipsTheMoveAndRemovesTheStagedFile(t
 	f := &fakeExec{failOn: map[string]bool{"install": true}}
 	r := newRunner(f)
 	r.TempDir = t.TempDir()
-	res := r.Run(context.Background(), domain.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
-	if res.Status != domain.StepFailed {
+	res := r.Run(context.Background(), plan.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
+	if res.Status != plan.StepFailed {
 		t.Errorf("result = %+v, want failure", res)
 	}
 	for _, c := range f.calls {
@@ -323,8 +323,8 @@ func TestPrivilegedWriteFile_MoveFailureRemovesTheStagedFile(t *testing.T) {
 	f := &fakeExec{failOn: map[string]bool{"mv": true}}
 	r := newRunner(f)
 	r.TempDir = t.TempDir()
-	res := r.Run(context.Background(), domain.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
-	if res.Status != domain.StepFailed {
+	res := r.Run(context.Background(), plan.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
+	if res.Status != plan.StepFailed {
 		t.Errorf("result = %+v, want failure", res)
 	}
 	assertStagedRemoved(t, f)
@@ -346,8 +346,8 @@ func TestPrivilegedWriteFile_StagingDirIsCheckedBeforeAnyExec(t *testing.T) {
 	f := &fakeExec{}
 	r := newRunner(f)
 	r.TempDir = loose
-	res := r.Run(context.Background(), domain.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
-	if res.Status != domain.StepFailed || res.Err == nil || !strings.Contains(res.Err.Error(), "writable by group or others") {
+	res := r.Run(context.Background(), plan.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
+	if res.Status != plan.StepFailed || res.Err == nil || !strings.Contains(res.Err.Error(), "writable by group or others") {
 		t.Errorf("result = %+v, want a refused staging dir", res)
 	}
 	if len(f.calls) != 0 {
@@ -360,8 +360,8 @@ func TestPrivilegedWriteFile_DefaultStagingDirIsPrivateUnderHomeWhenNoRuntimeDir
 	home := t.TempDir()
 	f := &fakeExec{}
 	r := system.Runner{Home: home, Exec: f.run}
-	res := r.Run(context.Background(), domain.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
-	if res.Status != domain.StepOK {
+	res := r.Run(context.Background(), plan.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
+	if res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	dir := filepath.Join(home, ".cache", "nuydeck", "tmp")
@@ -379,8 +379,8 @@ func TestPrivilegedWriteFile_RuntimeDirIsTheDefaultWhenSet(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	f := &fakeExec{}
 	r := system.Runner{Home: t.TempDir(), Exec: f.run}
-	res := r.Run(context.Background(), domain.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
-	if res.Status != domain.StepOK {
+	res := r.Run(context.Background(), plan.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
+	if res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if got := f.calls[0].args; !strings.HasPrefix(got[len(got)-2], runtimeDir+string(filepath.Separator)) {
@@ -402,8 +402,8 @@ func TestPrivilegedWriteFile_PathsOutsideAllowListAreRefusedBeforeAnyExec(t *tes
 			f := &fakeExec{}
 			r := newRunner(f)
 			r.TempDir = t.TempDir()
-			res := r.Run(context.Background(), domain.WriteFileStep{Path: p, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
-			if res.Status != domain.StepFailed || res.Err == nil {
+			res := r.Run(context.Background(), plan.WriteFileStep{Path: p, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
+			if res.Status != plan.StepFailed || res.Err == nil {
 				t.Errorf("result = %+v, want failure", res)
 			}
 			if len(f.calls) != 0 {
@@ -418,8 +418,8 @@ func TestPrivilegedWriteFile_PacmanConfIsAllowed(t *testing.T) {
 	r := newRunner(f)
 	r.TempDir = t.TempDir()
 	r.Lstat = lstatResult(false)
-	res := r.Run(context.Background(), domain.WriteFileStep{Path: "/etc/pacman.conf", Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
-	if res.Status != domain.StepOK || len(f.calls) != 2 {
+	res := r.Run(context.Background(), plan.WriteFileStep{Path: "/etc/pacman.conf", Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
+	if res.Status != plan.StepOK || len(f.calls) != 2 {
 		t.Fatalf("result = %+v, calls = %+v", res, f.calls)
 	}
 	staged := "/etc/pacman.conf.nuydeck-new"
@@ -436,8 +436,8 @@ func TestAppendPackageStep_AppendsThroughTomlx(t *testing.T) {
 	if err := os.WriteFile(path, []byte("version = 1\n\n[[package]]\nname = \"a\"\nsource = \"pacman\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res := newRunner(&fakeExec{}).Run(context.Background(), domain.AppendPackageStep{Path: path, Entry: manifest.Package{Name: "htop", Source: manifest.SourceAUR}}, nil)
-	if res.Status != domain.StepOK {
+	res := newRunner(&fakeExec{}).Run(context.Background(), plan.AppendPackageStep{Path: path, Entry: manifest.Package{Name: "htop", Source: manifest.SourceAUR}}, nil)
+	if res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if b, _ := os.ReadFile(path); !strings.Contains(string(b), `name = "htop"`) {
@@ -450,13 +450,13 @@ func TestFileStepsDelegateToFsx(t *testing.T) {
 	r := newRunner(&fakeExec{})
 	ctx := context.Background()
 
-	steps := map[string]domain.Step{
-		"theme":   domain.WriteFileStep{Path: filepath.Join(dir, "theme", "name"), Content: []byte("nuytek"), Mode: 0o644},
-		"link":    domain.SymlinkStep{Path: filepath.Join(dir, "gpu_env.lua"), Target: "gpu_env_amd.lua"},
-		"secrets": domain.WriteSecretsStep{Path: filepath.Join(dir, ".secrets")},
+	steps := map[string]plan.Step{
+		"theme":   plan.WriteFileStep{Path: filepath.Join(dir, "theme", "name"), Content: []byte("nuytek"), Mode: 0o644},
+		"link":    plan.SymlinkStep{Path: filepath.Join(dir, "gpu_env.lua"), Target: "gpu_env_amd.lua"},
+		"secrets": plan.WriteSecretsStep{Path: filepath.Join(dir, ".secrets")},
 	}
 	for name, s := range steps {
-		if res := r.Run(ctx, s, nil); res.Status != domain.StepOK {
+		if res := r.Run(ctx, s, nil); res.Status != plan.StepOK {
 			t.Errorf("%s: %+v", name, res)
 		}
 	}

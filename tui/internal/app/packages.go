@@ -6,13 +6,14 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 // Packages manages explicit packages that the catalog does not know.
 type Packages struct {
 	Probe       SystemProbe
 	Inspector   Inspector
-	Runner      Runner
+	Runner      plan.Runner
 	Catalog     []manifest.Package
 	Drivers     []manifest.Driver
 	CatalogPath string
@@ -30,22 +31,22 @@ func (p *Packages) ListUnregistered(ctx context.Context) ([]string, error) {
 
 // AddPackage appends pkg to the catalog file; an invalid or duplicate package is rejected before any write.
 // The in-memory catalog follows only a real write, so a dry-run leaves it untouched.
-func (p *Packages) AddPackage(ctx context.Context, pkg manifest.Package) (domain.StepResult, error) {
+func (p *Packages) AddPackage(ctx context.Context, pkg manifest.Package) (plan.StepResult, error) {
 	if err := manifest.ValidatePackages(append(slices.Clone(p.Catalog), pkg)); err != nil {
-		return domain.StepResult{}, err
+		return plan.StepResult{}, err
 	}
-	res := p.Runner.Run(ctx, domain.AppendPackageStep{Path: p.CatalogPath, Entry: pkg}, nil)
-	if res.Status == domain.StepOK {
+	res := p.Runner.Run(ctx, plan.AppendPackageStep{Path: p.CatalogPath, Entry: pkg}, nil)
+	if res.Status == plan.StepOK {
 		p.Catalog = append(p.Catalog, pkg)
 	}
 	return res, nil
 }
 
 // IgnorePackage adds name to the ignored packages in the state, keeping the rest of the state as saved.
-func (p *Packages) IgnorePackage(ctx context.Context, name string) domain.StepResult {
+func (p *Packages) IgnorePackage(ctx context.Context, name string) plan.StepResult {
 	state, _ := p.Inspector.LoadState(ctx)
 	if !slices.Contains(state.IgnoredPackages, name) {
 		state.IgnoredPackages = append(slices.Clone(state.IgnoredPackages), name)
 	}
-	return p.Runner.Run(ctx, domain.SaveStateStep{State: state}, nil)
+	return p.Runner.Run(ctx, plan.SaveStateStep{State: state}, nil)
 }

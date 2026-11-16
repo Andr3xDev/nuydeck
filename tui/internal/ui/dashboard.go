@@ -13,6 +13,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
@@ -33,7 +34,7 @@ type driftEntryMsg struct {
 type driftDoneMsg struct{ gen int }
 
 // startSyncMsg asks the root to open the Sync section for a direction.
-type startSyncMsg struct{ direction domain.Direction }
+type startSyncMsg struct{ direction plan.Direction }
 
 // Dashboard lists drift per managed entry, computed in the background.
 type Dashboard struct {
@@ -137,9 +138,9 @@ func (d *Dashboard) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		case key.Matches(msg, d.keys.Down):
 			d.cursor = max(min(d.cursor+1, len(d.entries)-1), 0)
 		case key.Matches(msg, d.keys.Pull):
-			return d, requestSync(domain.Pull)
+			return d, requestSync(plan.Pull)
 		case key.Matches(msg, d.keys.Push):
-			return d, requestSync(domain.Push)
+			return d, requestSync(plan.Push)
 		}
 	}
 	return d, nil
@@ -149,7 +150,7 @@ func (d *Dashboard) Update(msg tea.Msg) (Screen, tea.Cmd) {
 // only reports StepWouldApply, so it never changes the shown stamp.
 func (d *Dashboard) recordSync(res app.ApplyResult) {
 	for _, o := range res.Outcomes {
-		if st, ok := o.Step.(domain.SaveStateStep); ok && o.Result.Status == domain.StepOK {
+		if st, ok := o.Step.(plan.SaveStateStep); ok && o.Result.Status == plan.StepOK {
 			d.state.lastSync = st.State.LastSync
 		}
 	}
@@ -161,7 +162,7 @@ func (d *Dashboard) cancelWork() {
 	}
 }
 
-func requestSync(dir domain.Direction) tea.Cmd {
+func requestSync(dir plan.Direction) tea.Cmd {
 	return func() tea.Msg { return startSyncMsg{direction: dir} }
 }
 

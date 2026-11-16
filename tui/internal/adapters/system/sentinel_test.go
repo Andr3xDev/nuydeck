@@ -19,6 +19,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
@@ -47,12 +48,12 @@ func (sentinelProbe) ReadSystemFile(path string) ([]byte, error) {
 
 // capturingRunner keeps every StepResult the wrapped runner returns.
 type capturingRunner struct {
-	inner   app.Runner
+	inner   plan.Runner
 	mu      sync.Mutex
-	results []domain.StepResult
+	results []plan.StepResult
 }
 
-func (c *capturingRunner) Run(ctx context.Context, s domain.Step, progress func(domain.StepProgress)) domain.StepResult {
+func (c *capturingRunner) Run(ctx context.Context, s plan.Step, progress func(plan.StepProgress)) plan.StepResult {
 	res := c.inner.Run(ctx, s, progress)
 	c.mu.Lock()
 	c.results = append(c.results, res)
@@ -79,10 +80,10 @@ type sentinelRun struct {
 	results  []string
 	plan     app.InstallPlan
 	result   app.InstallResult
-	outcomes []domain.StepResult
+	outcomes []plan.StepResult
 }
 
-func sentinelInstaller(t *testing.T, home string, runner app.Runner, dryRun bool) *app.Installer {
+func sentinelInstaller(t *testing.T, home string, runner plan.Runner, dryRun bool) *app.Installer {
 	t.Helper()
 	inspector := system.Inspector{Home: home}
 	now := func() time.Time { return time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC) }
@@ -104,7 +105,7 @@ func executeSentinelInstall(t *testing.T, inst *app.Installer, capture *capturin
 	t.Helper()
 	plan, err := inst.Plan(context.Background(), app.Draft{
 		Profile: "minimal",
-		Secrets: []domain.SecretEntry{{Name: "API_TOKEN", Value: domain.Secret(secretSentinel)}},
+		Secrets: []plan.SecretEntry{{Name: "API_TOKEN", Value: plan.Secret(secretSentinel)}},
 	})
 	if err != nil {
 		t.Fatalf("Plan: %v", err)

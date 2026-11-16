@@ -10,12 +10,12 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const sentinel = "SENTINEL-secret-value-9c1e"
 
-func run(t *testing.T, s domain.Step) domain.StepResult {
+func run(t *testing.T, s plan.Step) plan.StepResult {
 	t.Helper()
 	return fsx.Runner{Home: t.TempDir()}.Run(context.Background(), s, nil)
 }
@@ -44,11 +44,11 @@ func TestWriteSecrets_CreatesExportLinesWithMode600EvenUnderRestrictiveUmask(t *
 	old := syscall.Umask(0o277)
 	t.Cleanup(func() { syscall.Umask(old) })
 
-	res := run(t, domain.WriteSecretsStep{Path: path, Entries: []domain.SecretEntry{
+	res := run(t, plan.WriteSecretsStep{Path: path, Entries: []plan.SecretEntry{
 		{Name: "API_KEY", Value: "plain"},
 		{Name: "QUOTED", Value: "it's"},
 	}})
-	if res.Status != domain.StepOK {
+	if res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if got := mode(t, path); got != 0o600 {
@@ -62,7 +62,7 @@ func TestWriteSecrets_CreatesExportLinesWithMode600EvenUnderRestrictiveUmask(t *
 
 func TestWriteSecrets_ZeroEntriesCreatesEmptyFileWithMode600(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".secrets")
-	if res := run(t, domain.WriteSecretsStep{Path: path}); res.Status != domain.StepOK {
+	if res := run(t, plan.WriteSecretsStep{Path: path}); res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if got := readString(t, path); got != "" {
@@ -78,8 +78,8 @@ func TestWriteSecrets_ExistingFileIsNeverOverwrittenOrReModed(t *testing.T) {
 	if err := os.WriteFile(path, []byte("export KEEP='me'\n"), 0o640); err != nil {
 		t.Fatal(err)
 	}
-	res := run(t, domain.WriteSecretsStep{Path: path, Entries: []domain.SecretEntry{{Name: "A", Value: sentinel}}})
-	if res.Status == domain.StepOK {
+	res := run(t, plan.WriteSecretsStep{Path: path, Entries: []plan.SecretEntry{{Name: "A", Value: sentinel}}})
+	if res.Status == plan.StepOK {
 		t.Errorf("result = %+v, want not OK", res)
 	}
 	if got := readString(t, path); got != "export KEEP='me'\n" {
@@ -95,8 +95,8 @@ func TestWriteSecrets_ExistingFileIsNeverOverwrittenOrReModed(t *testing.T) {
 
 func TestWriteSecrets_ValueWithNewlineIsRejectedWithoutLeakingIt(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".secrets")
-	res := run(t, domain.WriteSecretsStep{Path: path, Entries: []domain.SecretEntry{{Name: "A", Value: domain.Secret(sentinel + "\nexport EVIL='1'")}}})
-	if res.Status != domain.StepFailed || res.Err == nil {
+	res := run(t, plan.WriteSecretsStep{Path: path, Entries: []plan.SecretEntry{{Name: "A", Value: plan.Secret(sentinel + "\nexport EVIL='1'")}}})
+	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("result = %+v, want failure", res)
 	}
 	if strings.Contains(res.Err.Error(), sentinel) {
@@ -109,8 +109,8 @@ func TestWriteSecrets_ValueWithNewlineIsRejectedWithoutLeakingIt(t *testing.T) {
 
 func TestWriteSecrets_NulInValueIsRejected(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".secrets")
-	res := run(t, domain.WriteSecretsStep{Path: path, Entries: []domain.SecretEntry{{Name: "A", Value: domain.Secret("a\x00b")}}})
-	if res.Status != domain.StepFailed {
+	res := run(t, plan.WriteSecretsStep{Path: path, Entries: []plan.SecretEntry{{Name: "A", Value: plan.Secret("a\x00b")}}})
+	if res.Status != plan.StepFailed {
 		t.Errorf("result = %+v, want failure", res)
 	}
 	if _, err := os.Stat(path); err == nil {
@@ -121,11 +121,11 @@ func TestWriteSecrets_NulInValueIsRejected(t *testing.T) {
 func TestWriteSecrets_UnsafeOrDuplicateNamesAreRejectedAndNoFileIsCreated(t *testing.T) {
 	for _, names := range [][]string{{"X; touch pwned"}, {"A=B"}, {"1A"}, {""}, {"A", "A"}} {
 		path := filepath.Join(t.TempDir(), ".secrets")
-		var entries []domain.SecretEntry
+		var entries []plan.SecretEntry
 		for _, n := range names {
-			entries = append(entries, domain.SecretEntry{Name: n, Value: "v"})
+			entries = append(entries, plan.SecretEntry{Name: n, Value: "v"})
 		}
-		if res := run(t, domain.WriteSecretsStep{Path: path, Entries: entries}); res.Status != domain.StepFailed {
+		if res := run(t, plan.WriteSecretsStep{Path: path, Entries: entries}); res.Status != plan.StepFailed {
 			t.Errorf("names %q: result = %+v, want failure", names, res)
 		}
 		if _, err := os.Stat(path); err == nil {
@@ -136,7 +136,7 @@ func TestWriteSecrets_UnsafeOrDuplicateNamesAreRejectedAndNoFileIsCreated(t *tes
 
 func TestWriteSecrets_CreatesMissingParentDir(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", ".secrets")
-	if res := run(t, domain.WriteSecretsStep{Path: path, Entries: []domain.SecretEntry{{Name: "A", Value: "v"}}}); res.Status != domain.StepOK {
+	if res := run(t, plan.WriteSecretsStep{Path: path, Entries: []plan.SecretEntry{{Name: "A", Value: "v"}}}); res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if got := mode(t, path); got != 0o600 {
@@ -146,7 +146,7 @@ func TestWriteSecrets_CreatesMissingParentDir(t *testing.T) {
 
 func TestSymlink_CreatesMissingParentDir(t *testing.T) {
 	link := filepath.Join(t.TempDir(), "hypr", "gpu_env.lua")
-	if res := run(t, domain.SymlinkStep{Path: link, Target: "gpu_env_amd.lua"}); res.Status != domain.StepOK {
+	if res := run(t, plan.SymlinkStep{Path: link, Target: "gpu_env_amd.lua"}); res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if got, err := os.Readlink(link); err != nil || got != "gpu_env_amd.lua" {
@@ -165,8 +165,8 @@ func TestWriteSecrets_WriteFailureNamesPathAndCauseButNoValue(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 	path := filepath.Join(dir, ".secrets")
 
-	res := run(t, domain.WriteSecretsStep{Path: path, Entries: []domain.SecretEntry{{Name: "A", Value: sentinel}}})
-	if res.Status != domain.StepFailed || res.Err == nil {
+	res := run(t, plan.WriteSecretsStep{Path: path, Entries: []plan.SecretEntry{{Name: "A", Value: sentinel}}})
+	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("result = %+v, want failure", res)
 	}
 	if !strings.HasPrefix(res.Err.Error(), "create "+path+": ") {
@@ -182,7 +182,7 @@ func TestWriteSecrets_WriteFailureNamesPathAndCauseButNoValue(t *testing.T) {
 func TestSymlink_CreatesRelativeLink(t *testing.T) {
 	dir := t.TempDir()
 	link := filepath.Join(dir, "gpu_env.lua")
-	if res := run(t, domain.SymlinkStep{Path: link, Target: "gpu_env_nvidia.lua"}); res.Status != domain.StepOK {
+	if res := run(t, plan.SymlinkStep{Path: link, Target: "gpu_env_nvidia.lua"}); res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if got, err := os.Readlink(link); err != nil || got != "gpu_env_nvidia.lua" {
@@ -196,7 +196,7 @@ func TestSymlink_ReplacesExistingLinkWithoutLeavingTempFiles(t *testing.T) {
 	if err := os.Symlink("gpu_env_intel.lua", link); err != nil {
 		t.Fatal(err)
 	}
-	if res := run(t, domain.SymlinkStep{Path: link, Target: "gpu_env_amd.lua"}); res.Status != domain.StepOK {
+	if res := run(t, plan.SymlinkStep{Path: link, Target: "gpu_env_amd.lua"}); res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
 	}
 	if got, _ := os.Readlink(link); got != "gpu_env_amd.lua" {
@@ -213,7 +213,7 @@ func TestSymlink_ExistingRegularFileIsLeftUntouched(t *testing.T) {
 	if err := os.WriteFile(path, []byte("hand written"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run(t, domain.SymlinkStep{Path: path, Target: "gpu_env_amd.lua"})
+	run(t, plan.SymlinkStep{Path: path, Target: "gpu_env_amd.lua"})
 	info, err := os.Lstat(path)
 	if err != nil || info.Mode()&os.ModeSymlink != 0 {
 		t.Fatalf("regular file was replaced: %v, %v", info, err)
@@ -228,12 +228,12 @@ func TestSymlink_ExistingRegularFileIsLeftUntouched(t *testing.T) {
 
 func TestWriteFile_CreatesParentsAndReplacesAtomically(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nuydeck", "theme", "name")
-	step := domain.WriteFileStep{Path: path, Content: []byte("nuytek\n"), Mode: 0o644}
-	if res := run(t, step); res.Status != domain.StepOK {
+	step := plan.WriteFileStep{Path: path, Content: []byte("nuytek\n"), Mode: 0o644}
+	if res := run(t, step); res.Status != plan.StepOK {
 		t.Fatalf("create: %+v", res)
 	}
 	step.Content = []byte("other\n")
-	if res := run(t, step); res.Status != domain.StepOK {
+	if res := run(t, step); res.Status != plan.StepOK {
 		t.Fatalf("replace: %+v", res)
 	}
 	if got := readString(t, path); got != "other\n" {
@@ -249,8 +249,8 @@ func TestWriteFile_CreatesParentsAndReplacesAtomically(t *testing.T) {
 
 func TestWriteFile_PrivilegedStepIsRefusedAndNothingIsWritten(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "pacman.conf")
-	res := run(t, domain.WriteFileStep{Path: path, Content: []byte("x"), Mode: 0o644, Privileged: true})
-	if res.Status != domain.StepFailed {
+	res := run(t, plan.WriteFileStep{Path: path, Content: []byte("x"), Mode: 0o644, Privileged: true})
+	if res.Status != plan.StepFailed {
 		t.Errorf("result = %+v, want failure", res)
 	}
 	if _, err := os.Lstat(path); !os.IsNotExist(err) {

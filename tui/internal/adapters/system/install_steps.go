@@ -13,8 +13,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/sysx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const (
@@ -39,7 +38,7 @@ func (r Runner) exec(ctx context.Context, opts execx.Options, name string, args 
 	return execx.RunWith(ctx, opts, name, args...)
 }
 
-func (r Runner) runCommand(ctx context.Context, s domain.CommandStep, progress func(domain.StepProgress)) domain.StepResult {
+func (r Runner) runCommand(ctx context.Context, s plan.CommandStep, progress func(plan.StepProgress)) plan.StepResult {
 	if len(s.Argv) == 0 {
 		return failure(errors.New("command step has no argv"))
 	}
@@ -54,14 +53,14 @@ func (r Runner) runCommand(ctx context.Context, s domain.CommandStep, progress f
 		return r.runInteractive(ctx, s, argv)
 	}
 
-	stdout, stderr := app.NewLineWriter(progress), app.NewLineWriter(progress)
+	stdout, stderr := plan.NewLineWriter(progress), plan.NewLineWriter(progress)
 	res, err := r.exec(ctx, execx.Options{Stdout: stdout, Stderr: stderr, Dir: s.Dir}, argv[0], argv[1:]...)
 	stdout.Flush()
 	stderr.Flush()
 	return commandResult(s.Argv[0], res, err)
 }
 
-func (r Runner) runInteractive(ctx context.Context, s domain.CommandStep, argv []string) domain.StepResult {
+func (r Runner) runInteractive(ctx context.Context, s plan.CommandStep, argv []string) plan.StepResult {
 	if r.Terminal == nil {
 		return failure(errNoTerminal)
 	}
@@ -70,7 +69,7 @@ func (r Runner) runInteractive(ctx context.Context, s domain.CommandStep, argv [
 	if err := r.Terminal.Run(ctx, cmd); err != nil {
 		return failure(fmt.Errorf("%s: %w", s.Argv[0], err))
 	}
-	return domain.StepResult{Status: domain.StepOK}
+	return plan.StepResult{Status: plan.StepOK}
 }
 
 // refuseRemoval blocks pacman and paru removal operations: the installer never uninstalls.
@@ -126,7 +125,7 @@ func (r Runner) lstat(path string) (fs.FileInfo, error) {
 }
 
 // writePrivileged backs up the target, stages the content as root beside it and moves it into place.
-func (r Runner) writePrivileged(ctx context.Context, s domain.WriteFileStep) domain.StepResult {
+func (r Runner) writePrivileged(ctx context.Context, s plan.WriteFileStep) plan.StepResult {
 	if !sysx.IsAllowedSystemPath(s.Path) {
 		return failure(fmt.Errorf("privileged write refused: %s is not allow-listed", s.Path))
 	}
@@ -167,7 +166,7 @@ func (r Runner) writePrivileged(ctx context.Context, s domain.WriteFileStep) dom
 		r.discardStaged(ctx, staged)
 		return failure(err)
 	}
-	return domain.StepResult{Status: domain.StepOK}
+	return plan.StepResult{Status: plan.StepOK}
 }
 
 // discardStaged is best effort and survives a cancelled ctx, which is a likely cause of the failure.
@@ -181,16 +180,16 @@ func (r Runner) sudo(ctx context.Context, argv ...string) error {
 	return commandResult(argv[0], res, err).Err
 }
 
-func commandResult(name string, res execx.Result, err error) domain.StepResult {
+func commandResult(name string, res execx.Result, err error) plan.StepResult {
 	switch {
 	case err != nil:
 		return failure(fmt.Errorf("%s: %w", name, err))
 	case res.ExitCode != 0:
 		return failure(fmt.Errorf("%s exited with %d: %s", name, res.ExitCode, strings.TrimSpace(res.Stderr)))
 	}
-	return domain.StepResult{Status: domain.StepOK}
+	return plan.StepResult{Status: plan.StepOK}
 }
 
-func failure(err error) domain.StepResult {
-	return domain.StepResult{Status: domain.StepFailed, Err: err}
+func failure(err error) plan.StepResult {
+	return plan.StepResult{Status: plan.StepFailed, Err: err}
 }

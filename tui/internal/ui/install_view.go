@@ -10,8 +10,8 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const (
@@ -185,21 +185,21 @@ func (s *Install) summaryView(width, height int) string {
 	return bold("Summary") + "\n" + s.summary.View() + "\n\n" + footer
 }
 
-func stepLabel(step domain.Step) string {
+func stepLabel(step plan.Step) string {
 	switch s := step.(type) {
-	case domain.CommandStep:
+	case plan.CommandStep:
 		return s.Label
-	case domain.WriteFileStep:
+	case plan.WriteFileStep:
 		return "write " + s.Path
-	case domain.SymlinkStep:
+	case plan.SymlinkStep:
 		return "link " + s.Path
-	case domain.WriteSecretsStep:
+	case plan.WriteSecretsStep:
 		return "create " + s.Path
-	case domain.CopyStep:
+	case plan.CopyStep:
 		return "copy " + string(s.Entry.Root) + ":" + s.Entry.Path
-	case domain.BackupStep:
+	case plan.BackupStep:
 		return "back up overwritten files"
-	case domain.AppendLogStep:
+	case plan.AppendLogStep:
 		return "record install log"
 	}
 	return fmt.Sprintf("%T", step)

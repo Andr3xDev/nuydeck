@@ -13,16 +13,16 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 // Syncer is the sync use-case surface the screen needs; *app.Service implements it.
 type Syncer interface {
-	PlanSync(ctx context.Context, dir domain.Direction, entries []manifest.ResolvedEntry) (app.SyncPlan, error)
+	PlanSync(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (app.SyncPlan, error)
 	NeedsBackup(plan app.SyncPlan, sel app.Selection) bool
-	Apply(ctx context.Context, plan app.SyncPlan, sel app.Selection, opts app.ApplyOptions, progress func(domain.StepProgress)) app.ApplyResult
+	Apply(ctx context.Context, plan app.SyncPlan, sel app.Selection, opts app.ApplyOptions, progress func(plan.StepProgress)) app.ApplyResult
 }
 
 type planMsg struct {
@@ -75,7 +75,7 @@ type Sync struct {
 
 	gen       int
 	phase     syncPhase
-	direction domain.Direction
+	direction plan.Direction
 	plan      app.SyncPlan
 	sel       app.Selection
 	cursor    int
@@ -117,7 +117,7 @@ func (s *Sync) busy() bool {
 }
 
 // startPlan always recomputes: a plan is never cached (spec).
-func (s *Sync) startPlan(dir domain.Direction) tea.Cmd {
+func (s *Sync) startPlan(dir plan.Direction) tea.Cmd {
 	if s.busy() {
 		return nil
 	}
@@ -217,9 +217,9 @@ func (s *Sync) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 
 	switch {
 	case key.Matches(msg, s.keys.Pull):
-		return s, s.startPlan(domain.Pull)
+		return s, s.startPlan(plan.Pull)
 	case key.Matches(msg, s.keys.Push):
-		return s, s.startPlan(domain.Push)
+		return s, s.startPlan(plan.Push)
 	case s.phase != phasePreview:
 		return s, nil
 	case key.Matches(msg, s.keys.Up):
@@ -291,7 +291,7 @@ func (s *Sync) startApply() tea.Cmd {
 	s.phase, s.progress, s.notice = phaseApplying, 0, ""
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
-	gen, syncer, plan, opts := s.gen, s.syncer, s.plan, app.ApplyOptions{Backup: s.backup, DryRun: s.dryRun}
+	gen, syncer, syncPlan, opts := s.gen, s.syncer, s.plan, app.ApplyOptions{Backup: s.backup, DryRun: s.dryRun}
 	sel := maps.Clone(s.sel)
 	return func() tea.Msg {
 		ch := make(chan applyEvent)
@@ -305,7 +305,7 @@ func (s *Sync) startApply() tea.Cmd {
 		go func() {
 			defer close(ch)
 			defer cancel()
-			res := syncer.Apply(ctx, plan, sel, opts, func(p domain.StepProgress) {
+			res := syncer.Apply(ctx, syncPlan, sel, opts, func(p plan.StepProgress) {
 				send(applyEvent{path: p.Path})
 			})
 			send(applyEvent{done: &res})
@@ -421,7 +421,7 @@ func (s *Sync) resultView(width, height int) string {
 func resultLines(res app.ApplyResult) []string {
 	var lines []string
 	for _, o := range res.Outcomes {
-		if o.Result.Status == domain.StepWouldApply {
+		if o.Result.Status == plan.StepWouldApply {
 			lines = append(lines, o.Result.Detail)
 		}
 	}
@@ -438,21 +438,21 @@ func (s *Sync) colored(c color.Color, text string) string {
 	return lipgloss.NewStyle().Foreground(c).Render(text)
 }
 
-func directionLabel(d domain.Direction) string {
+func directionLabel(d plan.Direction) string {
 	switch d {
-	case domain.Pull:
+	case plan.Pull:
 		return "Pull"
-	case domain.Restore:
+	case plan.Restore:
 		return "Restore"
 	}
 	return "Push"
 }
 
-func changeLabel(t domain.ChangeType) string {
+func changeLabel(t plan.ChangeType) string {
 	switch t {
-	case domain.Create:
+	case plan.Create:
 		return "create"
-	case domain.Delete:
+	case plan.Delete:
 		return "delete"
 	}
 	return "update"
@@ -461,9 +461,9 @@ func changeLabel(t domain.ChangeType) string {
 func badges(it app.PlanItem) []string {
 	var out []string
 	switch it.Change.Warning {
-	case domain.WarnAbsoluteLink:
+	case plan.WarnAbsoluteLink:
 		out = append(out, "absolute link")
-	case domain.WarnLeavesManagedSet:
+	case plan.WarnLeavesManagedSet:
 		out = append(out, "leaves managed set")
 	}
 	if it.Blocked {

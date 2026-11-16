@@ -15,6 +15,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
@@ -36,14 +37,14 @@ type GPUDetector interface {
 
 // PathKinder checks whether a path exists without opening it.
 type PathKinder interface {
-	PathKind(path string) (domain.NodeKind, error)
+	PathKind(path string) (plan.NodeKind, error)
 }
 
 // InstallDeps is what the Install section needs besides the shell.
 type InstallDeps struct {
 	Installer Installer
 	// Preview is always a dry-run recorder; the summary renders each planned step through it.
-	Preview     app.Runner
+	Preview     plan.Runner
 	GPUs        GPUDetector
 	Paths       PathKinder
 	SecretsPath string
@@ -416,7 +417,7 @@ func (s *Install) enterSecrets() {
 	s.secretsExist = false
 	if s.deps.Paths != nil {
 		kind, err := s.deps.Paths.PathKind(s.deps.SecretsPath)
-		s.secretsExist = err == nil && kind != domain.KindNone
+		s.secretsExist = err == nil && kind != plan.KindNone
 	}
 	// The blink command is dropped on purpose: EchoNone shows no cursor.
 	_ = s.secretInput.Focus()
@@ -445,7 +446,7 @@ func (s *Install) secretsKey(msg tea.KeyPressMsg) tea.Cmd {
 // submitSecret stores the typed value (an empty one omits the variable) and moves to the next name.
 func (s *Install) submitSecret() tea.Cmd {
 	if value := s.secretInput.Value(); value != "" {
-		s.draft.Secrets = append(s.draft.Secrets, domain.SecretEntry{Name: s.deps.SecretNames[s.secretIdx], Value: domain.Secret(value)})
+		s.draft.Secrets = append(s.draft.Secrets, plan.SecretEntry{Name: s.deps.SecretNames[s.secretIdx], Value: plan.Secret(value)})
 	}
 	s.secretInput.SetValue("")
 	s.secretIdx++
@@ -590,18 +591,18 @@ func (s *Install) finishRun(result app.InstallResult) {
 }
 
 // withoutSecretValues keeps the step list for the run page but drops the secret values.
-func withoutSecretValues(plan app.InstallPlan) app.InstallPlan {
-	plan.Steps = slices.Clone(plan.Steps)
-	for i, ps := range plan.Steps {
-		if w, ok := ps.Step.(domain.WriteSecretsStep); ok {
+func withoutSecretValues(installPlan app.InstallPlan) app.InstallPlan {
+	installPlan.Steps = slices.Clone(installPlan.Steps)
+	for i, ps := range installPlan.Steps {
+		if w, ok := ps.Step.(plan.WriteSecretsStep); ok {
 			w.Entries = slices.Clone(w.Entries)
 			for j := range w.Entries {
 				w.Entries[j].Value = ""
 			}
-			plan.Steps[i].Step = w
+			installPlan.Steps[i].Step = w
 		}
 	}
-	return plan
+	return installPlan
 }
 
 // WaitRun blocks until the install goroutine has returned (log persisted, child reaped) or timeout passes.

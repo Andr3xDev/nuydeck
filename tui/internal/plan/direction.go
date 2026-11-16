@@ -1,4 +1,4 @@
-package domain
+package plan
 
 type Direction int
 

@@ -1,4 +1,4 @@
-package domain
+package plan
 
 const redacted = "[redacted]"
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 // ProfileCustom selects exactly the packages named in Draft.Packages.
@@ -15,9 +16,9 @@ const ProfileCustom = "custom"
 type Installer struct {
 	Service *Service
 	Probe   SystemProbe
-	Runner  Runner
+	Runner  plan.Runner
 	// Preview is always a Recorder; it renders the summary over the plan that Run executes.
-	Preview        Runner
+	Preview        plan.Runner
 	Now            func() time.Time
 	KeepaliveEvery time.Duration
 	DryRun         bool
@@ -37,7 +38,7 @@ type Draft struct {
 	Drivers        []string
 	SkipGPUEnvLink bool
 	SkipSecrets    bool
-	Secrets        []domain.SecretEntry
+	Secrets        []plan.SecretEntry
 	// ThemeVariant defaults to nadir when empty.
 	ThemeVariant string
 }

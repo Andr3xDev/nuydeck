@@ -14,6 +14,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
@@ -24,7 +25,7 @@ const repoTimesFileKey = "."
 // Service bundles the use cases over the ports.
 type Service struct {
 	Inspector Inspector
-	Runner    Runner
+	Runner    plan.Runner
 	RepoDir   string
 	Now       func() time.Time
 }
@@ -42,7 +43,7 @@ type Selection map[ItemKey]bool
 // Src and Dst are the endpoints of the entry. For a file entry they are the
 // file paths and Change.Path is the file's base name, as rsync itemizes it.
 type PlanItem struct {
-	Change   domain.Change
+	Change   plan.Change
 	Resolved manifest.ResolvedEntry
 	Src, Dst string
 	Blocked  bool
@@ -73,7 +74,7 @@ func (i PlanItem) endpoint(entryPath string) string {
 func (i PlanItem) Key() ItemKey { return ItemKey{Root: i.Change.Entry.Root, Path: i.rel()} }
 
 type SyncPlan struct {
-	Direction    domain.Direction
+	Direction    plan.Direction
 	Items        []PlanItem
 	Selection    Selection
 	StateWarning string
@@ -88,8 +89,8 @@ type ApplyOptions struct {
 }
 
 type StepOutcome struct {
-	Step   domain.Step
-	Result domain.StepResult
+	Step   plan.Step
+	Result plan.StepResult
 }
 
 const (
@@ -110,32 +111,32 @@ type ApplyResult struct {
 	Err      error
 }
 
-func (s *Service) PlanSync(ctx context.Context, dir domain.Direction, entries []manifest.ResolvedEntry) (SyncPlan, error) {
+func (s *Service) PlanSync(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (SyncPlan, error) {
 	state, warning := s.Inspector.LoadState(ctx)
 	managed := make([]manifest.Entry, len(entries))
 	for i, e := range entries {
 		managed[i] = e.Entry
 	}
-	plan := SyncPlan{Direction: dir, Selection: Selection{}, StateWarning: warning}
+	syncPlan := SyncPlan{Direction: dir, Selection: Selection{}, StateWarning: warning}
 	for _, e := range entries {
 		src, dst := e.RepoPath, e.DestPath
-		if dir == domain.Pull {
+		if dir == plan.Pull {
 			src, dst = dst, src
 		}
 		items, err := s.planEntry(ctx, dir, e, src, dst, managed)
 		if errors.Is(err, errSourceMissing) {
-			plan.Notices = append(plan.Notices, fmt.Sprintf("skipped: source missing: %s/%s", e.Root, e.Path))
+			syncPlan.Notices = append(syncPlan.Notices, fmt.Sprintf("skipped: source missing: %s/%s", e.Root, e.Path))
 			continue
 		}
 		if err != nil {
 			return SyncPlan{}, err
 		}
 		for _, it := range items {
-			plan.Items = append(plan.Items, it)
-			plan.Selection[it.Key()] = !it.Blocked && !slices.Contains(state.Ignores, ignoreKey(it.Key()))
+			syncPlan.Items = append(syncPlan.Items, it)
+			syncPlan.Selection[it.Key()] = !it.Blocked && !slices.Contains(state.Ignores, ignoreKey(it.Key()))
 		}
 	}
-	return plan, nil
+	return syncPlan, nil
 }
 
 func ignoreKey(k ItemKey) string { return string(k.Root) + ":" + k.Path }
@@ -143,30 +144,30 @@ func ignoreKey(k ItemKey) string { return string(k.Root) + ":" + k.Path }
 var errSourceMissing = errors.New("source missing")
 
 // planEntry diffs one entry and turns the changes into plan items.
-func (s *Service) planEntry(ctx context.Context, dir domain.Direction, e manifest.ResolvedEntry, src, dst string, managed []manifest.Entry) ([]PlanItem, error) {
+func (s *Service) planEntry(ctx context.Context, dir plan.Direction, e manifest.ResolvedEntry, src, dst string, managed []manifest.Entry) ([]PlanItem, error) {
 	srcKind, err := s.Inspector.PathKind(src)
 	if err != nil {
 		return nil, fmt.Errorf("%s/%s: %w", e.Root, e.Path, err)
 	}
-	if srcKind == domain.KindNone {
+	if srcKind == plan.KindNone {
 		return nil, fmt.Errorf("%s/%s: source %s: %w", e.Root, e.Path, src, errSourceMissing)
 	}
-	changes, err := s.Inspector.Diff(ctx, e, domain.Endpoint{Path: src}, domain.Endpoint{Path: dst})
+	changes, err := s.Inspector.Diff(ctx, e, plan.Endpoint{Path: src}, plan.Endpoint{Path: dst})
 	if err != nil {
 		return nil, fmt.Errorf("%s/%s: %w", e.Root, e.Path, err)
 	}
-	fileEntry := srcKind == domain.KindFile || srcKind == domain.KindLink
+	fileEntry := srcKind == plan.KindFile || srcKind == plan.KindLink
 	kept := changes[:0:0]
 	for _, c := range changes {
-		if !manifest.Excluded(c.Path, c.Kind == domain.KindDir, e.Filter) {
+		if !manifest.Excluded(c.Path, c.Kind == plan.KindDir, e.Filter) {
 			c.Entry = e.Entry
 			kept = append(kept, c)
 		}
 	}
 	blocked := domain.PreflightBlocked(dst, srcKind, kept, s.Inspector.PathKind)
 
-	var repoTimes domain.RepoTimes
-	if dir != domain.Restore && len(kept) > 0 {
+	var repoTimes plan.RepoTimes
+	if dir != plan.Restore && len(kept) > 0 {
 		repoTimes, err = s.Inspector.RepoTimes(ctx, s.RepoDir, string(e.Root)+"/"+e.Path)
 		if err != nil {
 			return nil, fmt.Errorf("%s/%s: %w", e.Root, e.Path, err)
@@ -176,7 +177,7 @@ func (s *Service) planEntry(ctx context.Context, dir domain.Direction, e manifes
 	items := make([]PlanItem, 0, len(kept))
 	for _, c := range kept {
 		it := PlanItem{Change: c, Resolved: e, Src: src, Dst: dst, Blocked: slices.Contains(blocked, c.Path), fileEntry: fileEntry}
-		if dir != domain.Restore {
+		if dir != plan.Restore {
 			s.attachTimes(ctx, &it, dir, repoTimes)
 			it.Change.Warning = s.linkWarning(it, managed)
 		}
@@ -187,11 +188,11 @@ func (s *Service) planEntry(ctx context.Context, dir domain.Direction, e manifes
 
 // attachTimes sets the times of the sides that have the file: the source side
 // except for a Delete, the destination side except for a Create.
-func (s *Service) attachTimes(ctx context.Context, it *PlanItem, dir domain.Direction, repoTimes domain.RepoTimes) {
-	onSrc := it.Change.Type != domain.Delete
-	onDst := it.Change.Type != domain.Create
+func (s *Service) attachTimes(ctx context.Context, it *PlanItem, dir plan.Direction, repoTimes plan.RepoTimes) {
+	onSrc := it.Change.Type != plan.Delete
+	onDst := it.Change.Type != plan.Create
 	repoHas, pcHas := onSrc, onDst
-	if dir == domain.Pull {
+	if dir == plan.Pull {
 		repoHas, pcHas = onDst, onSrc
 	}
 	if repoHas {
@@ -203,7 +204,7 @@ func (s *Service) attachTimes(ctx context.Context, it *PlanItem, dir domain.Dire
 	}
 	if pcHas {
 		pcPath := it.dstPath()
-		if dir == domain.Pull {
+		if dir == plan.Pull {
 			pcPath = it.srcPath()
 		}
 		it.PCTime, _ = s.Inspector.NewestMTime(ctx, pcPath, manifest.Filter{})
@@ -211,13 +212,13 @@ func (s *Service) attachTimes(ctx context.Context, it *PlanItem, dir domain.Dire
 }
 
 // linkWarning classifies the source-side target of a created or updated link.
-func (s *Service) linkWarning(it PlanItem, managed []manifest.Entry) domain.LinkWarning {
-	if it.Change.Kind != domain.KindLink || it.Change.Type == domain.Delete {
-		return domain.NoLinkWarning
+func (s *Service) linkWarning(it PlanItem, managed []manifest.Entry) plan.LinkWarning {
+	if it.Change.Kind != plan.KindLink || it.Change.Type == plan.Delete {
+		return plan.NoLinkWarning
 	}
 	target, err := s.Inspector.LinkTarget(it.srcPath())
 	if err != nil {
-		return domain.WarnLeavesManagedSet
+		return plan.WarnLeavesManagedSet
 	}
 	return domain.ClassifyLink(it.Change.Entry.Root, path.Dir(it.rel()), target, managed)
 }
@@ -229,23 +230,23 @@ func (s *Service) PlanRestore(ctx context.Context, b domain.Backup) (SyncPlan, e
 		roots = append(roots, root)
 	}
 	slices.Sort(roots)
-	plan := SyncPlan{Direction: domain.Restore, Selection: Selection{}}
+	syncPlan := SyncPlan{Direction: plan.Restore, Selection: Selection{}}
 	for _, root := range roots {
 		src, dst := path.Join(b.Dir, string(root)), b.Roots[root]
 		e := manifest.ResolvedEntry{Entry: manifest.Entry{Root: root}, RepoPath: src, DestPath: dst}
-		items, err := s.planEntry(ctx, domain.Restore, e, src, dst, nil)
+		items, err := s.planEntry(ctx, plan.Restore, e, src, dst, nil)
 		if err != nil {
 			return SyncPlan{}, err
 		}
 		for _, it := range items {
-			if it.Change.Type == domain.Delete {
+			if it.Change.Type == plan.Delete {
 				continue
 			}
-			plan.Items = append(plan.Items, it)
-			plan.Selection[it.Key()] = !it.Blocked
+			syncPlan.Items = append(syncPlan.Items, it)
+			syncPlan.Selection[it.Key()] = !it.Blocked
 		}
 	}
-	return plan, nil
+	return syncPlan, nil
 }
 
 // NeedsBackup reports whether the selection overwrites or deletes an existing destination file.
@@ -266,25 +267,25 @@ func selectedItems(plan SyncPlan, sel Selection) []PlanItem {
 func backupFiles(items []PlanItem) []PlanItem {
 	var files []PlanItem
 	for _, it := range items {
-		if it.Change.Type != domain.Create && it.Change.Kind != domain.KindDir {
+		if it.Change.Type != plan.Create && it.Change.Kind != plan.KindDir {
 			files = append(files, it)
 		}
 	}
 	return files
 }
 
-func (s *Service) Apply(ctx context.Context, plan SyncPlan, sel Selection, opts ApplyOptions, progress func(domain.StepProgress)) ApplyResult {
-	items := selectedItems(plan, sel)
+func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, opts ApplyOptions, progress func(plan.StepProgress)) ApplyResult {
+	items := selectedItems(syncPlan, sel)
 	if len(items) == 0 {
 		return ApplyResult{Nothing: true}
 	}
 	var res ApplyResult
 	applied := map[ItemKey]bool{}
 
-	run := func(step domain.Step) (domain.StepResult, bool) {
+	run := func(step plan.Step) (plan.StepResult, bool) {
 		r := s.Runner.Run(ctx, step, progress)
 		res.Outcomes = append(res.Outcomes, StepOutcome{Step: step, Result: r})
-		if r.Status != domain.StepFailed {
+		if r.Status != plan.StepFailed {
 			return r, true
 		}
 		if res.Err == nil {
@@ -298,7 +299,7 @@ func (s *Service) Apply(ctx context.Context, plan SyncPlan, sel Selection, opts 
 
 	func() {
 		if files := backupFiles(items); opts.Backup && len(files) > 0 {
-			if _, ok := run(backupStep(plan.Direction, files)); !ok {
+			if _, ok := run(backupStep(syncPlan.Direction, files)); !ok {
 				return
 			}
 		}
@@ -307,7 +308,7 @@ func (s *Service) Apply(ctx context.Context, plan SyncPlan, sel Selection, opts 
 			if len(paths) == 0 {
 				continue
 			}
-			r, ok := run(domain.CopyStep{Entry: g[0].Resolved, Direction: plan.Direction, Src: g[0].Src, Dst: g[0].Dst, Paths: paths, Dir: !g[0].fileEntry})
+			r, ok := run(plan.CopyStep{Entry: g[0].Resolved, Direction: syncPlan.Direction, Src: g[0].Src, Dst: g[0].Dst, Paths: paths, Dir: !g[0].fileEntry})
 			for _, it := range group {
 				if ok || slices.Contains(r.Applied, it.Change.Path) {
 					applied[it.Key()] = true
@@ -318,13 +319,13 @@ func (s *Service) Apply(ctx context.Context, plan SyncPlan, sel Selection, opts 
 			}
 		}
 		for _, it := range orderedDeletes(items) {
-			if _, ok := run(domain.DeleteStep{Path: it.dstPath(), Root: it.Dst}); !ok {
+			if _, ok := run(plan.DeleteStep{Path: it.dstPath(), Root: it.Dst}); !ok {
 				return
 			}
 			applied[it.Key()] = true
 		}
-		if plan.Direction != domain.Restore {
-			if _, ok := run(domain.SaveStateStep{State: s.syncedState(ctx, plan.Direction)}); !ok {
+		if syncPlan.Direction != plan.Restore {
+			if _, ok := run(plan.SaveStateStep{State: s.syncedState(ctx, syncPlan.Direction)}); !ok {
 				return
 			}
 		}
@@ -337,11 +338,11 @@ func (s *Service) Apply(ctx context.Context, plan SyncPlan, sel Selection, opts 
 		}
 		res.Items = append(res.Items, ItemResult{Key: it.Key(), Result: result})
 	}
-	run(domain.AppendLogStep{Entry: s.logEntry(plan.Direction, opts.DryRun, items, res)})
+	run(plan.AppendLogStep{Entry: s.logEntry(syncPlan.Direction, opts.DryRun, items, res)})
 	return res
 }
 
-func (s *Service) syncedState(ctx context.Context, dir domain.Direction) state.State {
+func (s *Service) syncedState(ctx context.Context, dir plan.Direction) state.State {
 	// Re-read so ignores and state saved since planning are not overwritten.
 	current, _ := s.Inspector.LoadState(ctx)
 	current.RepoPath = s.RepoDir
@@ -349,7 +350,7 @@ func (s *Service) syncedState(ctx context.Context, dir domain.Direction) state.S
 	return current
 }
 
-func (s *Service) logEntry(dir domain.Direction, dryRun bool, items []PlanItem, res ApplyResult) state.LogEntry {
+func (s *Service) logEntry(dir plan.Direction, dryRun bool, items []PlanItem, res ApplyResult) state.LogEntry {
 	entry := state.LogEntry{
 		Time:      s.Now().Format(time.RFC3339),
 		Op:        "sync",
@@ -357,7 +358,7 @@ func (s *Service) logEntry(dir domain.Direction, dryRun bool, items []PlanItem, 
 		DryRun:    dryRun,
 		Result:    "ok",
 	}
-	if dir == domain.Restore {
+	if dir == plan.Restore {
 		entry.Op = "restore"
 	}
 	if res.Err != nil {
@@ -369,31 +370,31 @@ func (s *Service) logEntry(dir domain.Direction, dryRun bool, items []PlanItem, 
 	return entry
 }
 
-func directionName(d domain.Direction) string {
+func directionName(d plan.Direction) string {
 	switch d {
-	case domain.Pull:
+	case plan.Pull:
 		return "pull"
-	case domain.Restore:
+	case plan.Restore:
 		return "restore"
 	}
 	return "push"
 }
 
-func kindName(k domain.NodeKind) string {
+func kindName(k plan.NodeKind) string {
 	switch k {
-	case domain.KindDir:
+	case plan.KindDir:
 		return "dir"
-	case domain.KindLink:
+	case plan.KindLink:
 		return "link"
 	}
 	return "file"
 }
 
 // backupStep backs up files at the destination side; the roots are the destination root directories.
-func backupStep(dir domain.Direction, files []PlanItem) domain.BackupStep {
-	step := domain.BackupStep{Direction: dir, Roots: map[manifest.Root]string{}}
+func backupStep(dir plan.Direction, files []PlanItem) plan.BackupStep {
+	step := plan.BackupStep{Direction: dir, Roots: map[manifest.Root]string{}}
 	for _, it := range files {
-		step.Files = append(step.Files, domain.BackupFile{Root: it.Change.Entry.Root, Path: it.rel()})
+		step.Files = append(step.Files, plan.BackupFile{Root: it.Change.Entry.Root, Path: it.rel()})
 		step.Roots[it.Change.Entry.Root] = strings.TrimSuffix(it.Dst, "/"+it.Change.Entry.Path)
 	}
 	return step
@@ -419,7 +420,7 @@ func copyPaths(group []PlanItem) ([]string, []PlanItem) {
 	var paths []string
 	var copied []PlanItem
 	for _, it := range group {
-		if it.Change.Type != domain.Delete {
+		if it.Change.Type != plan.Delete {
 			paths = append(paths, it.Change.Path)
 			copied = append(copied, it)
 		}
@@ -432,8 +433,8 @@ func orderedDeletes(items []PlanItem) []PlanItem {
 	var files, dirs []PlanItem
 	for _, it := range items {
 		switch {
-		case it.Change.Type != domain.Delete:
-		case it.Change.Kind == domain.KindDir:
+		case it.Change.Type != plan.Delete:
+		case it.Change.Kind == plan.KindDir:
 			dirs = append(dirs, it)
 		default:
 			files = append(files, it)
@@ -471,7 +472,7 @@ type DriftResult struct {
 	State      DriftState
 	Changes    int
 	Err        error
-	RepoTimes  domain.RepoTimes
+	RepoTimes  plan.RepoTimes
 	PCTime     time.Time
 	LastBackup *domain.Backup
 }
@@ -526,17 +527,17 @@ func (s *Service) driftEntry(ctx context.Context, e manifest.ResolvedEntry) Drif
 		return r
 	}
 	switch {
-	case repoKind == domain.KindNone && pcKind == domain.KindNone:
+	case repoKind == plan.KindNone && pcKind == plan.KindNone:
 		r.State, r.Err = DriftError, errors.New("absent on both sides")
 		return r
-	case repoKind == domain.KindNone:
+	case repoKind == plan.KindNone:
 		r.State, r.Missing = DriftDrifted, MissingInRepo
 		return r
-	case pcKind == domain.KindNone:
+	case pcKind == plan.KindNone:
 		r.State, r.Missing = DriftDrifted, MissingOnPC
 		return r
 	}
-	changes, err := s.Inspector.Diff(ctx, e, domain.Endpoint{Path: e.RepoPath}, domain.Endpoint{Path: e.DestPath})
+	changes, err := s.Inspector.Diff(ctx, e, plan.Endpoint{Path: e.RepoPath}, plan.Endpoint{Path: e.DestPath})
 	if err != nil {
 		r.State, r.Err = DriftError, err
 		return r
@@ -568,9 +569,9 @@ func (s *Service) ListBackups(ctx context.Context) ([]domain.Backup, error) {
 }
 
 // DeleteBackup runs a DeleteBackupStep only when confirmed; the bool reports whether a step ran.
-func (s *Service) DeleteBackup(ctx context.Context, dir string, confirmed bool) (domain.StepResult, bool) {
+func (s *Service) DeleteBackup(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool) {
 	if !confirmed {
-		return domain.StepResult{}, false
+		return plan.StepResult{}, false
 	}
-	return s.Runner.Run(ctx, domain.DeleteBackupStep{Dir: dir}, nil), true
+	return s.Runner.Run(ctx, plan.DeleteBackupStep{Dir: dir}, nil), true
 }

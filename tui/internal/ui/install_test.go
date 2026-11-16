@@ -14,6 +14,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const waitTimeout = 2 * time.Second
@@ -40,7 +41,7 @@ func (f *fakeInstaller) Run(ctx context.Context, _ app.InstallPlan, events chan<
 }
 
 func onePlan() app.InstallPlan {
-	return app.InstallPlan{Steps: []domain.PlannedStep{{Phase: domain.PhaseReboot, Step: domain.CommandStep{Label: "reboot"}}}}
+	return app.InstallPlan{Steps: []domain.PlannedStep{{Phase: domain.PhaseReboot, Step: plan.CommandStep{Label: "reboot"}}}}
 }
 
 func newTestRoot(f *fakeInstaller, secretNames ...string) (Root, *Install) {
@@ -220,8 +221,8 @@ func TestInstallRebootAckAcceptsEnterOnly(t *testing.T) {
 
 func TestInstallForgetsSecretValuesAfterTheRun(t *testing.T) {
 	const sentinel = "hunter2-sentinel"
-	plan := app.InstallPlan{Steps: []domain.PlannedStep{{Phase: domain.PhaseEnv, Step: domain.WriteSecretsStep{
-		Path: "/home/u/.secrets", Entries: []domain.SecretEntry{{Name: "TOKEN", Value: sentinel}},
+	plan := app.InstallPlan{Steps: []domain.PlannedStep{{Phase: domain.PhaseEnv, Step: plan.WriteSecretsStep{
+		Path: "/home/u/.secrets", Entries: []plan.SecretEntry{{Name: "TOKEN", Value: sentinel}},
 	}}}}
 	f := &fakeInstaller{plan: plan}
 	_, in := newTestRoot(f, "TOKEN")

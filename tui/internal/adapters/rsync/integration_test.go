@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 func requireRsync(t *testing.T) {
@@ -61,7 +61,7 @@ func setMtime(t *testing.T, path string, ts time.Time) {
 	}
 }
 
-func plan(t *testing.T, r Request) []Item {
+func planItems(t *testing.T, r Request) []Item {
 	t.Helper()
 	res, err := Plan(context.Background(), r)
 	if err != nil {
@@ -108,13 +108,13 @@ func TestIntegrationPlanApplyTouchesOnlySelected(t *testing.T) {
 	write(t, dst+"/extra.txt", "extra", 0o644)
 
 	r := dirReq(src, dst)
-	got := plan(t, r)
+	got := planItems(t, r)
 	want := []Item{
-		{"extra.txt", domain.Delete, domain.KindFile},
-		{"new.txt", domain.Create, domain.KindFile},
-		{"rel", domain.Create, domain.KindLink},
-		{"sub/deep.txt", domain.Create, domain.KindFile},
-		{"upd.txt", domain.Update, domain.KindFile},
+		{"extra.txt", plan.Delete, plan.KindFile},
+		{"new.txt", plan.Create, plan.KindFile},
+		{"rel", plan.Create, plan.KindLink},
+		{"sub/deep.txt", plan.Create, plan.KindFile},
+		{"upd.txt", plan.Update, plan.KindFile},
 	}
 	slices.SortFunc(got, func(a, b Item) int { return strings.Compare(a.Path, b.Path) })
 	if !slices.Equal(got, want) {
@@ -215,7 +215,7 @@ func TestIntegrationExcludedReceiverOnlyFileIsNotOffered(t *testing.T) {
 	write(t, src+"/keep.txt", "k", 0o644)
 	write(t, dst+"/identities.json", "secret", 0o600)
 
-	got := plan(t, dirReq(src, dst, "/identities.json"))
+	got := planItems(t, dirReq(src, dst, "/identities.json"))
 	for _, it := range got {
 		if it.Path == "identities.json" {
 			t.Fatalf("excluded receiver-only file offered: %+v", it)
@@ -236,14 +236,14 @@ func TestIntegrationExecutabilityIsSyncedWithoutMtimeDrift(t *testing.T) {
 	setMtime(t, dst+"/run.sh", time.Unix(1_500_000_000, 0))
 	r := dirReq(src, dst)
 
-	if got := plan(t, r); len(got) != 1 || got[0].Type != domain.Update {
+	if got := planItems(t, r); len(got) != 1 || got[0].Type != plan.Update {
 		t.Fatalf("exec bit difference must be one update, got %+v", got)
 	}
 	apply(t, r, "run.sh")
 	if info, _ := os.Stat(dst + "/run.sh"); info.Mode().Perm()&0o111 == 0 {
 		t.Fatal("exec bit not synced")
 	}
-	if got := plan(t, r); len(got) != 0 {
+	if got := planItems(t, r); len(got) != 0 {
 		t.Fatalf("mtime difference must not cause drift, got %+v", got)
 	}
 }
@@ -262,8 +262,8 @@ func TestIntegrationChecksumDecidesSync(t *testing.T) {
 	setMtime(t, src+"/mtime.txt", same)
 	setMtime(t, dst+"/mtime.txt", same.Add(time.Hour))
 
-	got := plan(t, dirReq(src, dst))
-	want := []Item{{"content.txt", domain.Update, domain.KindFile}}
+	got := planItems(t, dirReq(src, dst))
+	want := []Item{{"content.txt", plan.Update, plan.KindFile}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %+v want %+v", got, want)
 	}
@@ -285,7 +285,7 @@ func TestIntegrationPlanSkipsFifoWithWarning(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []Item{{"a.txt", domain.Create, domain.KindFile}}; !slices.Equal(res.Items, want) {
+	if want := []Item{{"a.txt", plan.Create, plan.KindFile}}; !slices.Equal(res.Items, want) {
 		t.Fatalf("got %+v want %+v", res.Items, want)
 	}
 	if !strings.Contains(res.Warning, "pipe") {

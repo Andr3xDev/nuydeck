@@ -12,16 +12,16 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 // PackageManager is the packages use-case surface the screen needs; *app.Packages implements it.
 type PackageManager interface {
 	ListUnregistered(ctx context.Context) ([]string, error)
-	AddPackage(ctx context.Context, pkg manifest.Package) (domain.StepResult, error)
-	IgnorePackage(ctx context.Context, name string) domain.StepResult
+	AddPackage(ctx context.Context, pkg manifest.Package) (plan.StepResult, error)
+	IgnorePackage(ctx context.Context, name string) plan.StepResult
 }
 
 type unregisteredMsg struct {
@@ -31,13 +31,13 @@ type unregisteredMsg struct {
 
 type packageAddedMsg struct {
 	name string
-	res  domain.StepResult
+	res  plan.StepResult
 	err  error
 }
 
 type packageIgnoredMsg struct {
 	name string
-	res  domain.StepResult
+	res  plan.StepResult
 }
 
 const (
@@ -154,9 +154,9 @@ func (p *Packages) ignore(name string) tea.Cmd {
 func (p *Packages) ignored(msg packageIgnoredMsg) {
 	p.err = nil
 	switch msg.res.Status {
-	case domain.StepFailed:
+	case plan.StepFailed:
 		p.err = fmt.Errorf("ignore %s: %s", msg.name, failureText(msg.res))
-	case domain.StepWouldApply:
+	case plan.StepWouldApply:
 		p.notice = msg.res.Detail
 	default:
 		p.drop(msg.name)
@@ -171,9 +171,9 @@ func (p *Packages) added(msg packageAddedMsg) {
 	switch {
 	case msg.err != nil:
 		p.form.err = msg.err.Error()
-	case msg.res.Status == domain.StepFailed:
+	case msg.res.Status == plan.StepFailed:
 		p.form.err = failureText(msg.res)
-	case msg.res.Status == domain.StepWouldApply:
+	case msg.res.Status == plan.StepWouldApply:
 		p.form, p.notice = nil, msg.res.Detail
 	default:
 		p.form, p.notice = nil, "Added "+msg.name+". It joins the Install selection after a restart."
@@ -186,7 +186,7 @@ func (p *Packages) drop(name string) {
 	p.cursor = max(min(p.cursor, len(p.names)-1), 0)
 }
 
-func failureText(res domain.StepResult) string {
+func failureText(res plan.StepResult) string {
 	if res.Err != nil {
 		return res.Err.Error()
 	}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
@@ -48,8 +49,8 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 		case <-ctx.Done():
 		}
 	}
-	progress := func(index int) func(domain.StepProgress) {
-		return func(sp domain.StepProgress) {
+	progress := func(index int) func(plan.StepProgress) {
+		return func(sp plan.StepProgress) {
 			if sp.Line != "" {
 				emit(InstallEvent{Index: index, Kind: EventLine, Line: scrub.Replace(sp.Line)})
 			}
@@ -78,7 +79,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 		}
 		emit(InstallEvent{Index: index, Kind: EventStarted})
 		res := i.Runner.Run(runCtx, ps.Step, progress(index))
-		if res.Status != domain.StepFailed {
+		if res.Status != plan.StepFailed {
 			logItem("done")
 			emit(InstallEvent{Index: index, Kind: EventDone})
 			return nil
@@ -101,7 +102,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 		if runErr = runStep(ctx, index, ps); runErr != nil {
 			break
 		}
-		if c, ok := ps.Step.(domain.CommandStep); ok && c.Interactive && !i.DryRun {
+		if c, ok := ps.Step.(plan.CommandStep); ok && c.Interactive && !i.DryRun {
 			i.startKeepalive(ctx, &keepalive, &sudoExpired)
 		}
 	}
@@ -111,8 +112,8 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 
 	// The record is persisted even when the run was cancelled.
 	for index, ps := range p.Steps {
-		if entry, ok := ps.Step.(domain.AppendLogStep); ok && ps.Phase == domain.PhaseRecord {
-			ps.Step = domain.AppendLogStep{Entry: i.finishedEntry(entry.Entry, items, runErr)}
+		if entry, ok := ps.Step.(plan.AppendLogStep); ok && ps.Phase == domain.PhaseRecord {
+			ps.Step = plan.AppendLogStep{Entry: i.finishedEntry(entry.Entry, items, runErr)}
 			if err := runStep(context.WithoutCancel(ctx), index, ps); err != nil && runErr == nil {
 				runErr = err
 			}
@@ -155,7 +156,7 @@ func (i *Installer) startKeepalive(ctx context.Context, wg *sync.WaitGroup, expi
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if i.Runner.Run(ctx, probe, nil).Status == domain.StepFailed {
+				if i.Runner.Run(ctx, probe, nil).Status == plan.StepFailed {
 					expired.Store(true)
 				}
 			}
@@ -175,19 +176,19 @@ func (i *Installer) finishedEntry(entry state.LogEntry, items []state.LogItem, r
 }
 
 // describeStep names a step for the log without argv or secret values.
-func describeStep(s domain.Step) (label, kind string) {
+func describeStep(s plan.Step) (label, kind string) {
 	switch s := s.(type) {
-	case domain.CommandStep:
+	case plan.CommandStep:
 		return s.Label, "command"
-	case domain.WriteFileStep:
+	case plan.WriteFileStep:
 		return s.Path, "file"
-	case domain.SymlinkStep:
+	case plan.SymlinkStep:
 		return s.Path, "link"
-	case domain.WriteSecretsStep:
+	case plan.WriteSecretsStep:
 		return s.Path, "secrets"
-	case domain.CopyStep:
+	case plan.CopyStep:
 		return string(s.Entry.Root) + ":" + s.Entry.Path, "copy"
-	case domain.BackupStep:
+	case plan.BackupStep:
 		return "back up overwritten files", "backup"
 	}
 	return fmt.Sprintf("%T", s), "step"
@@ -201,11 +202,11 @@ func scrubError(scrub *strings.Replacer, err error) error {
 	return err
 }
 
-func needsSudo(s domain.Step) bool {
+func needsSudo(s plan.Step) bool {
 	switch s := s.(type) {
-	case domain.CommandStep:
+	case plan.CommandStep:
 		return s.Sudo || s.UsesSudo
-	case domain.WriteFileStep:
+	case plan.WriteFileStep:
 		return s.Privileged
 	}
 	return false
@@ -213,7 +214,7 @@ func needsSudo(s domain.Step) bool {
 
 // isVerificationProbe is the quiet `sudo -n -v` that follows the handoff in the privilege phase.
 func isVerificationProbe(ps domain.PlannedStep) bool {
-	c, ok := ps.Step.(domain.CommandStep)
+	c, ok := ps.Step.(plan.CommandStep)
 	return ok && ps.Phase == domain.PhasePrivilege && c.Quiet && slices.Equal(c.Argv, sudoProbeStep("").Argv)
 }
 
@@ -221,7 +222,7 @@ func isVerificationProbe(ps domain.PlannedStep) bool {
 func secretScrubber(steps []domain.PlannedStep) *strings.Replacer {
 	var values []string
 	for _, ps := range steps {
-		if w, ok := ps.Step.(domain.WriteSecretsStep); ok {
+		if w, ok := ps.Step.(plan.WriteSecretsStep); ok {
 			for _, e := range w.Entries {
 				if e.Value != "" {
 					values = append(values, e.Value.Reveal())

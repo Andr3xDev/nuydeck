@@ -7,15 +7,16 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/pelletier/go-toml/v2"
 )
 
 const sentinel = "S3NTINEL-do-not-leak"
 
-func sentinelStep() domain.WriteSecretsStep {
-	return domain.WriteSecretsStep{
+func sentinelStep() plan.WriteSecretsStep {
+	return plan.WriteSecretsStep{
 		Path:    "/home/test/.secrets",
-		Entries: []domain.SecretEntry{{Name: "API_TOKEN", Value: domain.Secret(sentinel)}},
+		Entries: []plan.SecretEntry{{Name: "API_TOKEN", Value: plan.Secret(sentinel)}},
 	}
 }
 
@@ -52,11 +53,5 @@ func TestSecretNeverPrintsItsValue(t *testing.T) {
 	}
 	if got := fmt.Sprintf("%v", step.Entries[0].Value); got != "[redacted]" {
 		t.Errorf("%%v = %q, want [redacted]", got)
-	}
-}
-
-func TestSecretRevealReturnsValue(t *testing.T) {
-	if got := domain.Secret(sentinel).Reveal(); got != sentinel {
-		t.Fatalf("Reveal() = %q", got)
 	}
 }

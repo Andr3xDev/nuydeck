@@ -13,6 +13,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 func requireRsync(t *testing.T) {
@@ -24,12 +25,12 @@ func requireRsync(t *testing.T) {
 
 func fixedNow(ts time.Time) func() time.Time { return func() time.Time { return ts } }
 
-func backupStep(dest string, rels ...string) domain.BackupStep {
-	files := make([]domain.BackupFile, len(rels))
+func backupStep(dest string, rels ...string) plan.BackupStep {
+	files := make([]plan.BackupFile, len(rels))
 	for i, r := range rels {
-		files[i] = domain.BackupFile{Root: manifest.RootConfig, Path: r}
+		files[i] = plan.BackupFile{Root: manifest.RootConfig, Path: r}
 	}
-	return domain.BackupStep{Direction: domain.Push, Files: files, Roots: map[manifest.Root]string{manifest.RootConfig: dest}}
+	return plan.BackupStep{Direction: plan.Push, Files: files, Roots: map[manifest.Root]string{manifest.RootConfig: dest}}
 }
 
 func TestBackupStep_WritesCompleteBackupWithoutPartial(t *testing.T) {
@@ -41,7 +42,7 @@ func TestBackupStep_WritesCompleteBackupWithoutPartial(t *testing.T) {
 
 	res := fsx.Runner{Home: home, Now: fixedNow(ts)}.Run(context.Background(), backupStep(dest, "nvim/init.lua"), nil)
 
-	if res.Status != domain.StepOK {
+	if res.Status != plan.StepOK {
 		t.Fatalf("status = %v, err = %v", res.Status, res.Err)
 	}
 	final := filepath.Join(fsx.BackupsDir(home), "20260301-100000")
@@ -59,7 +60,7 @@ func TestBackupStep_WritesCompleteBackupWithoutPartial(t *testing.T) {
 		t.Fatalf("ListBackups = %v, %v", backups, err)
 	}
 	got := backups[0]
-	if got.Incomplete || got.Unreadable || got.Direction != domain.Push || got.Roots[manifest.RootConfig] != dest ||
+	if got.Incomplete || got.Unreadable || got.Direction != plan.Push || got.Roots[manifest.RootConfig] != dest ||
 		!slices.Equal(got.Files, []string{"config/nvim/init.lua"}) || !got.Created.Equal(ts) {
 		t.Fatalf("meta round trip mismatch: %+v", got)
 	}
@@ -73,7 +74,7 @@ func TestBackupStep_SameTimestampGetsCollisionSuffix(t *testing.T) {
 	r := fsx.Runner{Home: home, Now: fixedNow(time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC))}
 
 	for range 2 {
-		if res := r.Run(context.Background(), backupStep(dest, "a"), nil); res.Status != domain.StepOK {
+		if res := r.Run(context.Background(), backupStep(dest, "a"), nil); res.Status != plan.StepOK {
 			t.Fatalf("status = %v, err = %v", res.Status, res.Err)
 		}
 	}
@@ -94,7 +95,7 @@ func TestBackupStep_FailureReturnsErrorAndNoCompleteBackup(t *testing.T) {
 	res := fsx.Runner{Home: home, Now: fixedNow(time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC))}.
 		Run(context.Background(), backupStep(dest, "does-not-exist"), nil)
 
-	if res.Status != domain.StepFailed || res.Err == nil {
+	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("status = %v, err = %v; want failure", res.Status, res.Err)
 	}
 	entries, _ := os.ReadDir(fsx.BackupsDir(home))
@@ -109,15 +110,15 @@ func TestBackupStep_RefusedWhenBackupsDirInsideDestinationEntry(t *testing.T) {
 	requireRsync(t)
 	home := t.TempDir()
 	writeFile(t, filepath.Join(home, "keep.txt"), "x")
-	step := domain.BackupStep{
-		Files: []domain.BackupFile{{Root: manifest.RootHome, Path: ".nuydeck-backups"}},
+	step := plan.BackupStep{
+		Files: []plan.BackupFile{{Root: manifest.RootHome, Path: ".nuydeck-backups"}},
 		Roots: map[manifest.Root]string{manifest.RootHome: home},
 	}
 	_ = os.MkdirAll(fsx.BackupsDir(home), 0o755)
 
 	res := fsx.Runner{Home: home}.Run(context.Background(), step, nil)
 
-	if res.Status != domain.StepFailed || res.Err == nil {
+	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("status = %v, err = %v; want refusal", res.Status, res.Err)
 	}
 	if entries, _ := os.ReadDir(fsx.BackupsDir(home)); len(entries) != 0 {
@@ -133,14 +134,14 @@ func TestBackupStep_RefusedWhenBackupsDirReachedThroughSymlinkedRoot(t *testing.
 	if err := os.Symlink(home, linkedRoot); err != nil {
 		t.Fatal(err)
 	}
-	step := domain.BackupStep{
-		Files: []domain.BackupFile{{Root: manifest.RootHome, Path: ".nuydeck-backups"}},
+	step := plan.BackupStep{
+		Files: []plan.BackupFile{{Root: manifest.RootHome, Path: ".nuydeck-backups"}},
 		Roots: map[manifest.Root]string{manifest.RootHome: linkedRoot},
 	}
 
 	res := fsx.Runner{Home: home}.Run(context.Background(), step, nil)
 
-	if res.Status != domain.StepFailed || res.Err == nil {
+	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("status = %v, err = %v; want refusal", res.Status, res.Err)
 	}
 	if entries, _ := os.ReadDir(fsx.BackupsDir(home)); len(entries) != 0 {
@@ -153,14 +154,14 @@ func TestBackupStep_RefusedWhenEntryLiesInsideBackupsDir(t *testing.T) {
 	home := t.TempDir()
 	backups := fsx.BackupsDir(home)
 	writeFile(t, filepath.Join(backups, "20260101-000000", "f"), "x")
-	step := domain.BackupStep{
-		Files: []domain.BackupFile{{Root: manifest.RootHome, Path: "20260101-000000/f"}},
+	step := plan.BackupStep{
+		Files: []plan.BackupFile{{Root: manifest.RootHome, Path: "20260101-000000/f"}},
 		Roots: map[manifest.Root]string{manifest.RootHome: backups},
 	}
 
 	res := fsx.Runner{Home: home}.Run(context.Background(), step, nil)
 
-	if res.Status != domain.StepFailed || res.Err == nil {
+	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("status = %v, err = %v; want refusal", res.Status, res.Err)
 	}
 	if entries, _ := os.ReadDir(backups); len(entries) != 1 {
@@ -178,7 +179,7 @@ func TestListBackups_NewestFirstAndFlagsBrokenOnes(t *testing.T) {
 		time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC),
 		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
 	} {
-		if res := (fsx.Runner{Home: home, Now: fixedNow(ts)}).Run(context.Background(), backupStep(dest, "a"), nil); res.Status != domain.StepOK {
+		if res := (fsx.Runner{Home: home, Now: fixedNow(ts)}).Run(context.Background(), backupStep(dest, "a"), nil); res.Status != plan.StepOK {
 			t.Fatalf("backup: %v", res.Err)
 		}
 	}
@@ -226,8 +227,8 @@ func TestDeleteBackupStep(t *testing.T) {
 	elsewhere := filepath.Join(home, "precious")
 	writeFile(t, filepath.Join(elsewhere, "f"), "x")
 	r := fsx.Runner{Home: home}
-	del := func(dir string) domain.StepResult {
-		return r.Run(context.Background(), domain.DeleteBackupStep{Dir: dir}, nil)
+	del := func(dir string) plan.StepResult {
+		return r.Run(context.Background(), plan.DeleteBackupStep{Dir: dir}, nil)
 	}
 
 	for name, dir := range map[string]string{
@@ -236,7 +237,7 @@ func TestDeleteBackupStep(t *testing.T) {
 		"dot-dot traversal":    filepath.Join(root, "..", "precious"),
 		"deeper descendant":    filepath.Join(inside, "meta.toml"),
 	} {
-		if res := del(dir); res.Status != domain.StepFailed || res.Err == nil {
+		if res := del(dir); res.Status != plan.StepFailed || res.Err == nil {
 			t.Errorf("%s: status = %v, err = %v; want refusal", name, res.Status, res.Err)
 		}
 	}
@@ -244,7 +245,7 @@ func TestDeleteBackupStep(t *testing.T) {
 		t.Fatal("refused deletes removed something")
 	}
 
-	if res := del(inside); res.Status != domain.StepOK {
+	if res := del(inside); res.Status != plan.StepOK {
 		t.Fatalf("delete inside: %v", res.Err)
 	}
 	if exists(inside) {

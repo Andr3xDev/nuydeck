@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -90,9 +90,9 @@ func TestDeleteStep(t *testing.T) {
 			_ = os.MkdirAll(outside, 0o755)
 			path := tc.setup(root, outside)
 
-			res := fsx.Runner{Home: base}.Run(context.Background(), domain.DeleteStep{Path: path, Root: root}, nil)
+			res := fsx.Runner{Home: base}.Run(context.Background(), plan.DeleteStep{Path: path, Root: root}, nil)
 
-			if gotFail := res.Status == domain.StepFailed; gotFail != tc.wantFail {
+			if gotFail := res.Status == plan.StepFailed; gotFail != tc.wantFail {
 				t.Fatalf("status = %v, err = %v; wantFail %v", res.Status, res.Err, tc.wantFail)
 			}
 			if tc.wantFail && res.Err == nil {

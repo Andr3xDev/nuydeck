@@ -11,6 +11,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 func collectDrift(svc *Service, entries []manifest.ResolvedEntry) map[string]DriftResult {
@@ -23,17 +24,17 @@ func collectDrift(svc *Service, entries []manifest.ResolvedEntry) map[string]Dri
 
 func TestDrift_ClassifiesEntriesAndIsolatesErrors(t *testing.T) {
 	boom := errors.New("rsync exited with code 23")
-	in := &fakeInspector{diff: func(e manifest.ResolvedEntry, src, dst domain.Endpoint) ([]domain.Change, error) {
+	in := &fakeInspector{diff: func(e manifest.ResolvedEntry, src, dst plan.Endpoint) ([]plan.Change, error) {
 		switch e.Path {
 		case "same":
 			return nil, nil
 		case "bad":
 			return nil, boom
 		}
-		return []domain.Change{
-			change("repo-only", domain.Create, domain.KindFile),
-			change("pc-only", domain.Delete, domain.KindFile),
-			change("differs", domain.Update, domain.KindFile),
+		return []plan.Change{
+			change("repo-only", plan.Create, plan.KindFile),
+			change("pc-only", plan.Delete, plan.KindFile),
+			change("differs", plan.Update, plan.KindFile),
 		}, nil
 	}}
 	entries := []manifest.ResolvedEntry{
@@ -67,14 +68,14 @@ func TestDrift_MissingSideIsClassifiedWithoutDiff(t *testing.T) {
 	e := resolved(manifest.RootConfig, "hypr")
 	tests := []struct {
 		name        string
-		kinds       map[string]domain.NodeKind
+		kinds       map[string]plan.NodeKind
 		wantState   DriftState
 		wantMissing Missing
 		wantErr     string
 	}{
-		{"absent in repo", map[string]domain.NodeKind{e.RepoPath: domain.KindNone, e.DestPath: domain.KindDir}, DriftDrifted, MissingInRepo, ""},
-		{"absent on pc", map[string]domain.NodeKind{e.RepoPath: domain.KindDir, e.DestPath: domain.KindNone}, DriftDrifted, MissingOnPC, ""},
-		{"absent on both", map[string]domain.NodeKind{e.RepoPath: domain.KindNone, e.DestPath: domain.KindNone}, DriftError, MissingNone, "absent on both sides"},
+		{"absent in repo", map[string]plan.NodeKind{e.RepoPath: plan.KindNone, e.DestPath: plan.KindDir}, DriftDrifted, MissingInRepo, ""},
+		{"absent on pc", map[string]plan.NodeKind{e.RepoPath: plan.KindDir, e.DestPath: plan.KindNone}, DriftDrifted, MissingOnPC, ""},
+		{"absent on both", map[string]plan.NodeKind{e.RepoPath: plan.KindNone, e.DestPath: plan.KindNone}, DriftError, MissingNone, "absent on both sides"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -96,7 +97,7 @@ func TestDrift_MissingSideIsClassifiedWithoutDiff(t *testing.T) {
 
 func TestDrift_RunsAtMostFourDiffsAtOnce(t *testing.T) {
 	var inFlight, peak atomic.Int32
-	in := &fakeInspector{diff: func(manifest.ResolvedEntry, domain.Endpoint, domain.Endpoint) ([]domain.Change, error) {
+	in := &fakeInspector{diff: func(manifest.ResolvedEntry, plan.Endpoint, plan.Endpoint) ([]plan.Change, error) {
 		n := inFlight.Add(1)
 		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
 		}
@@ -123,7 +124,7 @@ func TestDrift_AttachesTimesAndNewestCompleteBackup(t *testing.T) {
 	in := &fakeInspector{
 		diff:      diffReturning(),
 		mtimes:    map[string]time.Time{e.DestPath: pcT},
-		repoTimes: map[string]domain.RepoTimes{"config/hypr": {Entry: repoT}},
+		repoTimes: map[string]plan.RepoTimes{"config/hypr": {Entry: repoT}},
 		backups:   []domain.Backup{{Dir: "/home/u/.nuydeck-backups/x.partial", Incomplete: true}, complete},
 	}
 	r := collectDrift(newService(t, in, &fakeRunner{}), []manifest.ResolvedEntry{e})["hypr"]
@@ -188,7 +189,7 @@ func TestDrift_ReturnsBeforeListBackupsFinishes(t *testing.T) {
 func testBackup() domain.Backup {
 	return domain.Backup{
 		Dir:       "/home/u/.nuydeck-backups/20261103-100000",
-		Direction: domain.Push,
+		Direction: plan.Push,
 		Roots:     map[manifest.Root]string{manifest.RootConfig: "/home/u/.config"},
 		Files:     []string{"config/hypr/a.conf"},
 	}
@@ -197,51 +198,51 @@ func testBackup() domain.Backup {
 func TestPlanRestore_DiffsBackupIntoRecordedRootsAndNeverDeletes(t *testing.T) {
 	b := testBackup()
 	in := &fakeInspector{diff: diffReturning(
-		change("hypr/a.conf", domain.Update, domain.KindFile),
-		change("hypr/b.conf", domain.Create, domain.KindFile),
-		change("hypr/extra.conf", domain.Delete, domain.KindFile),
+		change("hypr/a.conf", plan.Update, plan.KindFile),
+		change("hypr/b.conf", plan.Create, plan.KindFile),
+		change("hypr/extra.conf", plan.Delete, plan.KindFile),
 	)}
-	plan, err := newService(t, in, &fakeRunner{}).PlanRestore(context.Background(), b)
+	syncPlan, err := newService(t, in, &fakeRunner{}).PlanRestore(context.Background(), b)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.Direction != domain.Restore {
-		t.Errorf("direction = %v, want Restore", plan.Direction)
+	if syncPlan.Direction != plan.Restore {
+		t.Errorf("direction = %v, want Restore", syncPlan.Direction)
 	}
 	if len(in.diffCalls) != 1 || in.diffCalls[0] != (diffCall{b.Dir + "/config", "/home/u/.config"}) {
 		t.Errorf("diff calls = %+v", in.diffCalls)
 	}
-	for _, it := range plan.Items {
-		if it.Change.Type == domain.Delete {
+	for _, it := range syncPlan.Items {
+		if it.Change.Type == plan.Delete {
 			t.Errorf("restore offered deletion of %s", it.Change.Path)
 		}
 	}
-	if len(plan.Items) != 2 {
-		t.Errorf("items = %d, want 2", len(plan.Items))
+	if len(syncPlan.Items) != 2 {
+		t.Errorf("items = %d, want 2", len(syncPlan.Items))
 	}
 }
 
 func TestApply_RestoreCopiesFromBackupAndOffersBackupForOverwrite(t *testing.T) {
 	b := testBackup()
-	in := &fakeInspector{diff: diffReturning(change("hypr/a.conf", domain.Update, domain.KindFile))}
+	in := &fakeInspector{diff: diffReturning(change("hypr/a.conf", plan.Update, plan.KindFile))}
 	svc := newService(t, in, &fakeRunner{})
-	plan, err := svc.PlanRestore(context.Background(), b)
+	syncPlan, err := svc.PlanRestore(context.Background(), b)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sel := selectAll(plan)
-	if !svc.NeedsBackup(plan, sel) {
+	sel := selectAll(syncPlan)
+	if !svc.NeedsBackup(syncPlan, sel) {
 		t.Error("restore overwriting a file must offer a backup")
 	}
 	r := &fakeRunner{}
-	newService(t, in, r).Apply(context.Background(), plan, sel, ApplyOptions{Backup: true}, nil)
+	newService(t, in, r).Apply(context.Background(), syncPlan, sel, ApplyOptions{Backup: true}, nil)
 
-	copies := stepsOfType[domain.CopyStep](r.steps)
-	if len(copies) != 1 || copies[0].Direction != domain.Restore || copies[0].Src != b.Dir+"/config" ||
+	copies := stepsOfType[plan.CopyStep](r.steps)
+	if len(copies) != 1 || copies[0].Direction != plan.Restore || copies[0].Src != b.Dir+"/config" ||
 		copies[0].Dst != "/home/u/.config" || len(copies[0].Paths) != 1 || copies[0].Paths[0] != "hypr/a.conf" {
 		t.Fatalf("copy steps = %+v", copies)
 	}
-	if len(stepsOfType[domain.DeleteStep](r.steps)) != 0 {
+	if len(stepsOfType[plan.DeleteStep](r.steps)) != 0 {
 		t.Error("restore must not delete")
 	}
 }
@@ -251,10 +252,10 @@ func TestDeleteBackup_DeclinedRunsNoStep(t *testing.T) {
 	tests := []struct {
 		name      string
 		confirmed bool
-		wantSteps []domain.Step
+		wantSteps []plan.Step
 	}{
 		{"declined", false, nil},
-		{"confirmed", true, []domain.Step{domain.DeleteBackupStep{Dir: dir}}},
+		{"confirmed", true, []plan.Step{plan.DeleteBackupStep{Dir: dir}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

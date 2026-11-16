@@ -11,8 +11,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 type fakeSyncer struct {
@@ -24,17 +24,17 @@ type fakeSyncer struct {
 	applyCalls    int
 }
 
-func (f *fakeSyncer) PlanSync(context.Context, domain.Direction, []manifest.ResolvedEntry) (app.SyncPlan, error) {
+func (f *fakeSyncer) PlanSync(context.Context, plan.Direction, []manifest.ResolvedEntry) (app.SyncPlan, error) {
 	return f.plan, nil
 }
 
 func (f *fakeSyncer) NeedsBackup(app.SyncPlan, app.Selection) bool { return f.needsBackup }
 
-func (f *fakeSyncer) Apply(ctx context.Context, _ app.SyncPlan, _ app.Selection, opts app.ApplyOptions, progress func(domain.StepProgress)) app.ApplyResult {
+func (f *fakeSyncer) Apply(ctx context.Context, _ app.SyncPlan, _ app.Selection, opts app.ApplyOptions, progress func(plan.StepProgress)) app.ApplyResult {
 	f.applyCalls++
 	f.opts = opts
 	for _, p := range f.progressPaths {
-		progress(domain.StepProgress{Path: p})
+		progress(plan.StepProgress{Path: p})
 	}
 	if f.blockUntilCtx {
 		<-ctx.Done()
@@ -55,7 +55,7 @@ func runCmds(s *Sync, cmd tea.Cmd) {
 }
 
 func planItem(path string, blocked bool) app.PlanItem {
-	return app.PlanItem{Change: domain.Change{Entry: manifest.Entry{Root: "home", Path: path}, Type: domain.Update}, Blocked: blocked}
+	return app.PlanItem{Change: plan.Change{Entry: manifest.Entry{Root: "home", Path: path}, Type: plan.Update}, Blocked: blocked}
 }
 
 func newPreview(f *fakeSyncer, dryRun bool) *Sync {
@@ -130,9 +130,9 @@ func TestSyncEnterDialogsDeclineBackup(t *testing.T) {
 
 func TestSyncDiscardsStalePlan(t *testing.T) {
 	s := newPreview(&fakeSyncer{}, false)
-	s.startPlan(domain.Push)
+	s.startPlan(plan.Push)
 	stale := s.gen
-	s.startPlan(domain.Pull)
+	s.startPlan(plan.Pull)
 	s.Update(planMsg{gen: stale, plan: app.SyncPlan{Items: []app.PlanItem{planItem("a", false)}}})
 	if s.phase != phasePlanning || len(s.plan.Items) != 0 {
 		t.Error("stale plan must be discarded")
@@ -197,7 +197,7 @@ func TestRootIgnoresNewPlansWhileApplying(t *testing.T) {
 	r, s, _ := applyingRoot(t, &fakeSyncer{plan: selectedPlan()})
 	gen := s.gen
 
-	for _, msg := range []tea.Msg{startSyncMsg{direction: domain.Pull}, restorePlanMsg{plan: selectedPlan()}} {
+	for _, msg := range []tea.Msg{startSyncMsg{direction: plan.Pull}, restorePlanMsg{plan: selectedPlan()}} {
 		r.Update(msg)
 		if s.phase != phaseApplying || s.gen != gen {
 			t.Fatalf("%T changed the running apply: phase=%v gen=%d want gen %d", msg, s.phase, s.gen, gen)
@@ -237,7 +237,7 @@ func TestSyncResultView(t *testing.T) {
 	}
 
 	s.Update(applyDoneMsg{gen: s.gen, result: app.ApplyResult{
-		Outcomes: []app.StepOutcome{{Result: domain.StepResult{Status: domain.StepWouldApply, Detail: "would append log entry"}}},
+		Outcomes: []app.StepOutcome{{Result: plan.StepResult{Status: plan.StepWouldApply, Detail: "would append log entry"}}},
 		Items:    []app.ItemResult{{Key: app.ItemKey{Root: "home", Path: "a"}, Result: app.ItemNotApplied}},
 		Err:      errors.New("boom"),
 	}})

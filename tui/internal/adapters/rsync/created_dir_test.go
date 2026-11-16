@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 func TestParseItemize_IgnoresCreatedDirectoryNotice(t *testing.T) {
@@ -12,7 +12,7 @@ func TestParseItemize_IgnoresCreatedDirectoryNotice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0] != (Item{"a.txt", domain.Create, domain.KindFile}) {
+	if len(got) != 1 || got[0] != (Item{"a.txt", plan.Create, plan.KindFile}) {
 		t.Fatalf("got %+v", got)
 	}
 }
@@ -22,7 +22,7 @@ func TestParseItemize_IgnoresCannotDeleteNonEmptyDirectoryNotice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0] != (Item{"a.txt", domain.Create, domain.KindFile}) {
+	if len(got) != 1 || got[0] != (Item{"a.txt", plan.Create, plan.KindFile}) {
 		t.Fatalf("got %+v", got)
 	}
 }

@@ -11,15 +11,15 @@ import (
 	"strings"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 // Item is one parsed itemize line: a create, update or delete.
 type Item struct {
 	Path string
-	Type domain.ChangeType
-	Kind domain.NodeKind
+	Type plan.ChangeType
+	Kind plan.NodeKind
 }
 
 // Request describes one rsync run for a resolved entry. Dir entries sync
@@ -67,23 +67,23 @@ func parseItemize(output string) (items []Item, skipped []string, err error) {
 			continue
 		}
 		if name, ok := strings.CutPrefix(line, deletingPrefix); ok {
-			kind := domain.KindFile
+			kind := plan.KindFile
 			if strings.HasSuffix(name, "/") {
-				kind = domain.KindDir
+				kind = plan.KindDir
 			}
-			items = append(items, Item{unescape(strings.TrimSuffix(name, "/")), domain.Delete, kind})
+			items = append(items, Item{unescape(strings.TrimSuffix(name, "/")), plan.Delete, kind})
 			continue
 		}
 		if len(line) <= flagsLen || line[flagsLen] != ' ' {
 			return nil, nil, fmt.Errorf("unrecognized rsync output line %q", line)
 		}
 		flags, name := line[:flagsLen], line[flagsLen+1:]
-		var kind domain.NodeKind
+		var kind plan.NodeKind
 		switch flags[1] {
 		case 'f':
-			kind = domain.KindFile
+			kind = plan.KindFile
 		case 'L':
-			kind = domain.KindLink
+			kind = plan.KindLink
 			name, _, _ = strings.Cut(name, linkArrow)
 		case 'd':
 			continue
@@ -93,9 +93,9 @@ func parseItemize(output string) (items []Item, skipped []string, err error) {
 		if !strings.ContainsRune("<>ch.", rune(flags[0])) {
 			return nil, nil, fmt.Errorf("unrecognized rsync output line %q", line)
 		}
-		change := domain.Update
+		change := plan.Update
 		if flags[2:] == allNewFlags {
-			change = domain.Create
+			change = plan.Create
 		}
 		items = append(items, Item{unescape(name), change, kind})
 	}

@@ -1,12 +1,10 @@
-package app
+package plan
 
 import (
 	"bytes"
 	"regexp"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 )
 
 // lineByteCap bounds one emitted line so a runaway process cannot flood the UI.
@@ -23,15 +21,15 @@ var ansiEscape = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-
 // LineWriter turns raw process output into sanitized StepProgress lines.
 // It is not safe for concurrent use; use one writer per stream.
 type LineWriter struct {
-	progress    func(domain.StepProgress)
+	progress    func(StepProgress)
 	buf         []byte
 	discardRest bool
 }
 
 // NewLineWriter returns a writer that reports lines to progress, which may be nil.
-func NewLineWriter(progress func(domain.StepProgress)) *LineWriter {
+func NewLineWriter(progress func(StepProgress)) *LineWriter {
 	if progress == nil {
-		progress = func(domain.StepProgress) {}
+		progress = func(StepProgress) {}
 	}
 	return &LineWriter{progress: progress}
 }
@@ -95,5 +93,5 @@ func (w *LineWriter) emit(raw []byte) {
 		}
 		line = line[:cut]
 	}
-	w.progress(domain.StepProgress{Line: line})
+	w.progress(StepProgress{Line: line})
 }

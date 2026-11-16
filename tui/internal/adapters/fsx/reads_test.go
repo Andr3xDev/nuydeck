@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 func TestPathKind_MissingPathIsKindNoneNotError(t *testing.T) {
@@ -15,8 +15,8 @@ func TestPathKind_MissingPathIsKindNoneNotError(t *testing.T) {
 	_ = os.Mkdir(filepath.Join(dir, "d"), 0o755)
 	_ = os.Symlink("f", filepath.Join(dir, "l"))
 
-	for name, want := range map[string]domain.NodeKind{
-		"f": domain.KindFile, "d": domain.KindDir, "l": domain.KindLink, "nope": domain.KindNone,
+	for name, want := range map[string]plan.NodeKind{
+		"f": plan.KindFile, "d": plan.KindDir, "l": plan.KindLink, "nope": plan.KindNone,
 	} {
 		got, err := fsx.PathKind(filepath.Join(dir, name))
 		if err != nil || got != want {
