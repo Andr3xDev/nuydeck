@@ -362,7 +362,7 @@ func (s *Install) applyEvent(ev plan.InstallEvent) {
 }
 
 func (s *Install) appendLog(line string) {
-	s.log = append(s.log, line)
+	s.log = append(s.log, sanitizeLine(line))
 	if len(s.log) > logLineCap {
 		s.log = s.log[len(s.log)-logLineCap:]
 	}

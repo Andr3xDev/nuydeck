@@ -167,33 +167,47 @@ func requestSync(dir plan.Direction) tea.Cmd {
 }
 
 func (d *Dashboard) View(width, height int) string {
-	lines := append(strings.Split(d.statusLines(), "\n"), "")
+	cw := contentWidth(width)
+	lines := append(d.statusLines(cw), "")
 	if len(d.entries) == 0 {
 		lines = append(lines, d.muted("No managed entries."))
 	}
-	detail := d.errorDetail()
+	detail := d.errorDetail(cw)
 	reserved := 0
 	if detail != "" {
 		reserved = 1
 	}
-	visible := max(height-2*panelPadY-len(lines)-reserved, 1)
+	visible := max(innerHeight(height)-len(lines)-reserved, 1)
 	if detail != "" {
 		lines = append(lines, detail)
 	}
-	start := max(min(d.cursor-visible/2, len(d.entries)-visible), 0)
-	for i := start; i < min(start+visible, len(d.entries)); i++ {
-		e := d.entries[i]
-		cursor := "  "
-		if i == d.cursor {
-			cursor = "> "
-		}
-		lines = append(lines, fmt.Sprintf("%s%-40s %s", cursor, fmt.Sprintf("%s:%s", e.Root, e.Path), d.entryStatus(e.Entry)))
+	rows := make([]string, len(d.entries))
+	for i, e := range d.entries {
+		rows[i] = d.row(i, e, width)
 	}
-	return renderPanel(width, height, strings.Join(lines, "\n"))
+	lines = append(lines, windowAround(rows, d.cursor, visible)...)
+	return screenBox(d.palette, "Dashboard", clip(lines, cw), width, height)
+}
+
+// row is the entry path with its status right-aligned; narrow panels drop the status.
+func (d *Dashboard) row(i int, e manifest.ResolvedEntry, width int) string {
+	cursor := "  "
+	if i == d.cursor {
+		cursor = "> "
+	}
+	cw := contentWidth(width)
+	path := sanitizeLine(fmt.Sprintf("%s:%s", e.Root, e.Path))
+	if width < wideRowWidth {
+		return cursor + truncate(path, cw-len(cursor))
+	}
+	status := d.entryStatus(e.Entry)
+	pathWidth := max(cw-len(cursor)-1-lipgloss.Width(status), 1)
+	path = truncate(path, pathWidth)
+	return cursor + path + strings.Repeat(" ", max(pathWidth-lipgloss.Width(path), 0)) + " " + status
 }
 
 // errorDetail is the cursor row's error flattened to one line, or "" when the row has none.
-func (d *Dashboard) errorDetail() string {
+func (d *Dashboard) errorDetail(cw int) string {
 	if d.cursor >= len(d.entries) {
 		return ""
 	}
@@ -201,22 +215,22 @@ func (d *Dashboard) errorDetail() string {
 	if !ok || r.State != drift.DriftError || r.Err == nil {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(d.palette.Error).Render(strings.Join(strings.Fields(r.Err.Error()), " "))
+	return lipgloss.NewStyle().Foreground(d.palette.Error).Render(truncate(sanitizeLine(strings.Join(strings.Fields(r.Err.Error()), " ")), cw))
 }
 
-func (d *Dashboard) statusLines() string {
+func (d *Dashboard) statusLines(cw int) []string {
 	lines := []string{d.muted("Last sync:   ") + d.lastSyncText(), d.muted("Last backup: ") + d.lastBackupText()}
 	if d.state.warning != "" {
-		lines = append(lines, lipgloss.NewStyle().Foreground(d.palette.Warning).Render("State: "+d.state.warning))
+		lines = append(lines, styled(d.palette.Warning, wrap("State: "+d.state.warning, cw))...)
 	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 func (d *Dashboard) lastSyncText() string {
 	if d.state.lastSync == nil {
 		return "never"
 	}
-	return fmt.Sprintf("%s (%s)", d.state.lastSync.Time.Format(timeLayout), d.state.lastSync.Direction)
+	return sanitizeLine(fmt.Sprintf("%s (%s)", d.state.lastSync.Time.Format(timeLayout), d.state.lastSync.Direction))
 }
 
 func (d *Dashboard) lastBackupText() string {
@@ -271,6 +285,8 @@ func (m ManifestError) View(width, height int) string {
 	if fix == "" {
 		fix = "manifest/paths.toml"
 	}
-	title := lipgloss.NewStyle().Bold(true).Foreground(m.palette.Error).Render("Invalid manifest")
-	return renderPanel(width, height, title+"\n\n"+wrapToPanel(width, m.err.Error())+"\n\nFix "+fix+" and restart.")
+	lines := styled(m.palette.Error, wrap(m.err.Error(), contentWidth(width)))
+	lines = append(lines, "")
+	lines = append(lines, wrap("Fix "+fix+" and restart.", contentWidth(width))...)
+	return screenBox(m.palette, "Invalid manifest", lines, width, height)
 }

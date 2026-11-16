@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"image/color"
 	"strings"
 	"time"
 
@@ -18,24 +19,35 @@ const (
 	dryRunBadge  = "DRY-RUN"
 )
 
-const (
-	panelPadX = 2
-	panelPadY = 1
-)
+// wideRowWidth is the panel width below which list rows drop their secondary columns.
+const wideRowWidth = 60
 
-// renderPanel pads content into a width x height box. Lines are clipped, never
-// wrapped, so long paths cannot push the box past its height.
-func renderPanel(width, height int, content string) string {
-	return lipgloss.NewStyle().Width(width).Height(height).Padding(panelPadY, panelPadX).
-		Render(lipgloss.NewStyle().MaxWidth(panelInnerWidth(width)).Render(content))
+// screenBox draws a screen's box with the palette's theme; lines must fit contentWidth(width).
+func screenBox(p Palette, title string, lines []string, width, height int) string {
+	return renderBox(newTheme(p), title, lines, width, height, true)
 }
 
-func panelInnerWidth(width int) int { return max(width-2*panelPadX, 1) }
+// innerHeight is the number of lines a screen can fill inside its box.
+func innerHeight(height int) int { return max(height-borderCells, 1) }
 
-// wrapToPanel wraps text to the panel's inner width so a long message stays
-// readable instead of being clipped by renderPanel.
-func wrapToPanel(width int, text string) string {
-	return lipgloss.NewStyle().Width(panelInnerWidth(width)).Render(text)
+// clip cuts already-styled lines to width cells.
+func clip(lines []string, width int) []string {
+	style := lipgloss.NewStyle().MaxWidth(max(width, 1))
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = style.Render(l)
+	}
+	return out
+}
+
+// styled applies a foreground color to every line of text.
+func styled(c color.Color, lines []string) []string {
+	style := lipgloss.NewStyle().Foreground(c)
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = style.Render(l)
+	}
+	return out
 }
 
 // canceller is implemented by screens with background work to stop on quit.
@@ -57,7 +69,7 @@ type placeholder struct{ title string }
 func (p placeholder) Update(tea.Msg) (Screen, tea.Cmd) { return p, nil }
 
 func (p placeholder) View(width, height int) string {
-	return renderPanel(width, height, p.title)
+	return screenBox(Palette{}, p.title, nil, width, height)
 }
 
 const (
@@ -260,7 +272,8 @@ func (r Root) render() string {
 
 	panel := r.sections[r.selected].screen.View(panelWidth, bodyHeight)
 	if r.showHelp {
-		panel = renderPanel(panelWidth, bodyHeight, r.help.FullHelpView(r.keys.FullHelp()))
+		helpText := lipgloss.NewStyle().MaxWidth(contentWidth(panelWidth)).Render(r.help.FullHelpView(r.keys.FullHelp()))
+		panel = screenBox(r.palette, "Help", strings.Split(helpText, "\n"), panelWidth, bodyHeight)
 	}
 	panel = lipgloss.NewStyle().MaxWidth(panelWidth).MaxHeight(bodyHeight).Render(panel)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, r.renderSidebar(bodyHeight), panel)

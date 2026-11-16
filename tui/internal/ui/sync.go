@@ -3,9 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
-	"image/color"
 	"maps"
-	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -328,56 +326,62 @@ func waitProgress(gen int, ch <-chan applyEvent) tea.Cmd {
 }
 
 func (s *Sync) View(width, height int) string {
-	return renderPanel(width, height, s.body(width, max(height-2*panelPadY, 1)))
+	return screenBox(s.palette, "Sync", s.body(width, innerHeight(height)), width, height)
 }
 
-func (s *Sync) body(width, height int) string {
+func (s *Sync) body(width, height int) []string {
+	cw := contentWidth(width)
 	switch s.phase {
 	case phaseIdle:
-		return s.muted("Press p to pull or P to push.")
+		return s.muted("Press p to pull or P to push.", cw)
 	case phasePlanning:
-		return s.muted("Planning " + directionLabel(s.direction) + "...")
+		return s.muted("Planning "+directionLabel(s.direction)+"...", cw)
 	case phaseApplying:
 		quit := s.keys.Quit.Help()
-		text := fmt.Sprintf("Applying... %d items transferred (%s to %s and interrupt the run)", s.progress, quit.Key, quit.Desc)
+		lines := wrap(fmt.Sprintf("Applying... %d items transferred (%s to %s and interrupt the run)", s.progress, quit.Key, quit.Desc), cw)
 		if s.notice != "" {
-			text += "\n\n" + s.warn(s.notice)
+			lines = append(append(lines, ""), s.warn(s.notice, cw)...)
 		}
-		return text
+		return lines
 	case phaseResult:
-		return s.resultView(width, height)
+		return s.resultView(cw, height)
 	}
-	preview := s.previewView(height - 2)
+	var dialog []string
 	switch s.phase {
 	case phaseBackupDialog:
-		return preview + "\n\n" + s.warn("Back up files that will be overwritten or deleted first? (y/n)")
+		dialog = s.warn("Back up files that will be overwritten or deleted first? (y/n)", cw)
 	case phaseConfirmDialog:
-		return preview + "\n\n" + s.warn(fmt.Sprintf("Apply %d items (%s)? (y/n)", s.selectedCount(), directionLabel(s.direction)))
+		dialog = s.warn(fmt.Sprintf("Apply %d items (%s)? (y/n)", s.selectedCount(), directionLabel(s.direction)), cw)
 	}
-	return preview
+	if dialog == nil {
+		return s.previewView(width, height)
+	}
+	return append(append(s.previewView(width, max(height-len(dialog)-1, 1)), ""), dialog...)
 }
 
-func (s *Sync) previewView(height int) string {
+func (s *Sync) previewView(width, height int) []string {
+	cw := contentWidth(width)
 	header := fmt.Sprintf("%s: %d of %d selected", directionLabel(s.direction), s.selectedCount(), len(s.plan.Items))
-	lines := []string{lipgloss.NewStyle().Bold(true).Render(header)}
+	lines := []string{lipgloss.NewStyle().Bold(true).Render(truncate(header, cw))}
 	if s.plan.StateWarning != "" {
-		lines = append(lines, s.warn("State: "+s.plan.StateWarning))
+		lines = append(lines, s.warn("State: "+s.plan.StateWarning, cw)...)
 	}
 	for _, notice := range s.plan.Notices {
-		lines = append(lines, s.warn(notice))
+		lines = append(lines, s.warn(notice, cw)...)
 	}
 	if len(s.plan.Items) == 0 {
-		return strings.Join(append(lines, s.muted("Nothing to sync.")), "\n")
+		return append(lines, s.muted("Nothing to sync.", cw)...)
 	}
-	visible := max(height-len(lines), 1)
-	start := max(min(s.cursor-visible/2, len(s.plan.Items)-visible), 0)
-	for i := start; i < min(start+visible, len(s.plan.Items)); i++ {
-		lines = append(lines, s.itemLine(i, s.plan.Items[i]))
+	rows := make([]listRow, len(s.plan.Items))
+	for i, it := range s.plan.Items {
+		rows[i] = listRow{text: s.itemText(it, width), muted: it.Blocked}
 	}
-	return strings.Join(lines, "\n")
+	list, at := listLines(newTheme(s.palette), rows, s.cursor, cw)
+	return append(lines, windowAround(list, at, max(height-len(lines), 1))...)
 }
 
-func (s *Sync) itemLine(i int, it cfgsync.PlanItem) string {
+// itemText is the plain row text; narrow panels drop the repo and PC times.
+func (s *Sync) itemText(it cfgsync.PlanItem, width int) string {
 	box := "[ ]"
 	switch {
 	case it.Blocked:
@@ -385,35 +389,35 @@ func (s *Sync) itemLine(i int, it cfgsync.PlanItem) string {
 	case s.sel[it.Key()]:
 		box = "[x]"
 	}
-	cursor := "  "
-	if i == s.cursor {
-		cursor = "> "
+	line := fmt.Sprintf("%s %s %s:%s", box, changeLabel(it.Change.Type), it.Change.Entry.Root, it.Key().Path)
+	if width >= wideRowWidth {
+		line += fmt.Sprintf("  repo %s  pc %s", timeText(it.RepoTime), timeText(it.PCTime))
 	}
-	line := fmt.Sprintf("%s%s %-6s %s:%s  repo %s  pc %s", cursor, box, changeLabel(it.Change.Type),
-		it.Change.Entry.Root, it.Key().Path, timeText(it.RepoTime), timeText(it.PCTime))
 	for _, badge := range badges(it) {
-		line += " " + s.warn("["+badge+"]")
+		line += " [" + badge + "]"
 	}
 	return line
 }
 
-func (s *Sync) resultView(width, height int) string {
+func (s *Sync) resultView(cw, height int) []string {
 	var lines []string
 	switch {
 	case s.err != nil:
-		lines = append(lines, s.colored(s.palette.Error, wrapToPanel(width, "Plan failed: "+s.err.Error())))
+		lines = styled(s.palette.Error, wrap("Plan failed: "+s.err.Error(), cw))
 	case s.result.Nothing:
-		lines = append(lines, "Nothing was done.")
+		lines = []string{"Nothing was done."}
 	default:
-		lines = append(lines, resultLines(s.result)...)
+		for _, l := range resultLines(s.result) {
+			lines = append(lines, wrap(l, cw)...)
+		}
 		if s.result.Err != nil {
-			lines = append(lines, s.colored(s.palette.Error, wrapToPanel(width, "Failed: "+s.result.Err.Error())))
+			lines = append(lines, styled(s.palette.Error, wrap("Failed: "+s.result.Err.Error(), cw))...)
 		}
 	}
 	if len(lines) > height {
-		lines = append(lines[:height-1], s.muted(fmt.Sprintf("... %d more lines", len(lines)-height+1)))
+		lines = append(lines[:height-1], s.muted(fmt.Sprintf("... %d more lines", len(lines)-height+1), cw)...)
 	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 func resultLines(res cfgsync.ApplyResult) []string {
@@ -429,9 +433,7 @@ func resultLines(res cfgsync.ApplyResult) []string {
 	return lines
 }
 
-func (s *Sync) muted(text string) string { return s.colored(s.palette.TextMuted, text) }
-func (s *Sync) warn(text string) string  { return s.colored(s.palette.Warning, text) }
-
-func (s *Sync) colored(c color.Color, text string) string {
-	return lipgloss.NewStyle().Foreground(c).Render(text)
+func (s *Sync) muted(text string, cw int) []string {
+	return styled(s.palette.TextMuted, wrap(text, cw))
 }
+func (s *Sync) warn(text string, cw int) []string { return styled(s.palette.Warning, wrap(text, cw)) }

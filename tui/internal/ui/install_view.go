@@ -15,6 +15,7 @@ const (
 	finalNotices = "Group changes such as docker need a new login. The logind power-key change and the theme apply after the reboot or the first Hyprland login."
 	gpuFallback  = "GPU detection failed or found no known GPU: every driver is proposed. Uncheck the ones you do not need."
 
+	markWidth     = 3 // "[x]"
 	summaryChrome = 4
 	runChrome     = 4
 )
@@ -22,100 +23,101 @@ const (
 var pageNames = []string{"profile", "hardware", "selection", "secrets", "summary", "run"}
 
 func (s *Install) View(width, height int) string {
-	return renderPanel(width, height, s.body(width, max(height-2*panelPadY, 1)))
+	title := fmt.Sprintf("Install %d/%d %s", int(s.page)+1, len(pageNames), pageNames[s.page])
+	return screenBox(s.palette, title, s.body(width, innerHeight(height)), width, height)
 }
 
-func (s *Install) breadcrumb() string {
-	parts := make([]string, len(pageNames))
-	for i, name := range pageNames {
-		parts[i] = name
-		if installPage(i) == s.page {
-			parts[i] = bold("[" + name + "]")
-		}
-	}
-	return strings.Join(parts, " > ")
+// hint wraps muted help text to the content width.
+func (s *Install) hint(text string, cw int) []string {
+	return styled(s.palette.TextMuted, wrap(text, cw))
 }
 
-func (s *Install) hint(text string) string { return paint(s.palette.TextMuted, text) }
-
-func (s *Install) body(width, height int) string {
-	head := s.breadcrumb() + "\n\n"
+func (s *Install) body(width, height int) []string {
+	cw := contentWidth(width)
 	switch s.page {
 	case pageProfile:
-		return head + s.profileView()
+		return s.profileView(width)
 	case pageHardware:
-		return head + s.hardwareView(width)
+		return s.hardwareView(width)
 	case pageSelection:
-		return head + s.selectionView(height-2)
+		return s.selectionView(cw, height)
 	case pageSecrets:
-		return head + s.secretsView(width)
+		return s.secretsView(cw)
 	case pageSummary:
-		return head + s.summaryView(width, height-2)
+		return s.summaryView(cw, height)
 	}
-	return head + s.runView(width, height-2)
+	return s.runView(cw, height)
 }
 
-func (s *Install) profileView() string {
+func (s *Install) profileView(width int) []string {
+	cw := contentWidth(width)
 	descriptions := map[string]string{
 		manifest.ProfileMinimal: "the essential packages",
 		manifest.ProfileFull:    "every packaged tool",
 		install.ProfileCustom:   "mark packages one by one",
 	}
-	lines := []string{bold("Choose a profile")}
+	rows := make([]listRow, len(profileChoices))
 	for i, p := range profileChoices {
-		lines = append(lines, fmt.Sprintf("%s%-8s %s", cursorMark(i == s.cursor), p, descriptions[p]))
+		rows[i] = listRow{text: p}
+		if width >= wideRowWidth {
+			rows[i].text += "  " + descriptions[p]
+		}
 	}
-	return strings.Join(append(lines, "", s.hint("up/down move, enter next")), "\n")
+	list, _ := listLines(newTheme(s.palette), rows, s.cursor, cw)
+	lines := append([]string{bold("Choose a profile")}, list...)
+	return append(append(lines, ""), s.hint("up/down move, enter next", cw)...)
 }
 
-func (s *Install) hardwareView(width int) string {
+func (s *Install) hardwareView(width int) []string {
+	cw := contentWidth(width)
 	lines := []string{bold("Hardware drivers")}
 	switch {
 	case s.hwLoading:
-		return lines[0] + "\n" + s.hint("Detecting GPUs...")
+		return append(lines, s.hint("Detecting GPUs...", cw)...)
 	case !s.detected:
-		lines = append(lines, paint(s.palette.Warning, wrapToPanel(width, gpuFallback)))
+		lines = append(lines, styled(s.palette.Warning, wrap(gpuFallback, cw))...)
 	}
-	for i, d := range s.deps.Drivers {
-		on := slices.Contains(s.draft.Drivers, d.ID)
-		lines = append(lines, fmt.Sprintf("%s%s %s (%s)", cursorMark(i == s.cursor), checkbox(on), d.ID, d.VendorID))
+	rows := make([]listRow, 0, len(s.deps.Drivers)+1)
+	for _, d := range s.deps.Drivers {
+		rows = append(rows, listRow{text: fmt.Sprintf("%s %s (%s)", checkbox(slices.Contains(s.draft.Drivers, d.ID)), d.ID, d.VendorID)})
 	}
-	skip := len(s.deps.Drivers)
-	lines = append(lines, fmt.Sprintf("%s%s skip the GPU env link (gpu_env.lua)", cursorMark(s.cursor == skip), checkbox(s.draft.SkipGPUEnvLink)))
-	return strings.Join(append(lines, "", s.hint("up/down move, space toggles, enter next, esc back")), "\n")
+	rows = append(rows, listRow{text: checkbox(s.draft.SkipGPUEnvLink) + " skip the GPU env link (gpu_env.lua)"})
+	list, _ := listLines(newTheme(s.palette), rows, s.cursor, cw)
+	lines = append(lines, list...)
+	return append(append(lines, ""), s.hint("up/down move, space toggles, enter next, esc back", cw)...)
 }
 
-func (s *Install) selectionView(height int) string {
+func (s *Install) selectionView(cw, height int) []string {
 	lines := []string{bold("Packages to install")}
-	visible := max(height-3, 1)
-	start := max(min(s.cursor-visible/2, len(s.rows)-visible), 0)
-	for i := start; i < min(start+visible, len(s.rows)); i++ {
-		row := s.rows[i]
-		if row.name == "" {
-			group := row.group
-			if group == "" {
-				group = "other"
-			}
-			lines = append(lines, cursorMark(i == s.cursor)+bold(group))
-			continue
+	hint := s.hint("space toggles a package or a whole group, enter next, esc back", cw)
+	rows := make([]listRow, len(s.rows))
+	for i, row := range s.rows {
+		switch {
+		case row.name != "":
+			rows[i] = listRow{text: "  " + checkbox(s.selected[row.name]) + " " + row.name}
+		case row.group == "":
+			rows[i] = listRow{text: "other"}
+		default:
+			rows[i] = listRow{text: row.group}
 		}
-		lines = append(lines, fmt.Sprintf("%s  %s %s", cursorMark(i == s.cursor), checkbox(s.selected[row.name]), row.name))
 	}
-	return strings.Join(append(lines, s.hint("space toggles a package or a whole group, enter next, esc back")), "\n")
+	list, at := listLines(newTheme(s.palette), rows, s.cursor, cw)
+	lines = append(lines, windowAround(list, at, max(height-len(lines)-len(hint), 1))...)
+	return append(lines, hint...)
 }
 
-func (s *Install) secretsView(width int) string {
+func (s *Install) secretsView(cw int) []string {
 	lines := []string{bold("Secrets")}
 	switch {
 	case s.secretsExist:
-		lines = append(lines, wrapToPanel(width, s.deps.SecretsPath+" already exists and is left as is."), "", s.hint("enter next, esc back"))
+		lines = append(lines, wrap(s.deps.SecretsPath+" already exists and is left as is.", cw)...)
+		lines = append(append(lines, ""), s.hint("enter next, esc back", cw)...)
 	case s.secretPrompting():
-		lines = append(lines,
-			fmt.Sprintf("Value for %s (%d of %d). Nothing is shown while you type.", s.deps.SecretNames[s.secretIdx], s.secretIdx+1, len(s.deps.SecretNames)),
-			"> "+s.secretInput.View(), "",
-			s.hint("enter submits (empty omits), ctrl+s skips the file, esc back"))
+		lines = append(lines, wrap(fmt.Sprintf("Value for %s (%d of %d). Nothing is shown while you type.", s.deps.SecretNames[s.secretIdx], s.secretIdx+1, len(s.deps.SecretNames)), cw)...)
+		lines = append(lines, clip([]string{"> " + s.secretInput.View()}, cw)[0], "")
+		lines = append(lines, s.hint("enter submits (empty omits), ctrl+s skips the file, esc back", cw)...)
 	}
-	return strings.Join(lines, "\n")
+	return lines
 }
 
 // showSummary renders the plan through the preview runner: names and paths only, never secret values.
@@ -124,7 +126,7 @@ func (s *Install) showSummary() {
 	for i, ps := range s.plan.Steps {
 		label := stepLabel(ps.Step)
 		if ps.Skip != "" {
-			lines = append(lines, fmt.Sprintf("%2d. [skipped: %s] %s", i+1, ps.Skip, label))
+			lines = append(lines, sanitizeLine(fmt.Sprintf("%2d. [skipped: %s] %s", i+1, ps.Skip, label)))
 			continue
 		}
 		detail := label
@@ -133,33 +135,35 @@ func (s *Install) showSummary() {
 				detail = res.Detail
 			}
 		}
-		lines = append(lines, fmt.Sprintf("%2d. %s", i+1, detail))
+		lines = append(lines, sanitizeLine(fmt.Sprintf("%2d. %s", i+1, detail)))
 	}
 	for _, n := range s.plan.Notices {
-		lines = append(lines, "", paint(s.palette.Warning, "notice: "+n))
+		lines = append(lines, "", paint(s.palette.Warning, sanitizeLine("notice: "+n)))
 	}
 	for _, err := range s.plan.Blocking {
-		lines = append(lines, "", paint(s.palette.Error, "blocking: "+err.Error()))
+		lines = append(lines, "", paint(s.palette.Error, sanitizeLine("blocking: "+err.Error())))
 	}
 	lines = append(lines, "", finalNotices)
 	s.summary.SetContentLines(lines)
 	s.summary.GotoTop()
 }
 
-func (s *Install) summaryView(width, height int) string {
+func (s *Install) summaryView(cw, height int) []string {
 	switch {
 	case s.planning:
-		return s.hint("Planning...")
+		return s.hint("Planning...", cw)
 	case s.planErr != nil:
-		return paint(s.palette.Error, wrapToPanel(width, "Plan failed: "+s.planErr.Error())) + "\n\n" + s.hint("esc back")
+		lines := styled(s.palette.Error, wrap("Plan failed: "+s.planErr.Error(), cw))
+		return append(append(lines, ""), s.hint("esc back", cw)...)
 	}
-	s.summary.SetWidth(panelInnerWidth(width))
+	s.summary.SetWidth(max(cw, 1))
 	s.summary.SetHeight(max(height-summaryChrome, 1))
-	footer := s.hint("up/down scroll, enter starts the install, esc back")
+	footer := s.hint("up/down scroll, enter starts the install, esc back", cw)
 	if !s.canConfirm() {
-		footer = paint(s.palette.Error, "The plan cannot run.") + " " + s.hint("esc back")
+		footer = []string{paint(s.palette.Error, "The plan cannot run.") + " " + paint(s.palette.TextMuted, "esc back")}
 	}
-	return bold("Summary") + "\n" + s.summary.View() + "\n\n" + footer
+	lines := append([]string{bold("Summary")}, strings.Split(s.summary.View(), "\n")...)
+	return append(append(lines, ""), footer...)
 }
 
 // stepLabel prefixes the kind only where the label is a bare path or name.
@@ -186,30 +190,33 @@ func (s *Install) statusMark(st stepStatus) string {
 	return "[ ]"
 }
 
-func (s *Install) runView(width, height int) string {
+func (s *Install) runView(cw, height int) []string {
 	listHeight := min(len(s.plan.Steps), max(height/3, 3))
-	start := max(min(s.current-listHeight/2, len(s.plan.Steps)-listHeight), 0)
-	var lines []string
-	for i := start; i < start+listHeight; i++ {
-		lines = append(lines, s.statusMark(s.statuses[i])+" "+stepLabel(s.plan.Steps[i].Step))
+	steps := make([]string, len(s.plan.Steps))
+	for i, step := range s.plan.Steps {
+		steps[i] = s.statusMark(s.statuses[i]) + " " + truncate(sanitizeLine(stepLabel(step.Step)), max(cw-markWidth-1, 0))
 	}
+	lines := windowAround(steps, s.current, listHeight)
 
-	s.logView.SetWidth(panelInnerWidth(width))
+	s.logView.SetWidth(max(cw, 1))
 	s.logView.SetHeight(max(height-listHeight-runChrome, 1))
 	if s.follow {
 		s.logView.GotoBottom()
 	}
-	return strings.Join(lines, "\n") + "\n\n" + s.logView.View() + "\n\n" + s.runStatus(width)
+	lines = append(lines, "")
+	lines = append(lines, strings.Split(s.logView.View(), "\n")...)
+	return append(append(lines, ""), s.runStatus(cw)...)
 }
 
-func (s *Install) runStatus(width int) string {
+func (s *Install) runStatus(cw int) []string {
 	switch {
 	case s.awaitAck:
-		return paint(s.palette.Warning, "Install complete. Press Enter to reboot, ctrl+c to quit without rebooting.") + "\n" + wrapToPanel(width, finalNotices)
+		return append(styled(s.palette.Warning, wrap("Install complete. Press Enter to reboot, ctrl+c to quit without rebooting.", cw)), wrap(finalNotices, cw)...)
 	case s.running:
-		return s.hint("Installing... ctrl+c cancels and quits.")
+		return s.hint("Installing... ctrl+c cancels and quits.", cw)
 	case s.runErr != nil:
-		return paint(s.palette.Error, wrapToPanel(width, "Install stopped: "+s.runErr.Error())) + "\n" + s.hint("esc back to the summary, ctrl+c quits.")
+		return append(styled(s.palette.Error, wrap("Install stopped: "+s.runErr.Error(), cw)), s.hint("esc back to the summary, ctrl+c quits.", cw)...)
 	}
-	return "Done. Nothing was rebooted.\n" + wrapToPanel(width, finalNotices) + "\n" + s.hint("esc back to the summary, ctrl+c quits.")
+	lines := append([]string{"Done. Nothing was rebooted."}, wrap(finalNotices, cw)...)
+	return append(lines, s.hint("esc back to the summary, ctrl+c quits.", cw)...)
 }

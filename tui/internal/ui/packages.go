@@ -246,55 +246,62 @@ func (p *Packages) submit() tea.Cmd {
 }
 
 func (p *Packages) View(width, height int) string {
-	return renderPanel(width, height, p.body(width, max(height-2*panelPadY, 1)))
-}
-
-func (p *Packages) body(width, height int) string {
+	cw := contentWidth(width)
 	if p.form != nil {
-		return p.formView(width)
+		return screenBox(p.palette, "Packages", p.formView(cw), width, height)
 	}
 	var lines []string
 	if p.err != nil {
-		lines = append(lines, paint(p.palette.Error, wrapToPanel(width, p.err.Error())))
+		lines = append(lines, styled(p.palette.Error, wrap(p.err.Error(), cw))...)
 	}
 	if p.notice != "" {
-		lines = append(lines, paint(p.palette.Warning, wrapToPanel(width, p.notice)))
+		lines = append(lines, styled(p.palette.Warning, wrap(p.notice, cw))...)
 	}
-	muted := func(text string) string { return paint(p.palette.TextMuted, text) }
+	muted := func(text string) []string { return styled(p.palette.TextMuted, wrap(text, cw)) }
+	var msg string
 	switch {
 	case p.manager == nil:
-		return strings.Join(append(lines, muted("Packages are not available.")), "\n")
+		msg = "Packages are not available."
 	case !p.loaded:
-		return strings.Join(append(lines, muted("Loading...")), "\n")
+		msg = "Loading..."
 	case p.err != nil && p.names == nil:
-		return strings.Join(append(lines, muted("r refreshes.")), "\n")
+		msg = "r refreshes."
 	case len(p.names) == 0:
-		return strings.Join(append(lines, muted("Every explicit package is registered or ignored.")), "\n")
+		msg = "Every explicit package is registered or ignored."
+	}
+	if msg != "" {
+		return screenBox(p.palette, "Packages", append(lines, muted(msg)...), width, height)
 	}
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d unregistered packages", len(p.names))))
-	visible := max(height-len(lines)-2, 1)
-	start := max(min(p.cursor-visible/2, len(p.names)-visible), 0)
-	for i := start; i < min(start+visible, len(p.names)); i++ {
-		lines = append(lines, cursorMark(i == p.cursor)+p.names[i])
+	rows := make([]listRow, len(p.names))
+	for i, name := range p.names {
+		rows[i] = listRow{text: name}
 	}
-	return strings.Join(append(lines, "", muted("a adds to the catalog, i ignores, r refreshes")), "\n")
+	list, at := listLines(newTheme(p.palette), rows, p.cursor, cw)
+	lines = append(lines, windowAround(list, at, max(innerHeight(height)-len(lines)-2, 1))...)
+	lines = append(lines, "")
+	lines = append(lines, muted("a adds to the catalog, i ignores, r refreshes")...)
+	return screenBox(p.palette, "Packages", lines, width, height)
 }
 
-func (p *Packages) formView(width int) string {
+func (p *Packages) formView(cw int) []string {
 	f := p.form
 	source := string(sourceChoices[f.source])
 	if source == "" {
 		source = "(not chosen, space cycles pacman and aur)"
 	}
 	lines := []string{
-		lipgloss.NewStyle().Bold(true).Render("Add " + f.name + " to the catalog"),
+		lipgloss.NewStyle().Bold(true).Render(truncate(sanitizeLine("Add "+f.name+" to the catalog"), cw)),
 		cursorMark(f.row == formRowSource) + "source: " + source,
 		cursorMark(f.row == formRowMinimal) + checkbox(f.minimal) + " minimal profile",
 		cursorMark(f.row == formRowFull) + checkbox(f.full) + " full profile",
 		cursorMark(f.row == formRowGroup) + "group (optional): " + f.group.View(),
 	}
+	lines = clip(lines, cw)
 	if f.err != "" {
-		lines = append(lines, "", paint(p.palette.Error, wrapToPanel(width, f.err)))
+		lines = append(lines, "")
+		lines = append(lines, styled(p.palette.Error, wrap(f.err, cw))...)
 	}
-	return strings.Join(append(lines, "", paint(p.palette.TextMuted, "up/down move, space toggles, enter adds, esc cancels")), "\n")
+	lines = append(lines, "")
+	return append(lines, styled(p.palette.TextMuted, wrap("up/down move, space toggles, enter adds, esc cancels", cw))...)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"image/color"
-	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -159,47 +158,51 @@ func (b *Backups) delete() tea.Cmd {
 }
 
 func (b *Backups) View(width, height int) string {
-	return renderPanel(width, height, b.body(width, max(height-2*panelPadY, 1)))
-}
-
-func (b *Backups) body(width, height int) string {
+	cw := contentWidth(width)
+	inner := innerHeight(height)
 	var lines []string
 	if b.err != nil {
-		lines = append(lines, b.colored(b.palette.Error, wrapToPanel(width, b.err.Error())))
+		lines = append(lines, styled(b.palette.Error, wrap(b.err.Error(), cw))...)
 	}
 	if b.notice != "" {
-		lines = append(lines, b.colored(b.palette.Warning, b.notice))
+		lines = append(lines, styled(b.palette.Warning, wrap(b.notice, cw))...)
 	}
 	if len(b.backups) == 0 {
-		return strings.Join(append(lines, b.colored(b.palette.TextMuted, "No backups yet.")), "\n")
+		lines = append(lines, b.colored(b.palette.TextMuted, "No backups yet."))
+		return screenBox(b.palette, "Backups", lines, width, height)
 	}
 	lines = append(lines, lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d backups, newest first", len(b.backups))))
-	listHeight := max((height-len(lines))/2, 1)
-	start := max(min(b.cursor-listHeight/2, len(b.backups)-listHeight), 0)
-	for i := start; i < min(start+listHeight, len(b.backups)); i++ {
-		lines = append(lines, b.row(i, b.backups[i]))
+	rows := make([]listRow, len(b.backups))
+	for i, bk := range b.backups {
+		rows[i] = listRow{text: b.rowText(bk, width)}
 	}
+	list, at := listLines(newTheme(b.palette), rows, b.cursor, cw)
+	lines = append(lines, windowAround(list, at, max((inner-len(lines))/2, 1))...)
 	sel := b.backups[b.cursor]
-	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Render(sel.Dir))
+	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Render(truncate(sanitizeLine(sel.Dir), cw)))
 	if b.confirm {
-		lines = append(lines, b.colored(b.palette.Warning, fmt.Sprintf("Delete this backup (%d files)? (y/n)", len(sel.Files))))
+		lines = append(lines, styled(b.palette.Warning, wrap(fmt.Sprintf("Delete this backup (%d files)? (y/n)", len(sel.Files)), cw))...)
 	}
-	room := max(height-len(lines), 1)
-	files := sel.Files
-	if len(files) > room {
-		files = append(files[:room-1:room-1], fmt.Sprintf("... %d more", len(sel.Files)-room+1))
+	room := max(inner-len(lines), 1)
+	files := make([]string, 0, min(len(sel.Files), room))
+	for _, f := range sel.Files {
+		if len(files) == room-1 && len(sel.Files) > room {
+			files = append(files, fmt.Sprintf("... %d more", len(sel.Files)-room+1))
+			break
+		}
+		files = append(files, truncate(sanitizeLine(f), cw))
 	}
-	return strings.Join(append(lines, files...), "\n")
+	return screenBox(b.palette, "Backups", append(lines, files...), width, height)
 }
 
-func (b *Backups) row(i int, bk backup.Backup) string {
-	cursor := "  "
-	if i == b.cursor {
-		cursor = "> "
+// rowText is the plain backup row; narrow panels drop direction and file count.
+func (b *Backups) rowText(bk backup.Backup, width int) string {
+	line := bk.Created.Format(timeLayout)
+	if width >= wideRowWidth {
+		line += fmt.Sprintf("  %s %d files", directionLabel(bk.Direction), len(bk.Files))
 	}
-	line := fmt.Sprintf("%s%s  %-7s %d files", cursor, bk.Created.Format(timeLayout), directionLabel(bk.Direction), len(bk.Files))
 	if f := flag(bk); f != "" {
-		line += " " + b.colored(b.palette.Warning, "["+f+"]")
+		line += " [" + f + "]"
 	}
 	return line
 }
