@@ -1,4 +1,4 @@
-package system_test
+package osexec_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -153,7 +153,7 @@ func TestPrivilegedWriteFile_DefaultStagingDirIsPrivateUnderHomeWhenNoRuntimeDir
 	t.Setenv("XDG_RUNTIME_DIR", "")
 	home := t.TempDir()
 	f := &fakeExec{}
-	r := system.Runner{Home: home, Exec: f.run}
+	r := osexec.Runner{Home: home, Exec: f.run}
 	res := r.Run(context.Background(), plan.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
 	if res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)
@@ -172,7 +172,7 @@ func TestPrivilegedWriteFile_RuntimeDirIsTheDefaultWhenSet(t *testing.T) {
 	runtimeDir := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
 	f := &fakeExec{}
-	r := system.Runner{Home: t.TempDir(), Exec: f.run}
+	r := osexec.Runner{Home: t.TempDir(), Exec: f.run}
 	res := r.Run(context.Background(), plan.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true}, nil)
 	if res.Status != plan.StepOK {
 		t.Fatalf("result = %+v", res)

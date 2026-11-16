@@ -1,4 +1,4 @@
-package system_test
+package osexec_test
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
@@ -38,7 +38,7 @@ func TestRunnerCopyStepUsesRsync(t *testing.T) {
 	if _, err := exec.LookPath("rsync"); err != nil {
 		t.Skip("rsync not installed")
 	}
-	r := system.Runner{Home: t.TempDir(), ConfigDir: t.TempDir()}
+	r := osexec.Runner{Home: t.TempDir(), ConfigDir: t.TempDir()}
 	root := t.TempDir()
 	ctx := context.Background()
 
@@ -62,7 +62,7 @@ func TestRunnerCopyStepUsesRsync(t *testing.T) {
 }
 
 func TestRunnerUnsupportedStepFails(t *testing.T) {
-	res := system.Runner{Home: t.TempDir(), ConfigDir: t.TempDir()}.Run(context.Background(), nil, nil)
+	res := osexec.Runner{Home: t.TempDir(), ConfigDir: t.TempDir()}.Run(context.Background(), nil, nil)
 	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Errorf("unsupported step: %+v", res)
 	}
@@ -71,7 +71,7 @@ func TestRunnerUnsupportedStepFails(t *testing.T) {
 func TestRunnerBackupAndDeleteBackupDelegateToFsx(t *testing.T) {
 	home, src := t.TempDir(), t.TempDir()
 	writeFile(t, src+"/f", "data")
-	r := system.Runner{Home: home, ConfigDir: t.TempDir()}
+	r := osexec.Runner{Home: home, ConfigDir: t.TempDir()}
 	ctx := context.Background()
 
 	res := r.Run(ctx, plan.BackupStep{
@@ -96,14 +96,14 @@ func TestRunnerBackupAndDeleteBackupDelegateToFsx(t *testing.T) {
 
 func TestRunnerDispatch(t *testing.T) {
 	home, cfg := t.TempDir(), t.TempDir()
-	r := system.Runner{Home: home, ConfigDir: cfg}
+	r := osexec.Runner{Home: home, ConfigDir: cfg}
 	ctx := context.Background()
 
 	res := r.Run(ctx, plan.SaveStateStep{State: state.State{RepoPath: "/elsewhere/repo"}}, nil)
 	if res.Status != plan.StepOK {
 		t.Fatalf("save state: %+v", res)
 	}
-	st, warn := system.Inspector{Home: home}.LoadState(ctx)
+	st, warn := state.LoadState(state.StatePath(home))
 	if warn != "" || st.RepoPath != "/elsewhere/repo" {
 		t.Errorf("state = %+v, warning %q", st, warn)
 	}

@@ -13,11 +13,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/sysx"
@@ -67,12 +67,12 @@ func run(dryRun bool, repoFlag string) error {
 		return err
 	}
 
-	inspector := system.Inspector{Home: home}
+	inspector := Inspector{Home: home}
 	state, stateWarning := inspector.LoadState(context.Background())
 	repo := resolveRepo(repoFlag, state.RepoPath, cwd)
 
 	bridge := ui.NewTerminalBridge()
-	var runner plan.Runner = system.Runner{Home: home, ConfigDir: configDir, Terminal: bridge}
+	var runner plan.Runner = osexec.Runner{Home: home, ConfigDir: configDir, Terminal: bridge}
 	if dryRun {
 		runner = dryrun.Recorder{}
 	}

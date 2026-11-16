@@ -1,4 +1,4 @@
-package system_test
+package osexec_test
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -91,8 +91,8 @@ func (f *fakeTerminal) Run(_ context.Context, cmd *exec.Cmd) error {
 	return f.err
 }
 
-func newRunner(f *fakeExec) system.Runner {
-	return system.Runner{Home: filepath.Join(os.TempDir(), "unused-home"), Exec: f.run}
+func newRunner(f *fakeExec) osexec.Runner {
+	return osexec.Runner{Home: filepath.Join(os.TempDir(), "unused-home"), Exec: f.run}
 }
 
 func TestCommandStep_SudoUsesNonInteractiveSudoWithoutAShell(t *testing.T) {

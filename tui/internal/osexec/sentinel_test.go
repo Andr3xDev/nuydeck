@@ -1,4 +1,4 @@
-package system_test
+package osexec_test
 
 import (
 	"context"
@@ -13,15 +13,59 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/gitx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/rsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
+
+// sentinelInspector duplicates cmd/nuydeck's Inspector glue, which tests here cannot import.
+type sentinelInspector struct {
+	Home string
+}
+
+func (i sentinelInspector) Diff(ctx context.Context, e manifest.ResolvedEntry, src, dst plan.Endpoint) ([]plan.Change, error) {
+	kind, err := osfs.PathKind(src.Path)
+	if err != nil {
+		return nil, err
+	}
+	res, err := rsync.Plan(ctx, rsync.Request{Src: src.Path, Dst: dst.Path, Dir: kind == plan.KindDir, Filter: e.Filter})
+	if err != nil {
+		return nil, err
+	}
+	changes := make([]plan.Change, len(res.Items))
+	for n, it := range res.Items {
+		changes[n] = plan.Change{Entry: e.Entry, Path: it.Path, Type: it.Type, Kind: it.Kind}
+	}
+	return changes, nil
+}
+
+func (sentinelInspector) LinkTarget(path string) (string, error)      { return osfs.LinkTarget(path) }
+func (sentinelInspector) PathKind(path string) (plan.NodeKind, error) { return osfs.PathKind(path) }
+
+func (sentinelInspector) NewestMTime(_ context.Context, path string, filter manifest.Filter) (time.Time, error) {
+	return osfs.NewestMTime(path, filter)
+}
+
+func (sentinelInspector) RepoTimes(ctx context.Context, repo, rel string) (plan.RepoTimes, error) {
+	return gitx.Reader{}.RepoTimes(ctx, repo, rel)
+}
+
+func (i sentinelInspector) ListBackups(ctx context.Context) ([]backup.Backup, error) {
+	return backup.ListBackups(ctx, i.Home)
+}
+
+func (i sentinelInspector) LoadState(context.Context) (state.State, string) {
+	return state.LoadState(state.StatePath(i.Home))
+}
 
 const (
 	secretSentinel = "SENTINEL-s3cr3t-Zx9Q-7731"
@@ -85,7 +129,7 @@ type sentinelRun struct {
 
 func sentinelInstaller(t *testing.T, home string, runner plan.Runner, dryRun bool) *app.Installer {
 	t.Helper()
-	inspector := system.Inspector{Home: home}
+	inspector := sentinelInspector{Home: home}
 	now := func() time.Time { return time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC) }
 	return &app.Installer{
 		Service: &app.Service{Inspector: inspector, Runner: runner, RepoDir: filepath.Join(home, "repo"), Now: now},
@@ -181,7 +225,7 @@ func TestSentinelRecorderPlanAndRun(t *testing.T) {
 	run.assertNoSentinel(t)
 }
 
-// Test 2 runs the real system.Runner (real fsx secrets, file and log adapters); only external commands and the sudo handoff are faked.
+// Test 2 runs the real osexec.Runner (real fsx secrets, file and log adapters); only external commands and the sudo handoff are faked.
 func TestSentinelRealRunnerSecretsWriteFailure(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("read-only target is not enforced for root")
@@ -195,7 +239,7 @@ func TestSentinelRealRunnerSecretsWriteFailure(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	runner := system.Runner{Home: home, ConfigDir: configDir, Exec: sentinelExec, Terminal: sentinelTerminal{}, TempDir: stagingDir}
+	runner := osexec.Runner{Home: home, ConfigDir: configDir, Exec: sentinelExec, Terminal: sentinelTerminal{}, TempDir: stagingDir}
 	capture := &capturingRunner{inner: runner}
 	inst := sentinelInstaller(t, home, capture, false)
 	inst.KeepaliveEvery = time.Hour
