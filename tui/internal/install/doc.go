@@ -1,2 +1,2 @@
-// Package app: use cases and ports (Inspector, Runner).
+// Package install: guided install use case (draft, plan, phases, run).
 package install
