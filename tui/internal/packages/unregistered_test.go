@@ -1,11 +1,11 @@
-package domain_test
+package packages_test
 
 import (
 	"slices"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/packages"
 )
 
 func TestCatalogUnregistered(t *testing.T) {
@@ -27,7 +27,7 @@ func TestCatalogUnregistered(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := domain.Unregistered(tc.explicit, catalog, drivers, prerequisites, tc.ignored)
+			got := packages.Unregistered(tc.explicit, catalog, drivers, prerequisites, tc.ignored)
 			if got == nil {
 				t.Fatal("Unregistered() = nil, want a non-nil slice")
 			}

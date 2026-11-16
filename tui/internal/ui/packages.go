@@ -17,7 +17,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
-// PackageManager is the packages use-case surface the screen needs; *app.Packages implements it.
+// PackageManager is the packages use-case surface the screen needs; *packages.Packages implements it.
 type PackageManager interface {
 	ListUnregistered(ctx context.Context) ([]string, error)
 	AddPackage(ctx context.Context, pkg manifest.Package) (plan.StepResult, error)

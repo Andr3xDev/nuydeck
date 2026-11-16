@@ -1,9 +1,10 @@
-package app
+package packages
 
 import (
 	"context"
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
@@ -13,10 +14,49 @@ import (
 
 const catalogPath = "/repo/manifest/packages.toml"
 
+type fakeProbe struct {
+	explicit    []string
+	explicitErr error
+}
+
+func (p *fakeProbe) ExplicitPackages(context.Context) ([]string, error) {
+	return p.explicit, p.explicitErr
+}
+
+type fakeInspector struct{ state state.State }
+
+func (f *fakeInspector) LoadState(context.Context) (state.State, string) { return f.state, "" }
+
+type fakeRunner struct {
+	mu     sync.Mutex
+	steps  []plan.Step
+	result func(plan.Step) plan.StepResult
+}
+
+func (r *fakeRunner) Run(_ context.Context, s plan.Step, _ func(plan.StepProgress)) plan.StepResult {
+	r.mu.Lock()
+	r.steps = append(r.steps, s)
+	r.mu.Unlock()
+	if r.result != nil {
+		return r.result(s)
+	}
+	return plan.StepResult{Status: plan.StepOK}
+}
+
+func stepsOfType[T plan.Step](steps []plan.Step) []T {
+	var out []T
+	for _, s := range steps {
+		if v, ok := s.(T); ok {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 func newPackages(probe *fakeProbe, in *fakeInspector, r plan.Runner) *Packages {
 	return &Packages{
 		Probe:       probe,
-		Inspector:   in,
+		LoadState:   in.LoadState,
 		Runner:      r,
 		CatalogPath: catalogPath,
 		Catalog:     []manifest.Package{{Name: "hyprland", Source: manifest.SourcePacman, Profiles: []string{"minimal"}}},

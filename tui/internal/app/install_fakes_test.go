@@ -14,8 +14,6 @@ import (
 type fakeProbe struct {
 	installed    map[string]bool
 	installedErr error
-	explicit     []string
-	explicitErr  error
 	commands     map[string]bool
 	shell        string
 	files        map[string][]byte
@@ -26,10 +24,6 @@ func (p *fakeProbe) DetectGPUs(context.Context) ([]domain.PCIDevice, error) { re
 
 func (p *fakeProbe) InstalledPackages(context.Context) (map[string]bool, error) {
 	return p.installed, p.installedErr
-}
-
-func (p *fakeProbe) ExplicitPackages(context.Context) ([]string, error) {
-	return p.explicit, p.explicitErr
 }
 
 func (p *fakeProbe) HasCommand(name string) bool { return p.commands[name] }

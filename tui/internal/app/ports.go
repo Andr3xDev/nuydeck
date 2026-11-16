@@ -23,7 +23,6 @@ type Inspector interface {
 type SystemProbe interface {
 	DetectGPUs(ctx context.Context) ([]domain.PCIDevice, error)
 	InstalledPackages(ctx context.Context) (map[string]bool, error)
-	ExplicitPackages(ctx context.Context) ([]string, error)
 	HasCommand(name string) bool
 	LoginShell(ctx context.Context) (string, error)
 	// ReadSystemFile reads an allow-listed system file; a missing file returns an error wrapping fs.ErrNotExist.

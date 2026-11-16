@@ -22,6 +22,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
+	"github.com/Andr3xDev/nuydeck/tui/internal/packages"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/sysx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui"
@@ -138,8 +139,8 @@ func wireCatalog(deps *ui.Deps, svc *app.Service, repo, home, username string, d
 		Catalog:     catalog,
 		Drivers:     drivers,
 	}
-	deps.Packages = &app.Packages{
-		Probe: probe, Inspector: inspector, Runner: runner, Catalog: catalog, Drivers: drivers,
+	deps.Packages = &packages.Packages{
+		Probe: probe, LoadState: inspector.LoadState, Runner: runner, Catalog: catalog, Drivers: drivers,
 		CatalogPath: filepath.Join(repo, packagesRelPath),
 	}
 }

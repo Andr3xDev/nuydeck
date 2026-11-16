@@ -1,18 +1,24 @@
-package app
+package packages
 
 import (
 	"context"
 	"slices"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
+
+// Probe is the read-only machine query the packages screen needs.
+type Probe interface {
+	ExplicitPackages(ctx context.Context) ([]string, error)
+}
 
 // Packages manages explicit packages that the catalog does not know.
 type Packages struct {
-	Probe       SystemProbe
-	Inspector   Inspector
+	Probe Probe
+	// LoadState never fails; a non-empty warning means defaults were used.
+	LoadState   func(ctx context.Context) (state.State, string)
 	Runner      plan.Runner
 	Catalog     []manifest.Package
 	Drivers     []manifest.Driver
@@ -25,8 +31,8 @@ func (p *Packages) ListUnregistered(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	state, _ := p.Inspector.LoadState(ctx)
-	return domain.Unregistered(explicit, p.Catalog, p.Drivers, manifest.ParuPrerequisites, state.IgnoredPackages), nil
+	saved, _ := p.LoadState(ctx)
+	return Unregistered(explicit, p.Catalog, p.Drivers, manifest.ParuPrerequisites, saved.IgnoredPackages), nil
 }
 
 // AddPackage appends pkg to the catalog file; an invalid or duplicate package is rejected before any write.
@@ -44,9 +50,9 @@ func (p *Packages) AddPackage(ctx context.Context, pkg manifest.Package) (plan.S
 
 // IgnorePackage adds name to the ignored packages in the state, keeping the rest of the state as saved.
 func (p *Packages) IgnorePackage(ctx context.Context, name string) plan.StepResult {
-	state, _ := p.Inspector.LoadState(ctx)
-	if !slices.Contains(state.IgnoredPackages, name) {
-		state.IgnoredPackages = append(slices.Clone(state.IgnoredPackages), name)
+	saved, _ := p.LoadState(ctx)
+	if !slices.Contains(saved.IgnoredPackages, name) {
+		saved.IgnoredPackages = append(slices.Clone(saved.IgnoredPackages), name)
 	}
-	return p.Runner.Run(ctx, plan.SaveStateStep{State: state}, nil)
+	return p.Runner.Run(ctx, plan.SaveStateStep{State: saved}, nil)
 }
