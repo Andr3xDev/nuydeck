@@ -12,9 +12,9 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/gitx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/rsync"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/tomlx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 // Inspector is the real app.Inspector.
@@ -53,8 +53,8 @@ func (i Inspector) ListBackups(ctx context.Context) ([]domain.Backup, error) {
 	return fsx.ListBackups(ctx, i.Home)
 }
 
-func (i Inspector) LoadState(context.Context) (domain.State, string) {
-	return tomlx.LoadState(tomlx.StatePath(i.Home))
+func (i Inspector) LoadState(context.Context) (state.State, string) {
+	return state.LoadState(state.StatePath(i.Home))
 }
 
 // Runner is the real app.Runner.
@@ -87,9 +87,9 @@ func (r Runner) Run(ctx context.Context, s domain.Step, progress func(domain.Ste
 		}
 		return domain.StepResult{Status: domain.StepOK, Applied: s.Paths}
 	case domain.SaveStateStep:
-		return done(tomlx.SaveState(tomlx.StatePath(r.Home), s.State))
+		return done(state.SaveState(state.StatePath(r.Home), s.State))
 	case domain.AppendLogStep:
-		return done(tomlx.AppendLog(tomlx.LogsDir(r.ConfigDir), s.Entry))
+		return done(state.AppendLog(state.LogsDir(r.ConfigDir), s.Entry))
 	case domain.DeleteStep, domain.BackupStep, domain.DeleteBackupStep, domain.SymlinkStep, domain.WriteSecretsStep:
 		return fsx.Runner{Home: r.Home}.Run(ctx, s, progress)
 	case domain.WriteFileStep:

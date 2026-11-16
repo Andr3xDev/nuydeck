@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 const (
@@ -46,7 +47,7 @@ func sudoProbe() domain.PlannedStep {
 }
 
 func recordStep() domain.PlannedStep {
-	return planned(domain.PhaseRecord, domain.AppendLogStep{Entry: domain.LogEntry{Op: "install"}})
+	return planned(domain.PhaseRecord, domain.AppendLogStep{Entry: state.LogEntry{Op: "install"}})
 }
 
 func rebootStep() domain.PlannedStep {
@@ -563,7 +564,7 @@ func TestRun_LogsOneItemPerStepWithLabelKindAndResult(t *testing.T) {
 
 	res, _ := runInstall(t, newRunInstaller(r), steps, nil)
 
-	want := []domain.LogItem{
+	want := []state.LogItem{
 		{Path: "one", Kind: "command", Result: "done"},
 		{Path: "skipped", Kind: "command", Result: "skipped"},
 		{Path: "/home/u/.config/nuydeck/theme/name", Kind: "file", Result: "done"},

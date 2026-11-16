@@ -14,6 +14,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 // repoTimesFileKey is the key gitx.RepoTimes uses for a file entry: the entry
@@ -340,16 +341,16 @@ func (s *Service) Apply(ctx context.Context, plan SyncPlan, sel Selection, opts 
 	return res
 }
 
-func (s *Service) syncedState(ctx context.Context, dir domain.Direction) domain.State {
+func (s *Service) syncedState(ctx context.Context, dir domain.Direction) state.State {
 	// Re-read so ignores and state saved since planning are not overwritten.
-	state, _ := s.Inspector.LoadState(ctx)
-	state.RepoPath = s.RepoDir
-	state.LastSync = &domain.LastSync{Time: s.Now(), Direction: directionName(dir)}
-	return state
+	current, _ := s.Inspector.LoadState(ctx)
+	current.RepoPath = s.RepoDir
+	current.LastSync = &state.LastSync{Time: s.Now(), Direction: directionName(dir)}
+	return current
 }
 
-func (s *Service) logEntry(dir domain.Direction, dryRun bool, items []PlanItem, res ApplyResult) domain.LogEntry {
-	entry := domain.LogEntry{
+func (s *Service) logEntry(dir domain.Direction, dryRun bool, items []PlanItem, res ApplyResult) state.LogEntry {
+	entry := state.LogEntry{
 		Time:      s.Now().Format(time.RFC3339),
 		Op:        "sync",
 		Direction: directionName(dir),
@@ -363,7 +364,7 @@ func (s *Service) logEntry(dir domain.Direction, dryRun bool, items []PlanItem, 
 		entry.Result, entry.Error = "failed", res.Err.Error()
 	}
 	for i, it := range items {
-		entry.Items = append(entry.Items, domain.LogItem{Path: it.rel(), Kind: kindName(it.Change.Kind), Result: res.Items[i].Result})
+		entry.Items = append(entry.Items, state.LogItem{Path: it.rel(), Kind: kindName(it.Change.Kind), Result: res.Items[i].Result})
 	}
 	return entry
 }

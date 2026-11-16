@@ -11,6 +11,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 const (
@@ -90,7 +91,7 @@ func (i *Installer) Plan(ctx context.Context, d Draft) (InstallPlan, error) {
 	i.planServices(b, d)
 	i.planTheme(b, d)
 
-	b.add(domain.PhaseRecord, domain.AppendLogStep{Entry: domain.LogEntry{Op: "install"}}, "")
+	b.add(domain.PhaseRecord, domain.AppendLogStep{Entry: state.LogEntry{Op: "install"}}, "")
 	b.add(domain.PhaseReboot, domain.CommandStep{Label: "reboot", Argv: []string{"systemctl", "reboot"}, Sudo: true}, "")
 	return b.plan, nil
 }

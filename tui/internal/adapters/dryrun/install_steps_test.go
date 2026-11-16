@@ -10,6 +10,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 const sentinel = "SENTINEL-secret-value-4d2b"
@@ -87,7 +88,7 @@ func TestRecorderSecretsStepWithoutEntriesSaysEmptyFileMode600(t *testing.T) {
 }
 
 func TestRecorderSaveStatePrintsIgnoredPackages(t *testing.T) {
-	got := detailOf(t, domain.SaveStateStep{State: domain.State{IgnoredPackages: []string{"htop", "tmux"}}})
+	got := detailOf(t, domain.SaveStateStep{State: state.State{IgnoredPackages: []string{"htop", "tmux"}}})
 	if !strings.HasPrefix(got, "would save state") {
 		t.Errorf("render = %q, want prefix %q", got, "would save state")
 	}

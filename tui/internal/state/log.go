@@ -1,4 +1,4 @@
-package domain
+package state
 
 // LogEntry is one JSONL record of a write operation.
 type LogEntry struct {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 var (
@@ -32,7 +33,7 @@ func twoEntryPlan(t *testing.T, dir domain.Direction) SyncPlan {
 
 func runApply(t *testing.T, plan SyncPlan, sel Selection, opts ApplyOptions, r *fakeRunner) ApplyResult {
 	t.Helper()
-	return newService(t, &fakeInspector{state: domain.State{RepoPath: testRepo}}, r).Apply(context.Background(), plan, sel, opts, nil)
+	return newService(t, &fakeInspector{state: state.State{RepoPath: testRepo}}, r).Apply(context.Background(), plan, sel, opts, nil)
 }
 
 func TestApply_BuildsOrderedSteps(t *testing.T) {

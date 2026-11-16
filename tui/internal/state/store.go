@@ -1,4 +1,4 @@
-package tomlx
+package state
 
 import (
 	"encoding/json"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 )
 
@@ -31,8 +30,8 @@ func LogsDir(configDir string) string { return filepath.Join(configDir, "nuydeck
 
 // LoadState reads the state file; a missing, corrupt or unsupported file yields
 // defaults and a warning, and is left untouched until the next SaveState.
-func LoadState(path string) (state domain.State, warning string) {
-	defaults := domain.State{Version: stateVersion}
+func LoadState(path string) (state State, warning string) {
+	defaults := State{Version: stateVersion}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return defaults, ""
@@ -51,7 +50,7 @@ func LoadState(path string) (state domain.State, warning string) {
 
 // SaveState writes the state atomically and refuses a path inside the repo.
 // Containment is checked on symlink-resolved paths and fails closed.
-func SaveState(path string, s domain.State) error {
+func SaveState(path string, s State) error {
 	dir := filepath.Dir(path)
 	if s.RepoPath != "" {
 		if err := refuseInsideRepo(dir, s.RepoPath); err != nil {
@@ -88,7 +87,7 @@ func refuseInsideRepo(dir, repo string) error {
 }
 
 // AppendLog appends e as one JSON line to <logsDir>/YYYY-MM.jsonl, the month taken from e.Time.
-func AppendLog(logsDir string, e domain.LogEntry) error {
+func AppendLog(logsDir string, e LogEntry) error {
 	ts, err := time.Parse(time.RFC3339, e.Time)
 	if err != nil {
 		return fmt.Errorf("log entry time: %w", err)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 // Inspector holds every read the use cases need; it is always the real
@@ -22,7 +23,7 @@ type Inspector interface {
 	// ListBackups returns backups newest first.
 	ListBackups(ctx context.Context) ([]domain.Backup, error)
 	// LoadState never fails; a non-empty warning means defaults were used.
-	LoadState(ctx context.Context) (domain.State, string)
+	LoadState(ctx context.Context) (state.State, string)
 }
 
 // Runner is the only way anything is modified; dry-run swaps in a recorder.

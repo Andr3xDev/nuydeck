@@ -8,6 +8,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 const catalogPath = "/repo/manifest/packages.toml"
@@ -45,7 +46,7 @@ func TestPackages_ListUnregisteredExcludesCatalogDriversPrerequisitesAndIgnored(
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			in := &fakeInspector{state: domain.State{IgnoredPackages: tc.ignored}}
+			in := &fakeInspector{state: state.State{IgnoredPackages: tc.ignored}}
 			got, err := newPackages(&fakeProbe{explicit: tc.explicit}, in, &fakeRunner{}).ListUnregistered(context.Background())
 			if err != nil || !slices.Equal(got, tc.want) {
 				t.Fatalf("ListUnregistered = %v, %v; want %v", got, err, tc.want)
@@ -141,7 +142,7 @@ func TestPackages_IgnorePackageAppendsToIgnoredPackagesAndKeepsSyncState(t *test
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			state := domain.State{Version: 1, RepoPath: "/repo", Ignores: []string{"config:hypr/a.conf"}, IgnoredPackages: tc.existing}
+			state := state.State{Version: 1, RepoPath: "/repo", Ignores: []string{"config:hypr/a.conf"}, IgnoredPackages: tc.existing}
 			r := &fakeRunner{}
 
 			newPackages(&fakeProbe{}, &fakeInspector{state: state}, r).IgnorePackage(context.Background(), "htop")

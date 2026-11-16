@@ -9,8 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
@@ -74,7 +74,7 @@ type Deps struct {
 	Backups       BackupManager
 	Entries       []manifest.ResolvedEntry
 	StateWarning  string
-	LastSync      *domain.LastSync
+	LastSync      *state.LastSync
 	ManifestError error
 	// CatalogError replaces only the Install and Packages sections.
 	CatalogError error

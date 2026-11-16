@@ -13,6 +13,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
@@ -53,7 +54,7 @@ type Dashboard struct {
 
 type dashboardInfo struct {
 	warning  string
-	lastSync *domain.LastSync
+	lastSync *state.LastSync
 }
 
 func newDashboard(deps Deps, keys KeyMap, palette theme.Palette) *Dashboard {

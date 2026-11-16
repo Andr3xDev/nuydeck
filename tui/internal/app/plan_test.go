@@ -9,6 +9,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 func TestPlanSync_DiffDirectionFollowsSyncDirection(t *testing.T) {
@@ -147,7 +148,7 @@ func TestPlanSync_DefaultSelectionIsAllExceptStateIgnores(t *testing.T) {
 	e := resolved(manifest.RootConfig, "hypr")
 	in := &fakeInspector{
 		diff:  diffReturning(change("a.conf", domain.Update, domain.KindFile), change("b.conf", domain.Update, domain.KindFile)),
-		state: domain.State{Ignores: []string{"config:hypr/b.conf"}},
+		state: state.State{Ignores: []string{"config:hypr/b.conf"}},
 	}
 	plan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), domain.Push, []manifest.ResolvedEntry{e})
 	if err != nil {

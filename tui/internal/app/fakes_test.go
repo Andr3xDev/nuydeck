@@ -8,6 +8,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 const (
@@ -33,7 +34,7 @@ type fakeInspector struct {
 	mtimes      map[string]time.Time
 	repoTimes   map[string]domain.RepoTimes
 	backups     []domain.Backup
-	state       domain.State
+	state       state.State
 	stateWarn   string
 	// listBackupsGate, when set, blocks ListBackups until it is closed.
 	listBackupsGate chan struct{}
@@ -70,7 +71,7 @@ func (f *fakeInspector) ListBackups(context.Context) ([]domain.Backup, error) {
 	return f.backups, nil
 }
 
-func (f *fakeInspector) LoadState(context.Context) (domain.State, string) {
+func (f *fakeInspector) LoadState(context.Context) (state.State, string) {
 	return f.state, f.stateWarn
 }
 

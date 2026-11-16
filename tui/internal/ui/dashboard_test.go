@@ -12,6 +12,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 type fakeDrifter struct {
@@ -165,9 +166,9 @@ func TestDashboardRefreshesAfterApply(t *testing.T) {
 	d.Init()
 	gen := d.gen
 
-	stamp := &domain.LastSync{Direction: "push"}
+	stamp := &state.LastSync{Direction: "push"}
 	_, cmd := d.Update(applyDoneMsg{result: app.ApplyResult{Outcomes: []app.StepOutcome{
-		{Step: domain.SaveStateStep{State: domain.State{LastSync: stamp}}, Result: domain.StepResult{Status: domain.StepOK}},
+		{Step: domain.SaveStateStep{State: state.State{LastSync: stamp}}, Result: domain.StepResult{Status: domain.StepOK}},
 	}}})
 	if cmd == nil || d.gen != gen+1 || len(f.ctxs) != 2 {
 		t.Errorf("apply must re-run drift: gen=%d runs=%d", d.gen, len(f.ctxs))

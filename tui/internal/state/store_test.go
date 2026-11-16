@@ -1,4 +1,4 @@
-package tomlx_test
+package state_test
 
 import (
 	"encoding/json"
@@ -9,32 +9,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/tomlx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 func TestStateAndLogLocations(t *testing.T) {
-	if got, want := tomlx.StatePath("/h"), "/h/.local/state/nuydeck/state.toml"; got != want {
+	if got, want := state.StatePath("/h"), "/h/.local/state/nuydeck/state.toml"; got != want {
 		t.Errorf("StatePath = %q, want %q", got, want)
 	}
-	if got, want := tomlx.LogsDir("/c"), "/c/nuydeck/logs"; got != want {
+	if got, want := state.LogsDir("/c"), "/c/nuydeck/logs"; got != want {
 		t.Errorf("LogsDir = %q, want %q", got, want)
 	}
 }
 
 func TestState_SaveThenLoadRoundTripCreatingMissingDir(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state", "nuydeck", "state.toml")
-	want := domain.State{
+	want := state.State{
 		Version:  1,
 		RepoPath: "/home/u/nuydeck",
-		LastSync: &domain.LastSync{Time: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC), Direction: "push"},
+		LastSync: &state.LastSync{Time: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC), Direction: "push"},
 		Ignores:  []string{"config:nvim/lazy-lock.json"},
 	}
 
-	if err := tomlx.SaveState(path, want); err != nil {
+	if err := state.SaveState(path, want); err != nil {
 		t.Fatal(err)
 	}
-	got, warning := tomlx.LoadState(path)
+	got, warning := state.LoadState(path)
 
 	if warning != "" || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v (warning %q), want %+v", got, warning, want)
@@ -47,17 +46,17 @@ func TestState_SaveThenLoadRoundTripCreatingMissingDir(t *testing.T) {
 
 func TestState_IgnoredPackagesRoundTripKeepsIgnoresAndVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.toml")
-	want := domain.State{
+	want := state.State{
 		Version:         1,
 		RepoPath:        "/home/u/nuydeck",
 		Ignores:         []string{"config:nvim/lazy-lock.json"},
 		IgnoredPackages: []string{"htop", "ncdu"},
 	}
 
-	if err := tomlx.SaveState(path, want); err != nil {
+	if err := state.SaveState(path, want); err != nil {
 		t.Fatal(err)
 	}
-	got, warning := tomlx.LoadState(path)
+	got, warning := state.LoadState(path)
 
 	if warning != "" || !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v (warning %q), want %+v", got, warning, want)
@@ -67,7 +66,7 @@ func TestState_IgnoredPackagesRoundTripKeepsIgnoresAndVersion(t *testing.T) {
 func TestState_SaveOmitsIgnoredPackagesKeyWhenEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.toml")
 
-	if err := tomlx.SaveState(path, domain.State{Version: 1}); err != nil {
+	if err := state.SaveState(path, state.State{Version: 1}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -87,7 +86,7 @@ func TestState_FileWithoutIgnoredPackagesLoadsEmptyWithoutWarning(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	got, warning := tomlx.LoadState(path)
+	got, warning := state.LoadState(path)
 
 	if warning != "" || len(got.IgnoredPackages) != 0 || got.Version != 1 || len(got.Ignores) != 1 {
 		t.Fatalf("got %+v (warning %q)", got, warning)
@@ -101,7 +100,7 @@ func TestState_FailedSaveLeavesNoTempFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := tomlx.SaveState(path, domain.State{Version: 1}); err == nil {
+	if err := state.SaveState(path, state.State{Version: 1}); err == nil {
 		t.Fatal("expected error")
 	}
 
@@ -126,7 +125,7 @@ func TestState_MissingCorruptOrUnknownVersionGivesDefaultsAndWarning(t *testing.
 				}
 			}
 
-			got, warning := tomlx.LoadState(path)
+			got, warning := state.LoadState(path)
 
 			if wantWarning := content != nil; (warning != "") != wantWarning {
 				t.Errorf("warning = %q, want a warning only for corrupt or unknown-version files", warning)
@@ -147,7 +146,7 @@ func TestState_SaveInsideRepoIsRefused(t *testing.T) {
 	repo := t.TempDir()
 	path := filepath.Join(repo, ".state", "state.toml")
 
-	err := tomlx.SaveState(path, domain.State{Version: 1, RepoPath: repo})
+	err := state.SaveState(path, state.State{Version: 1, RepoPath: repo})
 
 	if err == nil {
 		t.Fatal("expected refusal")
@@ -167,7 +166,7 @@ func TestState_SaveThroughSymlinkIntoRepoIsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := tomlx.SaveState(filepath.Join(link, "state.toml"), domain.State{Version: 1, RepoPath: repo})
+	err := state.SaveState(filepath.Join(link, "state.toml"), state.State{Version: 1, RepoPath: repo})
 
 	if err == nil {
 		t.Fatal("expected refusal: state dir resolves inside the repo")
@@ -180,7 +179,7 @@ func TestState_SaveThroughSymlinkIntoRepoIsRefused(t *testing.T) {
 func TestState_SaveRefusedWhenContainmentCannotBeDetermined(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	err := tomlx.SaveState("state.toml", domain.State{Version: 1, RepoPath: t.TempDir()})
+	err := state.SaveState("state.toml", state.State{Version: 1, RepoPath: t.TempDir()})
 
 	if err == nil {
 		t.Fatal("expected refusal: relative path vs absolute repo is undeterminable")
@@ -192,19 +191,19 @@ func TestState_SaveRefusedWhenContainmentCannotBeDetermined(t *testing.T) {
 
 func TestAppendLog_CreatesDirAppendsJSONLByMonthWithOnlyKnownFields(t *testing.T) {
 	logs := filepath.Join(t.TempDir(), "nuydeck", "logs")
-	entry := func(ts, result string) domain.LogEntry {
-		return domain.LogEntry{
+	entry := func(ts, result string) state.LogEntry {
+		return state.LogEntry{
 			Time: ts, Op: "sync", Direction: "push", Result: result,
-			Items: []domain.LogItem{{Path: "config:nvim/init.lua", Kind: "file", Result: "ok"}},
+			Items: []state.LogItem{{Path: "config:nvim/init.lua", Kind: "file", Result: "ok"}},
 		}
 	}
 
-	for _, e := range []domain.LogEntry{entry("2026-03-15T10:00:00Z", "ok"), entry("2026-03-16T11:00:00Z", "failed")} {
-		if err := tomlx.AppendLog(logs, e); err != nil {
+	for _, e := range []state.LogEntry{entry("2026-03-15T10:00:00Z", "ok"), entry("2026-03-16T11:00:00Z", "failed")} {
+		if err := state.AppendLog(logs, e); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := tomlx.AppendLog(logs, entry("2026-04-01T00:00:00Z", "ok")); err != nil {
+	if err := state.AppendLog(logs, entry("2026-04-01T00:00:00Z", "ok")); err != nil {
 		t.Fatal(err)
 	}
 

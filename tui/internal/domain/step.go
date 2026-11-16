@@ -1,6 +1,9 @@
 package domain
 
-import "github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+import (
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
+)
 
 // Step is a closed sum of every write the tool can perform; the marker
 // method keeps implementations inside this package.
@@ -40,11 +43,11 @@ type DeleteBackupStep struct {
 }
 
 type SaveStateStep struct {
-	State State
+	State state.State
 }
 
 type AppendLogStep struct {
-	Entry LogEntry
+	Entry state.LogEntry
 }
 
 func (CopyStep) isStep()         {}

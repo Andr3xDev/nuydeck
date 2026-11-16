@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 // defaultKeepaliveEvery stays well under sudo's default 5 minute timestamp_timeout.
@@ -39,7 +40,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 	}()
 
 	var sudoExpired atomic.Bool
-	var items []domain.LogItem
+	var items []state.LogItem
 	scrub := secretScrubber(p.Steps)
 	emit := func(e InstallEvent) {
 		select {
@@ -58,7 +59,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- Ins
 		label, kind := describeStep(ps.Step)
 		logItem := func(result string) {
 			if ps.Phase < domain.PhaseRecord {
-				items = append(items, domain.LogItem{Path: label, Kind: kind, Result: result})
+				items = append(items, state.LogItem{Path: label, Kind: kind, Result: result})
 			}
 		}
 		fail := func(err error) error {
@@ -162,7 +163,7 @@ func (i *Installer) startKeepalive(ctx context.Context, wg *sync.WaitGroup, expi
 	}()
 }
 
-func (i *Installer) finishedEntry(entry domain.LogEntry, items []domain.LogItem, runErr error) domain.LogEntry {
+func (i *Installer) finishedEntry(entry state.LogEntry, items []state.LogItem, runErr error) state.LogEntry {
 	entry.Time = i.Now().Format(time.RFC3339)
 	entry.DryRun = i.DryRun
 	entry.Items = items

@@ -16,10 +16,10 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/tomlx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 const (
@@ -211,7 +211,7 @@ func TestSentinelRealRunnerSecretsWriteFailure(t *testing.T) {
 	}
 	run.assertNoSentinel(t)
 
-	logs, err := filepath.Glob(filepath.Join(tomlx.LogsDir(configDir), "*"))
+	logs, err := filepath.Glob(filepath.Join(state.LogsDir(configDir), "*"))
 	if err != nil || len(logs) == 0 {
 		t.Fatalf("Record step wrote no log file (glob %v): %v", logs, err)
 	}

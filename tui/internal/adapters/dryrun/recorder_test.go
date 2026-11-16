@@ -8,6 +8,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
 var _ app.Runner = Recorder{}
@@ -24,7 +25,7 @@ func TestRecorderRendersEveryStepWithoutIO(t *testing.T) {
 		{domain.BackupStep{Files: []domain.BackupFile{{Root: "config", Path: "hypr/a"}}}, "would back up config/hypr/a"},
 		{domain.DeleteBackupStep{Dir: "/bk/1"}, "would delete backup /bk/1"},
 		{domain.SaveStateStep{}, "would save state"},
-		{domain.AppendLogStep{Entry: domain.LogEntry{Op: "push"}}, "would append log entry"},
+		{domain.AppendLogStep{Entry: state.LogEntry{Op: "push"}}, "would append log entry"},
 	}
 	for _, c := range cases {
 		res := Recorder{}.Run(context.Background(), c.step, nil)
