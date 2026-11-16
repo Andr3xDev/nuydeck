@@ -138,7 +138,7 @@ func (s *Service) lastCompleteBackup(ctx context.Context) *backup.Backup {
 		return nil
 	}
 	for _, b := range backups {
-		if !b.Incomplete && !b.Unreadable {
+		if backup.CheckRestorable(b) == nil {
 			return &b
 		}
 	}
