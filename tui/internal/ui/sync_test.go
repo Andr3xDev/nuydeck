@@ -15,7 +15,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-type fakeSyncer struct {
+type fakeSyncDeps struct {
 	plan          cfgsync.SyncPlan
 	needsBackup   bool
 	progressPaths []string
@@ -24,13 +24,17 @@ type fakeSyncer struct {
 	applyCalls    int
 }
 
-func (f *fakeSyncer) PlanSync(context.Context, plan.Direction, []manifest.ResolvedEntry) (cfgsync.SyncPlan, error) {
+func (f *fakeSyncDeps) deps() Deps {
+	return Deps{PlanSync: f.PlanSync, NeedsBackup: f.NeedsBackup, ApplySync: f.Apply}
+}
+
+func (f *fakeSyncDeps) PlanSync(context.Context, plan.Direction, []manifest.ResolvedEntry) (cfgsync.SyncPlan, error) {
 	return f.plan, nil
 }
 
-func (f *fakeSyncer) NeedsBackup(cfgsync.SyncPlan, cfgsync.Selection) bool { return f.needsBackup }
+func (f *fakeSyncDeps) NeedsBackup(cfgsync.SyncPlan, cfgsync.Selection) bool { return f.needsBackup }
 
-func (f *fakeSyncer) Apply(ctx context.Context, _ cfgsync.SyncPlan, _ cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult {
+func (f *fakeSyncDeps) Apply(ctx context.Context, _ cfgsync.SyncPlan, _ cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult {
 	f.applyCalls++
 	f.opts = opts
 	for _, p := range f.progressPaths {
@@ -58,8 +62,10 @@ func planItem(path string, blocked bool) cfgsync.PlanItem {
 	return cfgsync.PlanItem{Change: plan.Change{Entry: manifest.Entry{Root: "home", Path: path}, Type: plan.Update}, Blocked: blocked}
 }
 
-func newPreview(f *fakeSyncer, dryRun bool) *Sync {
-	s := newSync(Deps{Syncer: f}, dryRun, DefaultKeyMap(), NewRoot("", false, Deps{}).th)
+func newPreview(f *fakeSyncDeps, dryRun bool) *Sync {
+	svc := testServices(f.deps())
+	svc.dryRun = dryRun
+	s := newSync(svc)
 	s.Update(planMsg{gen: s.gen, plan: f.plan})
 	return s
 }
@@ -78,7 +84,7 @@ func TestSyncPreviewShowsPlanNotices(t *testing.T) {
 	const notice = "skipped: source missing: home/.gone"
 	plan := selectedPlan()
 	plan.Notices = []string{notice}
-	s := newPreview(&fakeSyncer{plan: plan}, false)
+	s := newPreview(&fakeSyncDeps{plan: plan}, false)
 
 	if !strings.Contains(ansi.Strip(s.View(120, 20)), notice) {
 		t.Fatalf("preview does not show %q", notice)
@@ -88,7 +94,7 @@ func TestSyncPreviewShowsPlanNotices(t *testing.T) {
 func TestSyncToggleRespectsBlockedItems(t *testing.T) {
 	plan := cfgsync.SyncPlan{Items: []cfgsync.PlanItem{planItem("a", false), planItem("b", true)}, Selection: cfgsync.Selection{}}
 	plan.Selection[plan.Items[0].Key()] = true
-	s := newPreview(&fakeSyncer{plan: plan}, false)
+	s := newPreview(&fakeSyncDeps{plan: plan}, false)
 
 	s.Update(keyPress(tea.KeySpace))
 	if s.sel[plan.Items[0].Key()] {
@@ -112,10 +118,10 @@ func TestSyncToggleRespectsBlockedItems(t *testing.T) {
 func TestSyncEnterDialogsDeclineBackup(t *testing.T) {
 	item := planItem("a", false)
 	plan := cfgsync.SyncPlan{Items: []cfgsync.PlanItem{item}, Selection: cfgsync.Selection{item.Key(): true}}
-	s := newPreview(&fakeSyncer{plan: plan, needsBackup: true}, false)
+	s := newPreview(&fakeSyncDeps{plan: plan, needsBackup: true}, false)
 
 	s.Update(keyPress(tea.KeyEnter))
-	if s.phase != phaseBackupDialog || !s.Modal() {
+	if s.phase != phaseBackupDialog || !modal(s) {
 		t.Fatalf("phase = %v, want backup dialog", s.phase)
 	}
 	s.Update(keyPress('n'))
@@ -129,7 +135,7 @@ func TestSyncEnterDialogsDeclineBackup(t *testing.T) {
 }
 
 func TestSyncDiscardsStalePlan(t *testing.T) {
-	s := newPreview(&fakeSyncer{}, false)
+	s := newPreview(&fakeSyncDeps{}, false)
 	s.startPlan(plan.Push)
 	stale := s.gen
 	s.startPlan(plan.Pull)
@@ -151,7 +157,7 @@ func TestSyncApplyLoopForwardsOptions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := &fakeSyncer{plan: selectedPlan(), needsBackup: true, progressPaths: []string{"a", "b"}}
+			f := &fakeSyncDeps{plan: selectedPlan(), needsBackup: true, progressPaths: []string{"a", "b"}}
 			s := newPreview(f, tt.dryRun)
 
 			s.Update(keyPress(tea.KeyEnter))
@@ -171,7 +177,7 @@ func TestSyncApplyLoopForwardsOptions(t *testing.T) {
 }
 
 func TestSyncNothingSelectedDoesNotApply(t *testing.T) {
-	f := &fakeSyncer{plan: cfgsync.SyncPlan{Items: []cfgsync.PlanItem{planItem("a", false)}}}
+	f := &fakeSyncDeps{plan: cfgsync.SyncPlan{Items: []cfgsync.PlanItem{planItem("a", false)}}}
 	s := newPreview(f, false)
 
 	_, cmd := s.Update(keyPress(tea.KeyEnter))
@@ -180,10 +186,10 @@ func TestSyncNothingSelectedDoesNotApply(t *testing.T) {
 	}
 }
 
-func applyingRoot(t *testing.T, f *fakeSyncer) (Root, *Sync, tea.Cmd) {
+func applyingRoot(t *testing.T, f *fakeSyncDeps) (*Root, *Sync, tea.Cmd) {
 	t.Helper()
-	r := NewRoot("", false, Deps{Syncer: f})
-	s := r.sections[syncSection].screen.(*Sync)
+	r := NewRoot("", false, f.deps())
+	s, _, _ := sectionOf[*Sync](r)
 	s.Update(planMsg{gen: s.gen, plan: f.plan})
 	s.Update(keyPress(tea.KeyEnter))
 	_, cmd := s.Update(keyPress('y'))
@@ -194,7 +200,7 @@ func applyingRoot(t *testing.T, f *fakeSyncer) (Root, *Sync, tea.Cmd) {
 }
 
 func TestRootIgnoresNewPlansWhileApplying(t *testing.T) {
-	r, s, _ := applyingRoot(t, &fakeSyncer{plan: selectedPlan()})
+	r, s, _ := applyingRoot(t, &fakeSyncDeps{plan: selectedPlan()})
 	gen := s.gen
 
 	for _, msg := range []tea.Msg{startSyncMsg{direction: plan.Pull}, restorePlanMsg{plan: selectedPlan()}} {
@@ -209,7 +215,7 @@ func TestRootIgnoresNewPlansWhileApplying(t *testing.T) {
 }
 
 func TestRootQuitCancelsRunningApplyWithoutHanging(t *testing.T) {
-	r, _, startCmd := applyingRoot(t, &fakeSyncer{plan: selectedPlan(), blockUntilCtx: true, progressPaths: []string{"a"}})
+	r, _, startCmd := applyingRoot(t, &fakeSyncDeps{plan: selectedPlan(), blockUntilCtx: true, progressPaths: []string{"a"}})
 	started := startCmd().(applyStartedMsg)
 
 	press(t, r, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
@@ -228,7 +234,7 @@ func TestRootQuitCancelsRunningApplyWithoutHanging(t *testing.T) {
 }
 
 func TestSyncResultView(t *testing.T) {
-	s := newPreview(&fakeSyncer{}, true)
+	s := newPreview(&fakeSyncDeps{}, true)
 	view := func() string { return ansi.Strip(s.View(100, 20)) }
 
 	s.Update(applyDoneMsg{gen: s.gen, result: cfgsync.ApplyResult{Nothing: true}})

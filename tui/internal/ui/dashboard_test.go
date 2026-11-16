@@ -3,9 +3,11 @@ package ui
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -16,12 +18,12 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
-type fakeDrifter struct {
+type fakeDrift struct {
 	ctxs []context.Context
 	out  chan drift.DriftResult
 }
 
-func (f *fakeDrifter) Drift(ctx context.Context, _ []manifest.ResolvedEntry) <-chan drift.DriftResult {
+func (f *fakeDrift) Drift(ctx context.Context, _ []manifest.ResolvedEntry) <-chan drift.DriftResult {
 	f.ctxs = append(f.ctxs, ctx)
 	f.out = make(chan drift.DriftResult, 8)
 	return f.out
@@ -31,15 +33,27 @@ func resolved(path string) manifest.ResolvedEntry {
 	return manifest.ResolvedEntry{Entry: manifest.Entry{Root: "home", Path: path}}
 }
 
-func newTestDashboard(f *fakeDrifter, entries ...manifest.ResolvedEntry) *Dashboard {
-	root := NewRoot("", false, Deps{Drifter: f, Entries: entries})
-	return root.sections[0].screen.(*Dashboard)
+func newTestDashboard(f *fakeDrift, entries ...manifest.ResolvedEntry) *Dashboard {
+	root := NewRoot("", false, Deps{Drift: f.Drift, Entries: entries})
+	d, _, _ := sectionOf[*Dashboard](root)
+	return d
 }
 
-func plainView(d *Dashboard) string { return ansi.Strip(d.View(100, 20)) }
+func plainView(s screen) string { return ansi.Strip(s.View(100, 20)) }
+
+func TestDashboardIsTheFirstScreen(t *testing.T) {
+	root := NewRoot("", false, Deps{})
+	var first screen = root.sections[0].screen
+	if _, ok := first.(*Dashboard); !ok || first.Title() != "Dashboard" || first.Enter() != nil {
+		t.Errorf("first screen = %T %q, want the Dashboard", first, first.Title())
+	}
+	if !slices.ContainsFunc(first.Keys(), func(b key.Binding) bool { return b.Help().Desc == "refresh" }) {
+		t.Error("dashboard keys must offer refresh")
+	}
+}
 
 func TestDashboardDiscardsStaleGeneration(t *testing.T) {
-	f := &fakeDrifter{}
+	f := &fakeDrift{}
 	d := newTestDashboard(f, resolved("a"), resolved("b"))
 	d.Init()
 	staleGen := d.gen
@@ -64,7 +78,7 @@ func TestDashboardDiscardsStaleGeneration(t *testing.T) {
 }
 
 func TestDashboardPerEntryStates(t *testing.T) {
-	f := &fakeDrifter{}
+	f := &fakeDrift{}
 	d := newTestDashboard(f, resolved("a"), resolved("b"), resolved("c"))
 	d.Init()
 	if strings.Count(plainView(d), "in sync") != 0 || !d.running {
@@ -90,7 +104,7 @@ func TestDashboardPerEntryStates(t *testing.T) {
 }
 
 func TestDashboardMissingSideStatuses(t *testing.T) {
-	d := newTestDashboard(&fakeDrifter{}, resolved("a"), resolved("b"))
+	d := newTestDashboard(&fakeDrift{}, resolved("a"), resolved("b"))
 	d.Init()
 	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("a"), State: drift.DriftDrifted, Missing: drift.MissingInRepo}})
 	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("b"), State: drift.DriftDrifted, Missing: drift.MissingOnPC}})
@@ -104,7 +118,7 @@ func TestDashboardMissingSideStatuses(t *testing.T) {
 }
 
 func TestDashboardMultilineErrorStaysOutOfRowAndShowsOnOneDetailLine(t *testing.T) {
-	d := newTestDashboard(&fakeDrifter{}, resolved("a"), resolved("b"))
+	d := newTestDashboard(&fakeDrift{}, resolved("a"), resolved("b"))
 	d.Init()
 	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("b"), State: drift.DriftError, Err: errors.New("first line\nsecond line")}})
 
@@ -134,7 +148,7 @@ func TestDashboardErrorDetailLineKeepsViewWithinHeight(t *testing.T) {
 	for _, p := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"} {
 		entries = append(entries, resolved(p))
 	}
-	d := newTestDashboard(&fakeDrifter{}, entries...)
+	d := newTestDashboard(&fakeDrift{}, entries...)
 	d.Init()
 	d.Update(driftEntryMsg{gen: d.gen, result: drift.DriftResult{Entry: resolved("a"), State: drift.DriftError, Err: errors.New("boom")}})
 
@@ -148,7 +162,7 @@ func TestDashboardRowsFitHeightAndFollowCursor(t *testing.T) {
 	for _, p := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t"} {
 		entries = append(entries, resolved(p))
 	}
-	d := newTestDashboard(&fakeDrifter{}, entries...)
+	d := newTestDashboard(&fakeDrift{}, entries...)
 
 	if n := strings.Count(d.View(100, 10), "\n") + 1; n > 10 {
 		t.Errorf("view has %d lines, want at most 10", n)
@@ -162,7 +176,7 @@ func TestDashboardRowsFitHeightAndFollowCursor(t *testing.T) {
 }
 
 func TestDashboardRefreshesAfterApply(t *testing.T) {
-	f := &fakeDrifter{}
+	f := &fakeDrift{}
 	d := newTestDashboard(f, resolved("a"))
 	d.Init()
 	gen := d.gen
@@ -180,7 +194,7 @@ func TestDashboardRefreshesAfterApply(t *testing.T) {
 }
 
 func TestDashboardPullPushRequestSync(t *testing.T) {
-	d := newTestDashboard(&fakeDrifter{}, resolved("a"))
+	d := newTestDashboard(&fakeDrift{}, resolved("a"))
 	for key, want := range map[rune]plan.Direction{'p': plan.Pull, 'P': plan.Push} {
 		_, cmd := d.Update(tea.KeyPressMsg{Code: key, Text: string(key)})
 		if got := cmd().(startSyncMsg).direction; got != want {
@@ -191,10 +205,9 @@ func TestDashboardPullPushRequestSync(t *testing.T) {
 
 func TestRootOpensSyncOnStartSync(t *testing.T) {
 	r := NewRoot("", false, Deps{})
-	m, _ := r.Update(startSyncMsg{direction: plan.Push})
-	r = m.(Root)
-	sync := r.sections[syncSection].screen.(*Sync)
-	if r.selected != syncSection || sync.direction != plan.Push {
+	r.Update(startSyncMsg{direction: plan.Push})
+	sync, at, _ := sectionOf[*Sync](r)
+	if r.selected != at || sync.direction != plan.Push {
 		t.Errorf("selected=%d direction=%v", r.selected, sync.direction)
 	}
 }
@@ -204,8 +217,7 @@ func TestRootManifestErrorOffersNoOperations(t *testing.T) {
 	if len(r.sections) != 1 {
 		t.Fatalf("sections = %d, want only the error screen", len(r.sections))
 	}
-	m, _ := r.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
-	r = m.(Root)
+	r.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	for _, k := range []rune{'p', 'P', 'r'} {
 		_, cmd := press(t, r, tea.KeyPressMsg{Code: k, Text: string(k)})
 		if cmd != nil {

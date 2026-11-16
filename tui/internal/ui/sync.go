@@ -13,13 +13,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-// Syncer is the sync use-case surface the screen needs; *cfgsync.Service implements it.
-type Syncer interface {
-	PlanSync(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.SyncPlan, error)
-	NeedsBackup(plan cfgsync.SyncPlan, sel cfgsync.Selection) bool
-	Apply(ctx context.Context, plan cfgsync.SyncPlan, sel cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult
-}
-
 type planMsg struct {
 	gen  int
 	plan cfgsync.SyncPlan
@@ -29,7 +22,7 @@ type planMsg struct {
 // applyStartedMsg hands the progress channel to the screen (D9).
 type applyStartedMsg struct {
 	gen int
-	ch  <-chan applyEvent
+	ch  <-chan progressEvent
 }
 
 type progressMsg struct {
@@ -42,8 +35,8 @@ type applyDoneMsg struct {
 	result cfgsync.ApplyResult
 }
 
-// applyEvent is either one progress path or, last, the final result.
-type applyEvent struct {
+// progressEvent is either one progress path or, last, the final result.
+type progressEvent struct {
 	path string
 	done *cfgsync.ApplyResult
 }
@@ -62,11 +55,14 @@ const (
 
 // Sync is the Plan -> Preview -> Apply screen.
 type Sync struct {
-	syncer  Syncer
-	entries []manifest.ResolvedEntry
-	dryRun  bool
-	keys    KeyMap
-	th      theme
+	ctx         context.Context
+	planSync    func(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.SyncPlan, error)
+	needsBackup func(p cfgsync.SyncPlan, sel cfgsync.Selection) bool
+	applySync   func(ctx context.Context, p cfgsync.SyncPlan, sel cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult
+	entries     []manifest.ResolvedEntry
+	dryRun      bool
+	keys        KeyMap
+	th          theme
 
 	gen       int
 	phase     syncPhase
@@ -76,7 +72,7 @@ type Sync struct {
 	cursor    int
 	err       error
 	backup    bool
-	stream    <-chan applyEvent
+	stream    <-chan progressEvent
 	progress  int
 	result    cfgsync.ApplyResult
 	notice    string
@@ -85,17 +81,35 @@ type Sync struct {
 
 const applyBusyNotice = "Another sync was ignored: an apply is in progress."
 
-func newSync(deps Deps, dryRun bool, keys KeyMap, th theme) *Sync {
-	return &Sync{syncer: deps.Syncer, entries: deps.Entries, dryRun: dryRun, keys: keys, th: th}
+func newSync(svc *services) *Sync {
+	return &Sync{
+		ctx:         svc.ctx,
+		planSync:    svc.PlanSync,
+		needsBackup: svc.NeedsBackup,
+		applySync:   svc.ApplySync,
+		entries:     svc.Entries,
+		dryRun:      svc.dryRun,
+		keys:        svc.keys,
+		th:          svc.th,
+	}
 }
 
-// Modal reports whether q and esc must reach the screen instead of the shell.
-func (s *Sync) Modal() bool {
-	return s.phase == phaseBackupDialog || s.phase == phaseConfirmDialog || s.phase == phaseApplying
+func (s *Sync) Title() string  { return "Sync" }
+func (s *Sync) Enter() tea.Cmd { return nil }
+
+// Keys claims esc while a dialog or the apply is open, so esc and q reach the screen instead of the shell.
+func (s *Sync) Keys() []key.Binding {
+	switch s.phase {
+	case phaseBackupDialog, phaseConfirmDialog:
+		return []key.Binding{s.keys.Yes, s.keys.No, s.keys.Back}
+	case phaseApplying:
+		return []key.Binding{s.keys.Back}
+	}
+	return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Toggle, s.keys.All, s.keys.Confirm, s.keys.Pull, s.keys.Push}
 }
 
-// cancelWork stops the running plan or apply, if any.
-func (s *Sync) cancelWork() {
+// Cancel stops the running plan or apply, if any.
+func (s *Sync) Cancel() {
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
@@ -116,19 +130,19 @@ func (s *Sync) startPlan(dir plan.Direction) tea.Cmd {
 	if s.busy() {
 		return nil
 	}
-	s.cancelWork()
+	s.Cancel()
 	s.gen++
 	s.direction, s.err = dir, nil
-	if s.syncer == nil {
+	if s.planSync == nil {
 		s.phase = phaseIdle
 		return nil
 	}
 	s.phase = phasePlanning
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(s.ctx)
 	s.cancel = cancel
-	gen, syncer, entries := s.gen, s.syncer, s.entries
+	gen, planSync, entries := s.gen, s.planSync, s.entries
 	return func() tea.Msg {
-		plan, err := syncer.PlanSync(ctx, dir, entries)
+		plan, err := planSync(ctx, dir, entries)
 		return planMsg{gen: gen, plan: plan, err: err}
 	}
 }
@@ -138,7 +152,7 @@ func (s *Sync) showPlan(plan cfgsync.SyncPlan) {
 	if s.busy() {
 		return
 	}
-	s.cancelWork()
+	s.Cancel()
 	s.gen++
 	s.direction, s.err = plan.Direction, nil
 	s.loadPlan(plan)
@@ -150,7 +164,7 @@ func (s *Sync) loadPlan(plan cfgsync.SyncPlan) {
 	maps.Copy(s.sel, plan.Selection)
 }
 
-func (s *Sync) Update(msg tea.Msg) (Screen, tea.Cmd) {
+func (s *Sync) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case planMsg:
 		if msg.gen != s.gen {
@@ -187,7 +201,7 @@ func (s *Sync) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, nil
 }
 
-func (s *Sync) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
+func (s *Sync) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
 	switch s.phase {
 	case phaseApplying:
 		return s, nil
@@ -271,7 +285,7 @@ func (s *Sync) confirm() tea.Cmd {
 	case s.selectedCount() == 0:
 		s.err, s.result, s.phase = nil, cfgsync.ApplyResult{Nothing: true}, phaseResult
 		return nil
-	case s.syncer.NeedsBackup(s.plan, s.sel):
+	case s.needsBackup != nil && s.needsBackup(s.plan, s.sel):
 		s.phase = phaseBackupDialog
 	default:
 		s.backup = false
@@ -281,17 +295,17 @@ func (s *Sync) confirm() tea.Cmd {
 }
 
 func (s *Sync) startApply() tea.Cmd {
-	s.cancelWork()
+	s.Cancel()
 	s.gen++
 	s.phase, s.progress, s.notice = phaseApplying, 0, ""
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(s.ctx)
 	s.cancel = cancel
-	gen, syncer, syncPlan, opts := s.gen, s.syncer, s.plan, cfgsync.ApplyOptions{Backup: s.backup, DryRun: s.dryRun}
+	gen, applySync, syncPlan, opts := s.gen, s.applySync, s.plan, cfgsync.ApplyOptions{Backup: s.backup, DryRun: s.dryRun}
 	sel := maps.Clone(s.sel)
 	return func() tea.Msg {
-		ch := make(chan applyEvent)
+		ch := make(chan progressEvent)
 		// send gives up once ctx is cancelled, so a consumer that stopped reading cannot hang Apply.
-		send := func(ev applyEvent) {
+		send := func(ev progressEvent) {
 			select {
 			case ch <- ev:
 			case <-ctx.Done():
@@ -300,17 +314,17 @@ func (s *Sync) startApply() tea.Cmd {
 		go func() {
 			defer close(ch)
 			defer cancel()
-			res := syncer.Apply(ctx, syncPlan, sel, opts, func(p plan.StepProgress) {
-				send(applyEvent{path: p.Path})
+			res := applySync(ctx, syncPlan, sel, opts, func(p plan.StepProgress) {
+				send(progressEvent{path: p.Path})
 			})
-			send(applyEvent{done: &res})
+			send(progressEvent{done: &res})
 		}()
 		return applyStartedMsg{gen: gen, ch: ch}
 	}
 }
 
 // waitProgress reads one event and is re-issued by Update until the final result (D9).
-func waitProgress(gen int, ch <-chan applyEvent) tea.Cmd {
+func waitProgress(gen int, ch <-chan progressEvent) tea.Cmd {
 	return func() tea.Msg {
 		ev, ok := <-ch
 		if !ok || ev.done != nil {
@@ -325,7 +339,7 @@ func waitProgress(gen int, ch <-chan applyEvent) tea.Cmd {
 }
 
 func (s *Sync) View(width, height int) string {
-	return screenBox(s.th, "Sync", s.body(width, innerHeight(height)), width, height)
+	return screenBox(s.th, s.Title(), s.body(width, innerHeight(height)), width, height)
 }
 
 func (s *Sync) body(width, height int) []string {

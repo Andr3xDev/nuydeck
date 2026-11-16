@@ -10,25 +10,29 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-type fakePackageManager struct {
+type fakePackagesDeps struct {
 	names []string
 	adds  []manifest.Package
 }
 
-func (f *fakePackageManager) ListUnregistered(context.Context) ([]string, error) { return f.names, nil }
+func (f *fakePackagesDeps) deps() PackagesDeps {
+	return PackagesDeps{ListUnregistered: f.ListUnregistered, AddPackage: f.AddPackage, IgnorePackage: f.IgnorePackage}
+}
 
-func (f *fakePackageManager) AddPackage(_ context.Context, pkg manifest.Package) (plan.StepResult, error) {
+func (f *fakePackagesDeps) ListUnregistered(context.Context) ([]string, error) { return f.names, nil }
+
+func (f *fakePackagesDeps) AddPackage(_ context.Context, pkg manifest.Package) (plan.StepResult, error) {
 	f.adds = append(f.adds, pkg)
 	return plan.StepResult{Status: plan.StepOK}, nil
 }
 
-func (f *fakePackageManager) IgnorePackage(context.Context, string) plan.StepResult {
+func (f *fakePackagesDeps) IgnorePackage(context.Context, string) plan.StepResult {
 	return plan.StepResult{Status: plan.StepOK}
 }
 
 func TestPackagesAddFormRejectsEmptySource(t *testing.T) {
-	f := &fakePackageManager{names: []string{"htop"}}
-	p := NewRoot("", false, Deps{Packages: f}).sections[packagesSection].screen.(*Packages)
+	f := &fakePackagesDeps{names: []string{"htop"}}
+	p, _, _ := sectionOf[*Packages](NewRoot("", false, Deps{Packages: f.deps()}))
 	p.Update(unregisteredMsg{names: f.names})
 
 	p.Update(keyPress('a'))

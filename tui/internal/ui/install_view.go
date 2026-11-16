@@ -131,7 +131,7 @@ func (s *Install) showSummary() {
 		}
 		detail := label
 		if s.deps.Preview != nil {
-			if res := s.deps.Preview.Run(context.Background(), ps.Step, nil); res.Detail != "" {
+			if res := s.deps.Preview(context.Background(), ps.Step); res.Detail != "" {
 				detail = res.Detail
 			}
 		}

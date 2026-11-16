@@ -13,12 +13,12 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-func detectGPUs(gpus GPUDetector, drivers []manifest.Driver) tea.Cmd {
+func detectGPUs(detect func(context.Context) ([]install.PCIDevice, error), drivers []manifest.Driver) tea.Cmd {
 	return func() tea.Msg {
 		var devices []install.PCIDevice
-		if gpus != nil {
+		if detect != nil {
 			// A failed probe leaves devices empty, which proposes every driver with detected=false.
-			devices, _ = gpus.DetectGPUs(context.Background())
+			devices, _ = detect(context.Background())
 		}
 		ids, detected := install.ProposeDrivers(devices, drivers)
 		return gpuDetectedMsg{ids: ids, detected: detected}
@@ -123,8 +123,8 @@ func (s *Install) enterSecrets() {
 	s.secretIdx = 0
 	s.secretInput.SetValue("")
 	s.secretsExist = false
-	if s.deps.Paths != nil {
-		kind, err := s.deps.Paths.PathKind(s.deps.SecretsPath)
+	if s.deps.PathKind != nil {
+		kind, err := s.deps.PathKind(s.deps.SecretsPath)
 		s.secretsExist = err == nil && kind != plan.KindNone
 	}
 	// The blink command is dropped on purpose: EchoNone shows no cursor.
@@ -181,19 +181,19 @@ func (s *Install) draftSnapshot() install.Draft {
 }
 
 func (s *Install) startPlan() tea.Cmd {
-	s.cancelWork()
+	s.Cancel()
 	s.gen++
 	s.plan, s.planErr, s.planning = install.InstallPlan{}, nil, true
 	s.showSummary()
-	if s.deps.Installer == nil {
+	if s.deps.Plan == nil {
 		s.planning, s.planErr = false, errInstallUnavailable
 		return nil
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(s.ctx)
 	s.cancel = cancel
-	gen, installer, draft := s.gen, s.deps.Installer, s.draftSnapshot()
+	gen, planInstall, draft := s.gen, s.deps.Plan, s.draftSnapshot()
 	return func() tea.Msg {
-		plan, err := installer.Plan(ctx, draft)
+		plan, err := planInstall(ctx, draft)
 		return installPlanMsg{gen: gen, plan: plan, err: err}
 	}
 }
@@ -206,7 +206,7 @@ func (s *Install) canConfirm() bool {
 func (s *Install) summaryKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case s.dismiss(msg):
-		s.cancelWork()
+		s.Cancel()
 		return s.step(-1)
 	case key.Matches(msg, s.keys.Up):
 		s.summary.ScrollUp(1)

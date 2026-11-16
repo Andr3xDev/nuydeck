@@ -41,6 +41,10 @@ func (f *fakeBackups) DeleteBackup(_ context.Context, dir string, confirmed bool
 	return plan.StepResult{}, true
 }
 
+func (f *fakeBackups) deps() Deps {
+	return Deps{ListBackups: f.ListBackups, PlanRestore: f.PlanRestore, DeleteBackup: f.DeleteBackup}
+}
+
 func TestBackupsDryRunDeleteShowsWouldDelete(t *testing.T) {
 	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}, dryRun: true}
 	b := loadedBackups(f)
@@ -70,7 +74,7 @@ func TestBackupsRefuseIncompleteAndUnreadableRestore(t *testing.T) {
 }
 
 func loadedBackups(f *fakeBackups) *Backups {
-	b := newBackups(Deps{Backups: f}, DefaultKeyMap(), NewRoot("", false, Deps{}).th)
+	b := newBackups(testServices(f.deps()))
 	b.Update(b.load()())
 	return b
 }
@@ -84,11 +88,11 @@ func TestBackupsDeleteDeclineMakesNoCall(t *testing.T) {
 	b := loadedBackups(f)
 
 	b.Update(keyPress('d'))
-	if !b.Modal() {
+	if !modal(b) {
 		t.Fatal("d must open the confirm dialog")
 	}
 	_, cmd := b.Update(keyPress('n'))
-	if cmd != nil || b.Modal() || len(f.deleted) != 0 {
+	if cmd != nil || modal(b) || len(f.deleted) != 0 {
 		t.Errorf("decline must not delete: cmd=%v deleted=%v", cmd != nil, f.deleted)
 	}
 }
@@ -112,16 +116,15 @@ func TestBackupsDeleteConfirmDeletesAndReloads(t *testing.T) {
 
 func TestBackupsRestoreOpensSyncWithRestorePlan(t *testing.T) {
 	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}}
-	r := NewRoot("", false, Deps{Backups: f, Syncer: &fakeSyncer{}})
-	r.selected, r.panelFocus = 2, true
-	b := r.sections[2].screen.(*Backups)
+	r := NewRoot("", false, f.deps())
+	b, at, _ := sectionOf[*Backups](r)
+	r.selected, r.panelFocus = at, true
 	b.Update(b.load()())
 
 	_, cmd := b.Update(keyPress(tea.KeyEnter))
-	model, _ := r.Update(cmd())
-	r = model.(Root)
-	s := r.sections[syncSection].screen.(*Sync)
-	if r.selected != syncSection || s.phase != phasePreview || s.plan.Direction != plan.Restore {
+	r.Update(cmd())
+	s, syncAt, _ := sectionOf[*Sync](r)
+	if r.selected != syncAt || s.phase != phasePreview || s.plan.Direction != plan.Restore {
 		t.Errorf("selected=%d phase=%v direction=%v", r.selected, s.phase, s.plan.Direction)
 	}
 }
@@ -143,7 +146,7 @@ func TestBackupsIncompleteListedFlaggedAndDeletable(t *testing.T) {
 		t.Error("incomplete backup must be flagged")
 	}
 	b.Update(keyPress('d'))
-	if !b.Modal() {
+	if !modal(b) {
 		t.Error("incomplete backup must be deletable")
 	}
 }

@@ -21,35 +21,6 @@ const logLineCap = 2000
 
 var errInstallUnavailable = errors.New("install is not available")
 
-// Installer is the install use-case surface the screen needs; *install.Installer implements it.
-type Installer interface {
-	Plan(ctx context.Context, d install.Draft) (install.InstallPlan, error)
-	Run(ctx context.Context, p install.InstallPlan, events chan<- plan.InstallEvent, ack <-chan struct{}) install.InstallResult
-}
-
-// GPUDetector is the read-only GPU probe of the hardware page.
-type GPUDetector interface {
-	DetectGPUs(ctx context.Context) ([]install.PCIDevice, error)
-}
-
-// PathKinder checks whether a path exists without opening it.
-type PathKinder interface {
-	PathKind(path string) (plan.NodeKind, error)
-}
-
-// InstallDeps is what the Install section needs besides the shell.
-type InstallDeps struct {
-	Installer Installer
-	// Preview is always a dry-run recorder; the summary renders each planned step through it.
-	Preview     plan.Runner
-	GPUs        GPUDetector
-	Paths       PathKinder
-	SecretsPath string
-	SecretNames []string
-	Catalog     []manifest.Package
-	Drivers     []manifest.Driver
-}
-
 type installPage int
 
 const (
@@ -111,6 +82,7 @@ type selectionRow struct {
 
 // Install is the guided install wizard: profile, hardware, selection, secrets, summary, run.
 type Install struct {
+	ctx  context.Context
 	deps InstallDeps
 	keys KeyMap
 	th   theme
@@ -153,13 +125,14 @@ type Install struct {
 	runErr   error
 }
 
-func newInstall(deps InstallDeps, keys KeyMap, th theme) *Install {
+func newInstall(svc *services) *Install {
 	input := textinput.New()
 	input.EchoMode = textinput.EchoNone
 	return &Install{
-		deps:        deps,
-		keys:        keys,
-		th:          th,
+		ctx:         svc.ctx,
+		deps:        svc.Install,
+		keys:        svc.keys,
+		th:          svc.th,
 		draft:       install.Draft{Profile: manifest.ProfileMinimal},
 		secretInput: input,
 		summary:     viewport.New(),
@@ -168,11 +141,19 @@ func newInstall(deps InstallDeps, keys KeyMap, th theme) *Install {
 	}
 }
 
-// Modal reports whether q and esc must reach the screen: every page after the first goes back with esc.
-func (s *Install) Modal() bool { return s.page != pageProfile }
+func (s *Install) Title() string  { return "Install" }
+func (s *Install) Enter() tea.Cmd { return nil }
 
-// capturesText reports whether printable keys belong to the hidden input, so the shell must not act on them.
-func (s *Install) capturesText() bool {
+// Keys claims esc on every page after the first, so esc and q go back instead of reaching the shell.
+func (s *Install) Keys() []key.Binding {
+	if s.page == pageProfile {
+		return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Confirm}
+	}
+	return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Confirm, s.keys.Back}
+}
+
+// CapturesText reports whether printable keys belong to the hidden input, so the shell must not act on them.
+func (s *Install) CapturesText() bool {
 	return s.page == pageSecrets && s.secretPrompting()
 }
 
@@ -180,15 +161,15 @@ func (s *Install) secretPrompting() bool {
 	return !s.secretsExist && s.secretIdx < len(s.deps.SecretNames)
 }
 
-// cancelWork stops the running plan or install, if any.
-func (s *Install) cancelWork() {
+// Cancel stops the running plan or install, if any.
+func (s *Install) Cancel() {
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
 	}
 }
 
-func (s *Install) Update(msg tea.Msg) (Screen, tea.Cmd) {
+func (s *Install) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case gpuDetectedMsg:
 		s.hwLoading, s.hwLoaded, s.detected = false, true, msg.detected
@@ -205,7 +186,7 @@ func (s *Install) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 	case installEventMsg:
 		if msg.gen == s.gen {
-			s.applyEvent(msg.event)
+			s.handleEvent(msg.event)
 			return s, waitInstall(msg.gen, s.stream)
 		}
 	case installDoneMsg:
@@ -287,7 +268,7 @@ func (s *Install) enterPage() tea.Cmd {
 	case pageHardware:
 		if !s.hwLoaded && !s.hwLoading {
 			s.hwLoading = true
-			return detectGPUs(s.deps.GPUs, s.deps.Drivers)
+			return detectGPUs(s.deps.DetectGPUs, s.deps.Drivers)
 		}
 	case pageSelection:
 		s.seedSelection()
@@ -301,18 +282,18 @@ func (s *Install) enterPage() tea.Cmd {
 
 // startRun is reachable only from an explicit confirm on the summary.
 func (s *Install) startRun() tea.Cmd {
-	s.cancelWork()
+	s.Cancel()
 	s.gen++
 	s.page = pageRun
 	s.statuses = make([]stepStatus, len(s.plan.Steps))
 	s.current, s.log, s.follow = 0, nil, true
 	s.running, s.finished, s.awaitAck, s.runErr = true, false, false, nil
 	s.logView.SetContentLines(nil)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(s.ctx)
 	s.cancel = cancel
 	ack := make(chan struct{}, 1)
 	s.ack = ack
-	gen, installer, installPlan := s.gen, s.deps.Installer, s.plan
+	gen, run, installPlan := s.gen, s.deps.Run, s.plan
 	// The plan snapshot carries the values Run needs; the draft must not keep them.
 	s.draft.Secrets = nil
 	runDone := make(chan struct{})
@@ -322,7 +303,7 @@ func (s *Install) startRun() tea.Cmd {
 		result := make(chan install.InstallResult, 1)
 		go func() {
 			defer close(runDone)
-			result <- installer.Run(ctx, installPlan, events, ack)
+			result <- run(ctx, installPlan, events, ack)
 		}()
 		return installStartedMsg{gen: gen, stream: installStream{events: events, result: result}}
 	}
@@ -338,7 +319,7 @@ func waitInstall(gen int, st installStream) tea.Cmd {
 	}
 }
 
-func (s *Install) applyEvent(ev plan.InstallEvent) {
+func (s *Install) handleEvent(ev plan.InstallEvent) {
 	if ev.Kind == plan.EventLine {
 		s.appendLog(ev.Line)
 		return

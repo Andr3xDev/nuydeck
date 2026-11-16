@@ -20,11 +20,6 @@ import (
 
 const timeLayout = "2006-01-02 15:04"
 
-// Drifter streams per-entry drift results; *drift.Service implements it.
-type Drifter interface {
-	Drift(ctx context.Context, entries []manifest.ResolvedEntry) <-chan drift.DriftResult
-}
-
 // driftEntryMsg carries one entry result; gen drops results of a superseded run.
 type driftEntryMsg struct {
 	gen    int
@@ -38,7 +33,8 @@ type startSyncMsg struct{ direction plan.Direction }
 
 // Dashboard lists drift per managed entry, computed in the background.
 type Dashboard struct {
-	drifter    Drifter
+	ctx        context.Context
+	drift      func(ctx context.Context, entries []manifest.ResolvedEntry) <-chan drift.DriftResult
 	entries    []manifest.ResolvedEntry
 	state      dashboardInfo
 	keys       KeyMap
@@ -58,17 +54,25 @@ type dashboardInfo struct {
 	lastSync *state.LastSync
 }
 
-func newDashboard(deps Deps, keys KeyMap, th theme) *Dashboard {
-	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(th.accent))
+func newDashboard(svc *services) *Dashboard {
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(svc.th.accent))
 	return &Dashboard{
-		drifter: deps.Drifter,
-		entries: deps.Entries,
-		state:   dashboardInfo{warning: deps.StateWarning, lastSync: deps.LastSync},
-		keys:    keys,
-		th:      th,
+		ctx:     svc.ctx,
+		drift:   svc.Drift,
+		entries: svc.Entries,
+		state:   dashboardInfo{warning: svc.StateWarning, lastSync: svc.LastSync},
+		keys:    svc.keys,
+		th:      svc.th,
 		spinner: sp,
 		results: map[manifest.Entry]drift.DriftResult{},
 	}
+}
+
+func (d *Dashboard) Title() string  { return "Dashboard" }
+func (d *Dashboard) Enter() tea.Cmd { return nil }
+
+func (d *Dashboard) Keys() []key.Binding {
+	return []key.Binding{d.keys.Up, d.keys.Down, d.keys.Refresh, d.keys.Pull, d.keys.Push}
 }
 
 // start cancels any prior run, bumps the generation and begins a new drift stream.
@@ -79,14 +83,14 @@ func (d *Dashboard) start() tea.Cmd {
 	d.gen++
 	d.results = map[manifest.Entry]drift.DriftResult{}
 	d.lastBackup = nil
-	if d.drifter == nil || len(d.entries) == 0 {
+	if d.drift == nil || len(d.entries) == 0 {
 		d.running, d.cancel = false, nil
 		return nil
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(d.ctx)
 	d.cancel = cancel
 	d.running = true
-	d.stream = d.drifter.Drift(ctx, d.entries)
+	d.stream = d.drift(ctx, d.entries)
 	return tea.Batch(waitDrift(d.gen, d.stream), d.spinner.Tick)
 }
 
@@ -103,7 +107,7 @@ func waitDrift(gen int, ch <-chan drift.DriftResult) tea.Cmd {
 
 func (d *Dashboard) Init() tea.Cmd { return d.start() }
 
-func (d *Dashboard) Update(msg tea.Msg) (Screen, tea.Cmd) {
+func (d *Dashboard) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case driftEntryMsg:
 		if msg.gen != d.gen {
@@ -156,7 +160,7 @@ func (d *Dashboard) recordSync(res cfgsync.ApplyResult) {
 	}
 }
 
-func (d *Dashboard) cancelWork() {
+func (d *Dashboard) Cancel() {
 	if d.cancel != nil {
 		d.cancel()
 	}
@@ -186,7 +190,7 @@ func (d *Dashboard) View(width, height int) string {
 		rows[i] = d.row(i, e, width)
 	}
 	lines = append(lines, windowAround(rows, d.cursor, visible)...)
-	return screenBox(d.th, "Dashboard", clip(lines, cw), width, height)
+	return screenBox(d.th, d.Title(), clip(lines, cw), width, height)
 }
 
 // row is the entry path with its status right-aligned; narrow panels drop the status.
@@ -267,24 +271,3 @@ func (d *Dashboard) entryStatus(e manifest.Entry) string {
 }
 
 func (d *Dashboard) muted(s string) string { return d.th.muted.Render(s) }
-
-// ManifestError replaces the sections that depend on an invalid manifest: no operation is offered.
-type ManifestError struct {
-	err error
-	th  theme
-	// fix names the file to repair; empty means manifest/paths.toml.
-	fix string
-}
-
-func (m ManifestError) Update(tea.Msg) (Screen, tea.Cmd) { return m, nil }
-
-func (m ManifestError) View(width, height int) string {
-	fix := m.fix
-	if fix == "" {
-		fix = "manifest/paths.toml"
-	}
-	lines := styled(m.th.err, wrap(m.err.Error(), contentWidth(width)))
-	lines = append(lines, "")
-	lines = append(lines, wrap("Fix "+fix+" and restart.", contentWidth(width))...)
-	return screenBox(m.th, "Invalid manifest", lines, width, height)
-}

@@ -12,13 +12,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-// BackupManager is the backup use-case surface the screen needs; *backup.Service implements it.
-type BackupManager interface {
-	ListBackups(ctx context.Context) ([]backup.Backup, error)
-	PlanRestore(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
-	DeleteBackup(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
-}
-
 type backupsMsg struct {
 	backups []backup.Backup
 	err     error
@@ -38,35 +31,52 @@ type restorePlanMsg struct {
 
 // Backups lists existing backups and starts restore and delete.
 type Backups struct {
-	manager BackupManager
-	keys    KeyMap
-	th      theme
-	backups []backup.Backup
-	cursor  int
-	err     error
-	confirm bool
-	notice  string
+	listBackups  func(ctx context.Context) ([]backup.Backup, error)
+	planRestore  func(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
+	deleteBackup func(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
+	keys         KeyMap
+	th           theme
+	backups      []backup.Backup
+	cursor       int
+	err          error
+	confirm      bool
+	notice       string
 }
 
-func newBackups(deps Deps, keys KeyMap, th theme) *Backups {
-	return &Backups{manager: deps.Backups, keys: keys, th: th}
+func newBackups(svc *services) *Backups {
+	return &Backups{
+		listBackups:  svc.ListBackups,
+		planRestore:  svc.PlanRestore,
+		deleteBackup: svc.DeleteBackup,
+		keys:         svc.keys,
+		th:           svc.th,
+	}
 }
 
-// Init loads the list at startup; enter reloads it.
-func (b *Backups) Init() tea.Cmd { return b.load() }
+func (b *Backups) Title() string { return "Backups" }
 
-func (b *Backups) enter() tea.Cmd { return b.load() }
+// Init loads the list at startup; Enter reloads it.
+func (b *Backups) Init() tea.Cmd  { return b.load() }
+func (b *Backups) Enter() tea.Cmd { return b.load() }
 
-// Modal reports whether q and esc must close the delete dialog instead of reaching the shell.
-func (b *Backups) Modal() bool { return b.confirm }
+// Keys claims esc while the delete dialog is open, so esc and q close it instead of reaching the shell.
+func (b *Backups) Keys() []key.Binding {
+	if b.confirm {
+		return []key.Binding{b.keys.Yes, b.keys.No, b.keys.Back}
+	}
+	return []key.Binding{b.keys.Up, b.keys.Down, b.keys.Refresh, b.keys.Delete, b.keys.Confirm}
+}
+
+// wired is false when restore and delete are not available.
+func (b *Backups) wired() bool { return b.planRestore != nil && b.deleteBackup != nil }
 
 func (b *Backups) load() tea.Cmd {
-	if b.manager == nil {
+	if b.listBackups == nil {
 		return nil
 	}
-	manager := b.manager
+	listBackups := b.listBackups
 	return func() tea.Msg {
-		list, err := manager.ListBackups(context.Background())
+		list, err := listBackups(context.Background())
 		return backupsMsg{backups: list, err: err}
 	}
 }
@@ -78,7 +88,7 @@ func (b *Backups) selected() (backup.Backup, bool) {
 	return b.backups[b.cursor], true
 }
 
-func (b *Backups) Update(msg tea.Msg) (Screen, tea.Cmd) {
+func (b *Backups) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case backupsMsg:
 		b.backups, b.err = msg.backups, msg.err
@@ -96,7 +106,7 @@ func (b *Backups) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	return b, nil
 }
 
-func (b *Backups) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
+func (b *Backups) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
 	if b.confirm {
 		switch {
 		case key.Matches(msg, b.keys.Yes):
@@ -115,7 +125,7 @@ func (b *Backups) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 		b.cursor = max(b.cursor-1, 0)
 	case key.Matches(msg, b.keys.Down):
 		b.cursor = max(min(b.cursor+1, len(b.backups)-1), 0)
-	case !ok || b.manager == nil:
+	case !ok || !b.wired():
 	case key.Matches(msg, b.keys.Delete):
 		b.confirm = true
 	case key.Matches(msg, b.keys.Confirm):
@@ -130,9 +140,9 @@ func (b *Backups) restore(sel backup.Backup) tea.Cmd {
 		return nil
 	}
 	b.err = nil
-	manager := b.manager
+	planRestore := b.planRestore
 	return func() tea.Msg {
-		plan, err := manager.PlanRestore(context.Background(), sel)
+		plan, err := planRestore(context.Background(), sel)
 		return restorePlanMsg{plan: plan, err: err}
 	}
 }
@@ -142,9 +152,9 @@ func (b *Backups) delete() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	manager := b.manager
+	deleteBackup := b.deleteBackup
 	return func() tea.Msg {
-		res, _ := manager.DeleteBackup(context.Background(), sel.Dir, true)
+		res, _ := deleteBackup(context.Background(), sel.Dir, true)
 		switch res.Status {
 		case plan.StepFailed:
 			return deleteDoneMsg{err: fmt.Errorf("delete failed: %s", res.Detail)}

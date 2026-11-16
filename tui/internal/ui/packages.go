@@ -15,13 +15,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-// PackageManager is the packages use-case surface the screen needs; *packages.Packages implements it.
-type PackageManager interface {
-	ListUnregistered(ctx context.Context) ([]string, error)
-	AddPackage(ctx context.Context, pkg manifest.Package) (plan.StepResult, error)
-	IgnorePackage(ctx context.Context, name string) plan.StepResult
-}
-
 type unregisteredMsg struct {
 	names []string
 	err   error
@@ -60,9 +53,9 @@ type addForm struct {
 
 // Packages lists explicit packages that are neither in the catalog nor ignored, and adds or ignores them.
 type Packages struct {
-	manager PackageManager
-	keys    KeyMap
-	th      theme
+	deps PackagesDeps
+	keys KeyMap
+	th   theme
 
 	names  []string
 	loaded bool
@@ -72,26 +65,38 @@ type Packages struct {
 	form   *addForm
 }
 
-func newPackages(deps Deps, keys KeyMap, th theme) *Packages {
-	return &Packages{manager: deps.Packages, keys: keys, th: th}
+func newPackages(svc *services) *Packages {
+	return &Packages{deps: svc.Packages, keys: svc.keys, th: svc.th}
 }
 
+func (p *Packages) Title() string { return "Packages" }
+
 func (p *Packages) Init() tea.Cmd  { return p.load() }
-func (p *Packages) enter() tea.Cmd { return p.load() }
+func (p *Packages) Enter() tea.Cmd { return p.load() }
 
-// Modal reports whether q and esc must close the add form instead of reaching the shell.
-func (p *Packages) Modal() bool { return p.form != nil }
+// Keys claims esc while the add form is open, so esc and q close it instead of reaching the shell.
+func (p *Packages) Keys() []key.Binding {
+	if p.form != nil {
+		return []key.Binding{p.keys.Up, p.keys.Down, p.keys.Toggle, p.keys.Confirm, p.keys.Back}
+	}
+	return []key.Binding{p.keys.Up, p.keys.Down, p.keys.Refresh, p.keys.Add, p.keys.Ignore}
+}
 
-// capturesText reports whether printable keys belong to the group field.
-func (p *Packages) capturesText() bool { return p.form != nil && p.form.row == formRowGroup }
+// CapturesText reports whether printable keys belong to the group field.
+func (p *Packages) CapturesText() bool { return p.form != nil && p.form.row == formRowGroup }
+
+// wired is false when the package manager is not available.
+func (p *Packages) wired() bool {
+	return p.deps.ListUnregistered != nil && p.deps.AddPackage != nil && p.deps.IgnorePackage != nil
+}
 
 func (p *Packages) load() tea.Cmd {
-	if p.manager == nil {
+	if p.deps.ListUnregistered == nil {
 		return nil
 	}
-	manager := p.manager
+	listUnregistered := p.deps.ListUnregistered
 	return func() tea.Msg {
-		names, err := manager.ListUnregistered(context.Background())
+		names, err := listUnregistered(context.Background())
 		return unregisteredMsg{names: names, err: err}
 	}
 }
@@ -103,7 +108,7 @@ func (p *Packages) selected() (string, bool) {
 	return p.names[p.cursor], true
 }
 
-func (p *Packages) Update(msg tea.Msg) (Screen, tea.Cmd) {
+func (p *Packages) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case unregisteredMsg:
 		p.loaded, p.names, p.err = true, msg.names, msg.err
@@ -130,7 +135,7 @@ func (p *Packages) listKey(msg tea.KeyPressMsg) tea.Cmd {
 		p.cursor = max(p.cursor-1, 0)
 	case key.Matches(msg, p.keys.Down):
 		p.cursor = max(min(p.cursor+1, len(p.names)-1), 0)
-	case !ok || p.manager == nil:
+	case !ok || !p.wired():
 	case key.Matches(msg, p.keys.Add):
 		p.notice = ""
 		group := textinput.New()
@@ -143,9 +148,9 @@ func (p *Packages) listKey(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (p *Packages) ignore(name string) tea.Cmd {
-	manager := p.manager
+	ignorePackage := p.deps.IgnorePackage
 	return func() tea.Msg {
-		return packageIgnoredMsg{name: name, res: manager.IgnorePackage(context.Background(), name)}
+		return packageIgnoredMsg{name: name, res: ignorePackage(context.Background(), name)}
 	}
 }
 
@@ -237,9 +242,9 @@ func (p *Packages) submit() tea.Cmd {
 	if f.full {
 		pkg.Profiles = append(pkg.Profiles, manifest.ProfileFull)
 	}
-	manager := p.manager
+	addPackage := p.deps.AddPackage
 	return func() tea.Msg {
-		res, err := manager.AddPackage(context.Background(), pkg)
+		res, err := addPackage(context.Background(), pkg)
 		return packageAddedMsg{name: pkg.Name, res: res, err: err}
 	}
 }
@@ -259,7 +264,7 @@ func (p *Packages) View(width, height int) string {
 	muted := func(text string) []string { return styled(p.th.muted, wrap(text, cw)) }
 	var msg string
 	switch {
-	case p.manager == nil:
+	case !p.wired():
 		msg = "Packages are not available."
 	case !p.loaded:
 		msg = "Loading..."

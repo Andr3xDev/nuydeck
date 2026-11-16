@@ -18,13 +18,10 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
-	"github.com/Andr3xDev/nuydeck/tui/internal/packages"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
-	"github.com/Andr3xDev/nuydeck/tui/internal/sysx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui"
 )
 
@@ -85,7 +82,8 @@ func run(dryRun bool, repoFlag string) error {
 	backups := &backup.Service{Service: svc, Lister: inspector}
 	drifter := &drift.Service{Service: svc, Inspector: inspector}
 
-	deps := ui.Deps{Drifter: drifter, Syncer: svc, Backups: backups, StateWarning: stateWarning, LastSync: state.LastSync}
+	deps := ui.Deps{Terminal: bridge, StateWarning: stateWarning, LastSync: state.LastSync}
+	wireSync(&deps, svc, backups, drifter)
 	if repo == "" {
 		deps.ManifestError = errRepoNotFound
 	} else if deps.Entries, err = loadEntries(repo, home); err != nil {
@@ -100,46 +98,6 @@ func run(dryRun bool, repoFlag string) error {
 	_, err = program.Run()
 	root.WaitInstall(installShutdownTimeout)
 	return err
-}
-
-// wireCatalog loads the package, hardware and secret-name manifests and builds the install and packages use cases.
-// A bad manifest only sets CatalogError, so sync and backups keep working.
-func wireCatalog(deps *ui.Deps, svc *cfgsync.Service, repo, home, username string, dryRun bool, runner plan.Runner, inspector Inspector) {
-	catalog, err := manifest.LoadPackages(filepath.Join(repo, packagesRelPath))
-	if err != nil {
-		deps.CatalogError = err
-		return
-	}
-	drivers, err := manifest.LoadHardware(filepath.Join(repo, hardwareRelPath))
-	if err != nil {
-		deps.CatalogError = err
-		return
-	}
-	secretNames, err := manifest.LoadSecrets(filepath.Join(repo, secretsRelPath))
-	if err != nil {
-		deps.CatalogError = err
-		return
-	}
-
-	probe := sysx.Probe{User: username}
-	preview := dryrun.Recorder{}
-	deps.Install = ui.InstallDeps{
-		Installer: &install.Installer{
-			Service: svc, Probe: probe, Runner: runner, Preview: preview, Now: time.Now, DryRun: dryRun,
-			Catalog: catalog, Drivers: drivers, Entries: deps.Entries, Home: home, User: username,
-		},
-		Preview:     preview,
-		GPUs:        probe,
-		Paths:       inspector,
-		SecretsPath: filepath.Join(home, ".secrets"),
-		SecretNames: secretNames,
-		Catalog:     catalog,
-		Drivers:     drivers,
-	}
-	deps.Packages = &packages.Packages{
-		Probe: probe, LoadState: inspector.LoadState, Runner: runner, Catalog: catalog, Drivers: drivers,
-		CatalogPath: filepath.Join(repo, packagesRelPath),
-	}
 }
 
 // resolveRepo picks the repo: the --repo flag, then the saved state, then the

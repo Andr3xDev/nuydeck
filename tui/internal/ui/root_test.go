@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -10,10 +11,15 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func press(t *testing.T, r Root, k tea.KeyPressMsg) (Root, tea.Cmd) {
+func press(t *testing.T, r *Root, k tea.KeyPressMsg) (*Root, tea.Cmd) {
 	t.Helper()
-	m, cmd := r.Update(k)
-	return m.(Root), cmd
+	_, cmd := r.Update(k)
+	return r, cmd
+}
+
+// testServices wires a screen under test the way NewRoot does.
+func testServices(deps Deps) *services {
+	return &services{Deps: deps, ctx: context.Background(), th: ForVariant(""), keys: DefaultKeyMap()}
 }
 
 func TestRootQuitKeys(t *testing.T) {
@@ -31,7 +37,7 @@ func TestRootQuitKeys(t *testing.T) {
 func TestRootQuitsFromSidebarWhileInstallIsPastTheFirstPage(t *testing.T) {
 	root, in := newTestRoot(&fakeInstaller{plan: onePlan()})
 	toHardware(in)
-	root.selected = installSection
+	_, root.selected, _ = sectionOf[*Install](root)
 	if in.page != pageHardware || root.panelFocus {
 		t.Fatalf("page=%v panelFocus=%v, want the hardware page with sidebar focus", in.page, root.panelFocus)
 	}
@@ -70,15 +76,14 @@ func TestRootResizeKeepsSelectedSection(t *testing.T) {
 	if r.selected != 2 {
 		t.Fatalf("selected = %d, want 2", r.selected)
 	}
-	m, _ := r.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	m, _ = m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
-	r = m.(Root)
+	r.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	r.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
 	if r.selected != 2 || r.width != 60 || r.height != 20 {
 		t.Errorf("state after resize: selected=%d size=%dx%d", r.selected, r.width, r.height)
 	}
 }
 
-func sectionTitles(r Root) []string {
+func sectionTitles(r *Root) []string {
 	titles := make([]string, len(r.sections))
 	for i, s := range r.sections {
 		titles[i] = s.title
@@ -93,18 +98,18 @@ func TestRootSidebarOrderKeepsSyncSection(t *testing.T) {
 	if got := sectionTitles(r); !slices.Equal(got, want) {
 		t.Fatalf("sections = %v, want %v", got, want)
 	}
-	if _, ok := r.sections[syncSection].screen.(*Sync); !ok || syncSection != 1 {
-		t.Errorf("syncSection = %d does not hold the Sync screen", syncSection)
+	if _, at, ok := sectionOf[*Sync](r); !ok || at != 1 {
+		t.Errorf("Sync section at %d (found %v), want 1", at, ok)
 	}
 }
 
 func TestRootCatalogErrorReplacesOnlyInstallAndPackages(t *testing.T) {
 	r := NewRoot("", false, Deps{CatalogError: errors.New("packages.toml:3: bad source")})
 
-	for i, s := range r.sections {
-		_, isError := s.screen.(ManifestError)
-		if want := i == installSection || i == packagesSection; isError != want {
-			t.Errorf("section %s: ManifestError = %v, want %v", s.title, isError, want)
+	for _, s := range r.sections {
+		_, isError := s.screen.(errorScreen)
+		if want := s.title == "Install" || s.title == "Packages"; isError != want {
+			t.Errorf("section %s: error screen = %v, want %v", s.title, isError, want)
 		}
 	}
 
@@ -116,8 +121,7 @@ func TestRootCatalogErrorReplacesOnlyInstallAndPackages(t *testing.T) {
 
 func TestRootViewShowsDryRunBadgeOnEverySection(t *testing.T) {
 	r := NewRoot("zenit", true, Deps{})
-	m, _ := r.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
-	r = m.(Root)
+	r.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
 	for i := range r.sections {
 		r.selected = i
 		v := r.View()
@@ -128,8 +132,9 @@ func TestRootViewShowsDryRunBadgeOnEverySection(t *testing.T) {
 			t.Errorf("section %d: DRY-RUN badge missing", i)
 		}
 	}
-	plain, _ := NewRoot("", false, Deps{}).Update(tea.WindowSizeMsg{Width: 80, Height: 20})
-	if strings.Contains(ansi.Strip(plain.(Root).View().Content), dryRunBadge) {
+	plain := NewRoot("", false, Deps{})
+	plain.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	if strings.Contains(ansi.Strip(plain.View().Content), dryRunBadge) {
 		t.Error("badge shown without dry-run")
 	}
 }

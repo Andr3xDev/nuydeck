@@ -43,13 +43,15 @@ func onePlan() install.InstallPlan {
 	return install.InstallPlan{Steps: []install.PlannedStep{{Phase: install.PhaseReboot, Step: plan.CommandStep{Label: "reboot"}}}}
 }
 
-func newTestRoot(f *fakeInstaller, secretNames ...string) (Root, *Install) {
+func newTestRoot(f *fakeInstaller, secretNames ...string) (*Root, *Install) {
 	root := NewRoot("", false, Deps{Install: InstallDeps{
-		Installer:   f,
+		Plan:        f.Plan,
+		Run:         f.Run,
 		Drivers:     []manifest.Driver{{ID: "amd", VendorID: "1002"}, {ID: "nvidia", VendorID: "10de"}},
 		SecretNames: secretNames,
 	}})
-	return root, root.sections[installSection].screen.(*Install)
+	in, _, _ := sectionOf[*Install](root)
+	return root, in
 }
 
 func specialKey(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code} }
@@ -143,7 +145,7 @@ func TestInstallRunsNothingBeforeExplicitConfirm(t *testing.T) {
 }
 
 // awaitingAck drives a run to the reboot acknowledgement; the fake reports how Run ended.
-func awaitingAck(t *testing.T) (root Root, in *Install, acked, cancelled chan struct{}) {
+func awaitingAck(t *testing.T) (root *Root, in *Install, acked, cancelled chan struct{}) {
 	t.Helper()
 	acked, cancelled = make(chan struct{}, 1), make(chan struct{}, 1)
 	f := &fakeInstaller{plan: onePlan(), run: func(ctx context.Context, events chan<- plan.InstallEvent, ack <-chan struct{}) install.InstallResult {
