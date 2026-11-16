@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 )
 
 const (
@@ -141,7 +141,7 @@ func AppendPackage(path string, entry domain.Package) error {
 	if _, err := parsePackages(filepath.Base(path), []byte(candidate)); err != nil {
 		return err
 	}
-	return fsx.WriteAtomic(path, []byte(candidate), info.Mode().Perm())
+	return fsutil.WriteAtomic(path, []byte(candidate), info.Mode().Perm())
 }
 
 func renderPackage(p domain.Package) string {

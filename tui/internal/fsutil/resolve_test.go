@@ -1,11 +1,11 @@
-package fsx_test
+package fsutil_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 )
 
 func TestResolveExisting_DanglingSymlinkFailsClosed(t *testing.T) {
@@ -19,11 +19,11 @@ func TestResolveExisting_DanglingSymlinkFailsClosed(t *testing.T) {
 		"link itself":           link,
 		"missing tail below it": filepath.Join(link, "sub", "file"),
 	} {
-		if got, err := fsx.ResolveExisting(p); err == nil {
+		if got, err := fsutil.ResolveExisting(p); err == nil {
 			t.Errorf("%s: resolved to %q, want an error", name, got)
 		}
 	}
-	if _, err := fsx.ResolveExisting(filepath.Join(dir, "plain-missing", "file")); err != nil {
+	if _, err := fsutil.ResolveExisting(filepath.Join(dir, "plain-missing", "file")); err != nil {
 		t.Errorf("plain missing path must still resolve: %v", err)
 	}
 }

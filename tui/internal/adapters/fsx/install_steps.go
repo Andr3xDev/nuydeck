@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 )
 
 const (
@@ -25,7 +26,7 @@ func writeFile(s domain.WriteFileStep) domain.StepResult {
 	if err := os.MkdirAll(filepath.Dir(s.Path), userDirMode); err != nil {
 		return failed(err)
 	}
-	return done(WriteAtomic(s.Path, s.Content, s.Mode))
+	return done(fsutil.WriteAtomic(s.Path, s.Content, s.Mode))
 }
 
 func symlink(s domain.SymlinkStep) domain.StepResult {

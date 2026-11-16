@@ -1,4 +1,4 @@
-package fsx
+package fsutil
 
 import (
 	"io/fs"

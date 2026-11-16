@@ -17,6 +17,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/rsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 )
 
 const (
@@ -66,7 +67,7 @@ func (r Runner) Run(ctx context.Context, s domain.Step, _ func(domain.StepProgre
 
 func deletePath(s domain.DeleteStep) domain.StepResult {
 	root, target := filepath.Clean(s.Root), filepath.Clean(s.Path)
-	if !StrictlyWithin(root, target) {
+	if !fsutil.StrictlyWithin(root, target) {
 		return failed(fmt.Errorf("refusing to delete %s: not inside %s", target, root))
 	}
 	// A symlinked parent would redirect the removal outside the root.
@@ -81,7 +82,7 @@ func deletePath(s domain.DeleteStep) domain.StepResult {
 	if err != nil {
 		return failed(err)
 	}
-	if !Within(realRoot, realParent) {
+	if !fsutil.Within(realRoot, realParent) {
 		return failed(fmt.Errorf("refusing to delete %s: parent resolves outside %s", target, root))
 	}
 	switch err := os.Remove(target); {
@@ -105,16 +106,16 @@ func (r Runner) now() time.Time {
 
 func (r Runner) backup(ctx context.Context, s domain.BackupStep) domain.StepResult {
 	backupsDir := BackupsDir(r.Home)
-	realBackupsDir, err := ResolveExisting(backupsDir)
+	realBackupsDir, err := fsutil.ResolveExisting(backupsDir)
 	if err != nil {
 		return failed(err)
 	}
 	for _, f := range s.Files {
-		realEntry, err := ResolveExisting(filepath.Join(s.Roots[f.Root], f.Path))
+		realEntry, err := fsutil.ResolveExisting(filepath.Join(s.Roots[f.Root], f.Path))
 		if err != nil {
 			return failed(err)
 		}
-		if Within(realEntry, realBackupsDir) || Within(realBackupsDir, realEntry) {
+		if fsutil.Within(realEntry, realBackupsDir) || fsutil.Within(realBackupsDir, realEntry) {
 			return failed(fmt.Errorf("refusing backup: %s lies inside %s/%s", backupsDir, f.Root, f.Path))
 		}
 	}

@@ -11,8 +11,8 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 )
 
 const (
@@ -66,22 +66,22 @@ func SaveState(path string, s domain.State) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return fsx.WriteAtomic(path, data, stateFileMode)
+	return fsutil.WriteAtomic(path, data, stateFileMode)
 }
 
 func refuseInsideRepo(dir, repo string) error {
-	realDir, err := fsx.ResolveExisting(dir)
+	realDir, err := fsutil.ResolveExisting(dir)
 	if err != nil {
 		return err
 	}
-	realRepo, err := fsx.ResolveExisting(repo)
+	realRepo, err := fsutil.ResolveExisting(repo)
 	if err != nil {
 		return err
 	}
 	if _, err := filepath.Rel(realRepo, realDir); err != nil {
 		return fmt.Errorf("cannot determine whether state dir %s is inside the repo: %w", dir, err)
 	}
-	if fsx.Within(realRepo, realDir) {
+	if fsutil.Within(realRepo, realDir) {
 		return fmt.Errorf("refusing to write state inside the repo: %s", dir)
 	}
 	return nil
