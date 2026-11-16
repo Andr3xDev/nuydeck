@@ -1,2 +1,2 @@
-// Package system composes the concrete adapters into the app ports.
+// Package osexec runs command and privileged plan steps through the OS.
 package osexec
