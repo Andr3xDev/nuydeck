@@ -1,18 +1,17 @@
-package app
+package backup
 
 import (
 	"context"
 	"path"
 	"slices"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 // PlanRestore plans a restore from the backup; roots come from the backup metadata and deletions are never offered.
-func (s *Service) PlanRestore(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error) {
+func (s *Service) PlanRestore(ctx context.Context, b Backup) (cfgsync.SyncPlan, error) {
 	roots := make([]manifest.Root, 0, len(b.Roots))
 	for root := range b.Roots {
 		roots = append(roots, root)

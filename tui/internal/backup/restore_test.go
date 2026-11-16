@@ -1,17 +1,16 @@
-package app
+package backup
 
 import (
 	"context"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-func testBackup() backup.Backup {
-	return backup.Backup{
+func testBackup() Backup {
+	return Backup{
 		Dir:       "/home/u/.nuydeck-backups/20261103-100000",
 		Direction: plan.Push,
 		Roots:     map[manifest.Root]string{manifest.RootConfig: "/home/u/.config"},

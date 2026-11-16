@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
@@ -82,7 +83,9 @@ func run(dryRun bool, repoFlag string) error {
 		Inspector: inspector,
 	}
 
-	deps := ui.Deps{Drifter: svc, Syncer: svc, Backups: svc, StateWarning: stateWarning, LastSync: state.LastSync}
+	backups := &backup.Service{Service: svc.Service, Lister: inspector}
+
+	deps := ui.Deps{Drifter: svc, Syncer: svc, Backups: backups, StateWarning: stateWarning, LastSync: state.LastSync}
 	if repo == "" {
 		deps.ManifestError = errRepoNotFound
 	} else if deps.Entries, err = loadEntries(repo, home); err != nil {

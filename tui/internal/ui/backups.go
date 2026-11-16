@@ -16,7 +16,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
-// BackupManager is the backup use-case surface the screen needs; *app.Service implements it.
+// BackupManager is the backup use-case surface the screen needs; *backup.Service implements it.
 type BackupManager interface {
 	ListBackups(ctx context.Context) ([]backup.Backup, error)
 	PlanRestore(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
