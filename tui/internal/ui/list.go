@@ -6,9 +6,13 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// listRow is one list entry. badges render as " [badge]" after the text, in the warning style;
+// header rows are group titles.
 type listRow struct {
-	text  string
-	muted bool
+	text   string
+	badges []string
+	muted  bool
+	header bool
 }
 
 // listLines wraps every row to width and highlights the cursor row.
@@ -21,13 +25,25 @@ func listLines(t theme, rows []listRow, cursor, width int) ([]string, int) {
 		if i == cursor {
 			cursorAt, prefix = len(lines), "> "
 		}
-		for _, l := range wrap(prefix+row.text, width) {
+		text := prefix + row.text
+		for _, b := range row.badges {
+			text += " [" + b + "]"
+		}
+		for _, l := range wrap(text, width) {
 			l = strings.TrimRight(l, " ")
 			switch {
 			case i == cursor:
 				l = t.selected.Render(l + strings.Repeat(" ", max(width-lipgloss.Width(l), 0)))
 			case row.muted:
 				l = t.muted.Render(l)
+			case row.header:
+				l = t.section.Render(l)
+			default:
+				// Badge text can wrap across lines; only a badge left whole on a line is styled.
+				for _, b := range row.badges {
+					l = strings.ReplaceAll(l, "["+b+"]", t.warning.Render("["+b+"]"))
+				}
+				l = t.plain.Render(l)
 			}
 			lines = append(lines, l)
 		}

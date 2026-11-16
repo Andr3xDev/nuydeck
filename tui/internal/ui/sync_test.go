@@ -59,7 +59,7 @@ func planItem(path string, blocked bool) cfgsync.PlanItem {
 }
 
 func newPreview(f *fakeSyncer, dryRun bool) *Sync {
-	s := newSync(Deps{Syncer: f}, dryRun, DefaultKeyMap(), NewRoot("", false, Deps{}).palette)
+	s := newSync(Deps{Syncer: f}, dryRun, DefaultKeyMap(), NewRoot("", false, Deps{}).th)
 	s.Update(planMsg{gen: s.gen, plan: f.plan})
 	return s
 }

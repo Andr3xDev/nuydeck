@@ -111,9 +111,9 @@ type selectionRow struct {
 
 // Install is the guided install wizard: profile, hardware, selection, secrets, summary, run.
 type Install struct {
-	deps    InstallDeps
-	keys    KeyMap
-	palette Palette
+	deps InstallDeps
+	keys KeyMap
+	th   theme
 
 	page   installPage
 	draft  install.Draft
@@ -153,13 +153,13 @@ type Install struct {
 	runErr   error
 }
 
-func newInstall(deps InstallDeps, keys KeyMap, palette Palette) *Install {
+func newInstall(deps InstallDeps, keys KeyMap, th theme) *Install {
 	input := textinput.New()
 	input.EchoMode = textinput.EchoNone
 	return &Install{
 		deps:        deps,
 		keys:        keys,
-		palette:     palette,
+		th:          th,
 		draft:       install.Draft{Profile: manifest.ProfileMinimal},
 		secretInput: input,
 		summary:     viewport.New(),

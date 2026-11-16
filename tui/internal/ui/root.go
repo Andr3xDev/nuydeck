@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"image/color"
 	"strings"
 	"time"
 
@@ -22,9 +21,9 @@ const (
 // wideRowWidth is the panel width below which list rows drop their secondary columns.
 const wideRowWidth = 60
 
-// screenBox draws a screen's box with the palette's theme; lines must fit contentWidth(width).
-func screenBox(p Palette, title string, lines []string, width, height int) string {
-	return renderBox(newTheme(p), title, lines, width, height, true)
+// screenBox draws a screen's box; lines must fit contentWidth(width).
+func screenBox(th theme, title string, lines []string, width, height int) string {
+	return renderBox(th, title, lines, width, height, true)
 }
 
 // innerHeight is the number of lines a screen can fill inside its box.
@@ -40,9 +39,8 @@ func clip(lines []string, width int) []string {
 	return out
 }
 
-// styled applies a foreground color to every line of text.
-func styled(c color.Color, lines []string) []string {
-	style := lipgloss.NewStyle().Foreground(c)
+// styled applies a style to every line of text.
+func styled(style lipgloss.Style, lines []string) []string {
 	out := make([]string, len(lines))
 	for i, l := range lines {
 		out[i] = style.Render(l)
@@ -69,7 +67,7 @@ type placeholder struct{ title string }
 func (p placeholder) Update(tea.Msg) (Screen, tea.Cmd) { return p, nil }
 
 func (p placeholder) View(width, height int) string {
-	return screenBox(Palette{}, p.title, nil, width, height)
+	return screenBox(theme{}, p.title, nil, width, height)
 }
 
 const (
@@ -108,37 +106,37 @@ type Root struct {
 	dryRun        bool
 	keys          KeyMap
 	help          help.Model
-	palette       Palette
+	th            theme
 }
 
 // NewRoot builds the shell. variant is the raw theme variant string read by
 // the caller; unknown values fall back to Nadir. A manifest error leaves only
 // the error screen, so no sync, backup or restore action exists.
 func NewRoot(variant string, dryRun bool, deps Deps) Root {
-	palette := ForVariant(variant)
+	th := ForVariant(variant)
 	h := help.New()
-	h.Styles = help.DefaultStyles(palette.Dark)
+	h.Styles = help.DefaultStyles(th.Dark)
 	keys := DefaultKeyMap()
 	sections := []section{
-		{"Dashboard", newDashboard(deps, keys, palette)},
-		{"Sync", newSync(deps, dryRun, keys, palette)},
-		{"Backups", newBackups(deps, keys, palette)},
-		{"Install", newInstall(deps.Install, keys, palette)},
-		{"Packages", newPackages(deps, keys, palette)},
+		{"Dashboard", newDashboard(deps, keys, th)},
+		{"Sync", newSync(deps, dryRun, keys, th)},
+		{"Backups", newBackups(deps, keys, th)},
+		{"Install", newInstall(deps.Install, keys, th)},
+		{"Packages", newPackages(deps, keys, th)},
 	}
 	if deps.CatalogError != nil {
-		catalogErr := ManifestError{err: deps.CatalogError, palette: palette, fix: catalogFiles}
+		catalogErr := ManifestError{err: deps.CatalogError, th: th, fix: catalogFiles}
 		sections[installSection].screen, sections[packagesSection].screen = catalogErr, catalogErr
 	}
 	if deps.ManifestError != nil {
-		sections = []section{{"Manifest", ManifestError{err: deps.ManifestError, palette: palette}}}
+		sections = []section{{"Manifest", ManifestError{err: deps.ManifestError, th: th}}}
 	}
 	return Root{
 		sections: sections,
 		dryRun:   dryRun,
 		keys:     keys,
 		help:     h,
-		palette:  palette,
+		th:       th,
 	}
 }
 
@@ -273,7 +271,7 @@ func (r Root) render() string {
 	panel := r.sections[r.selected].screen.View(panelWidth, bodyHeight)
 	if r.showHelp {
 		helpText := lipgloss.NewStyle().MaxWidth(contentWidth(panelWidth)).Render(r.help.FullHelpView(r.keys.FullHelp()))
-		panel = screenBox(r.palette, "Help", strings.Split(helpText, "\n"), panelWidth, bodyHeight)
+		panel = screenBox(r.th, "Help", strings.Split(helpText, "\n"), panelWidth, bodyHeight)
 	}
 	panel = lipgloss.NewStyle().MaxWidth(panelWidth).MaxHeight(bodyHeight).Render(panel)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, r.renderSidebar(bodyHeight), panel)
@@ -281,8 +279,8 @@ func (r Root) render() string {
 }
 
 func (r Root) renderSidebar(height int) string {
-	normal := lipgloss.NewStyle().Foreground(r.palette.TextSecondary).Padding(0, 1)
-	active := lipgloss.NewStyle().Foreground(r.palette.OnAccent).Background(r.palette.Accent).Padding(0, 1)
+	normal := r.th.secondary.Padding(0, 1)
+	active := r.th.onAccent.Padding(0, 1)
 	if !r.panelFocus {
 		active = active.Bold(true)
 	}
@@ -296,15 +294,14 @@ func (r Root) renderSidebar(height int) string {
 		lines[i] = style.Width(sidebarWidth).Render(s.title)
 	}
 	return lipgloss.NewStyle().Width(sidebarWidth).Height(height).
-		BorderStyle(lipgloss.NormalBorder()).BorderRight(true).BorderForeground(r.palette.Border).
+		BorderStyle(lipgloss.NormalBorder()).BorderRight(true).BorderForeground(r.th.border.GetForeground()).
 		Render(strings.Join(lines, "\n"))
 }
 
 func (r Root) renderKeybar() string {
 	badge := ""
 	if r.dryRun {
-		badge = lipgloss.NewStyle().Bold(true).Padding(0, 1).
-			Foreground(r.palette.OnAccent).Background(r.palette.Warning).Render(dryRunBadge)
+		badge = r.th.badge.Render(dryRunBadge)
 	}
 	hint := r.help.ShortHelpView(r.keys.ShortHelp())
 	gap := max(r.width-lipgloss.Width(hint)-lipgloss.Width(badge), 0)

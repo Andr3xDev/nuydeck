@@ -8,82 +8,92 @@ import (
 
 const variantZenit = "zenit"
 
-// Palette is the subset of Nuytek tokens the TUI uses.
-type Palette struct {
-	Dark          bool
-	Bg            color.Color
-	Surface       color.Color
-	Border        color.Color
-	TextMuted     color.Color
-	TextSecondary color.Color
-	TextPrimary   color.Color
-	OnAccent      color.Color
-	Accent        color.Color
-	Warning       color.Color
-	Error         color.Color
-	Success       color.Color
+// palette is the subset of Nuytek tokens the TUI uses.
+type palette struct {
+	dark          bool
+	border        color.Color
+	textMuted     color.Color
+	textSecondary color.Color
+	textPrimary   color.Color
+	onAccent      color.Color
+	accent        color.Color
+	warning       color.Color
+	failure       color.Color
+	success       color.Color
 }
 
 // Tokens copied from ~/.config/quickshell/lucyna/core/theme/primitives/nuytek/Nadir.qml:15-35.
-var nadir = Palette{
-	Dark:          true,
-	Bg:            lipgloss.Color("#151515"),
-	Surface:       lipgloss.Color("#232323"),
-	Border:        lipgloss.Color("#323232"),
-	TextMuted:     lipgloss.Color("#72837D"),
-	TextSecondary: lipgloss.Color("#A7B4B0"),
-	TextPrimary:   lipgloss.Color("#E9EDEB"),
-	OnAccent:      lipgloss.Color("#151515"),
-	Accent:        lipgloss.Color("#5AE2DD"),
-	Warning:       lipgloss.Color("#F39049"),
-	Error:         lipgloss.Color("#EF616D"),
-	Success:       lipgloss.Color("#84EB8D"),
+var nadir = palette{
+	dark:          true,
+	border:        lipgloss.Color("#323232"),
+	textMuted:     lipgloss.Color("#72837D"),
+	textSecondary: lipgloss.Color("#A7B4B0"),
+	textPrimary:   lipgloss.Color("#E9EDEB"),
+	onAccent:      lipgloss.Color("#151515"),
+	accent:        lipgloss.Color("#5AE2DD"),
+	warning:       lipgloss.Color("#F39049"),
+	failure:       lipgloss.Color("#EF616D"),
+	success:       lipgloss.Color("#84EB8D"),
 }
 
 // Tokens copied from ~/.config/quickshell/lucyna/core/theme/primitives/nuytek/Zenit.qml:15-35.
-var zenit = Palette{
-	Dark:          false,
-	Bg:            lipgloss.Color("#F3F4F4"),
-	Surface:       lipgloss.Color("#FAFAFA"),
-	Border:        lipgloss.Color("#DADCDC"),
-	TextMuted:     lipgloss.Color("#5E6D67"),
-	TextSecondary: lipgloss.Color("#4B5A54"),
-	TextPrimary:   lipgloss.Color("#16211E"),
-	OnAccent:      lipgloss.Color("#F7F8F8"),
-	Accent:        lipgloss.Color("#0B726D"),
-	Warning:       lipgloss.Color("#B85F1D"),
-	Error:         lipgloss.Color("#C23B46"),
-	Success:       lipgloss.Color("#1E8A3B"),
+var zenit = palette{
+	dark:          false,
+	border:        lipgloss.Color("#DADCDC"),
+	textMuted:     lipgloss.Color("#5E6D67"),
+	textSecondary: lipgloss.Color("#4B5A54"),
+	textPrimary:   lipgloss.Color("#16211E"),
+	onAccent:      lipgloss.Color("#F7F8F8"),
+	accent:        lipgloss.Color("#0B726D"),
+	warning:       lipgloss.Color("#B85F1D"),
+	failure:       lipgloss.Color("#C23B46"),
+	success:       lipgloss.Color("#1E8A3B"),
 }
 
-// theme is the styles the shared render primitives need; its zero value renders unstyled.
+// theme is the styles every screen renders with; its zero value renders unstyled.
 type theme struct {
-	title, selected, muted       lipgloss.Style
-	focusedBorder, blurredBorder lipgloss.Style
+	Dark bool
+
+	plain, secondary, muted, title lipgloss.Style
+	accent, onAccent, selected     lipgloss.Style
+	section                        lipgloss.Style
+	border, borderFocus            lipgloss.Style
+	ok, warning, err, badge        lipgloss.Style
 }
 
-func newTheme(p Palette) theme {
+func newTheme(p palette) theme {
+	fg := func(c color.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
 	return theme{
-		title:         lipgloss.NewStyle().Bold(true),
-		selected:      lipgloss.NewStyle().Bold(true).Foreground(p.OnAccent).Background(p.Accent),
-		muted:         lipgloss.NewStyle().Foreground(p.TextMuted),
-		focusedBorder: lipgloss.NewStyle().Foreground(p.Accent),
-		blurredBorder: lipgloss.NewStyle().Foreground(p.Border),
+		Dark:        p.dark,
+		plain:       fg(p.textPrimary),
+		secondary:   fg(p.textSecondary),
+		muted:       fg(p.textMuted),
+		title:       lipgloss.NewStyle().Bold(true),
+		accent:      fg(p.accent),
+		onAccent:    fg(p.onAccent).Background(p.accent),
+		selected:    fg(p.onAccent).Background(p.accent).Bold(true),
+		section:     fg(p.accent).Bold(true),
+		border:      fg(p.border),
+		borderFocus: fg(p.accent),
+		ok:          fg(p.success),
+		warning:     fg(p.warning),
+		err:         fg(p.failure),
+		badge:       fg(p.onAccent).Background(p.warning).Bold(true).Padding(0, 1),
 	}
 }
 
-func (t theme) border(focused bool) lipgloss.Style {
+func (t theme) borderFor(focused bool) lipgloss.Style {
 	if focused {
-		return t.focusedBorder
+		return t.borderFocus
 	}
-	return t.blurredBorder
+	return t.border
 }
 
 // ForVariant returns Zenit for "zenit" and Nadir for anything else, so a
 // missing or invalid variant never surfaces as an error.
-func ForVariant(variant string) Palette {
+func ForVariant(variant string) theme {
 	if variant == variantZenit {
-		return zenit
+		return newTheme(zenit)
 	}
-	return nadir
+	return newTheme(nadir)
 }

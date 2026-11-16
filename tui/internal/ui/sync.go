@@ -7,7 +7,6 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
@@ -67,7 +66,7 @@ type Sync struct {
 	entries []manifest.ResolvedEntry
 	dryRun  bool
 	keys    KeyMap
-	palette Palette
+	th      theme
 
 	gen       int
 	phase     syncPhase
@@ -86,8 +85,8 @@ type Sync struct {
 
 const applyBusyNotice = "Another sync was ignored: an apply is in progress."
 
-func newSync(deps Deps, dryRun bool, keys KeyMap, palette Palette) *Sync {
-	return &Sync{syncer: deps.Syncer, entries: deps.Entries, dryRun: dryRun, keys: keys, palette: palette}
+func newSync(deps Deps, dryRun bool, keys KeyMap, th theme) *Sync {
+	return &Sync{syncer: deps.Syncer, entries: deps.Entries, dryRun: dryRun, keys: keys, th: th}
 }
 
 // Modal reports whether q and esc must reach the screen instead of the shell.
@@ -326,7 +325,7 @@ func waitProgress(gen int, ch <-chan applyEvent) tea.Cmd {
 }
 
 func (s *Sync) View(width, height int) string {
-	return screenBox(s.palette, "Sync", s.body(width, innerHeight(height)), width, height)
+	return screenBox(s.th, "Sync", s.body(width, innerHeight(height)), width, height)
 }
 
 func (s *Sync) body(width, height int) []string {
@@ -362,7 +361,7 @@ func (s *Sync) body(width, height int) []string {
 func (s *Sync) previewView(width, height int) []string {
 	cw := contentWidth(width)
 	header := fmt.Sprintf("%s: %d of %d selected", directionLabel(s.direction), s.selectedCount(), len(s.plan.Items))
-	lines := []string{lipgloss.NewStyle().Bold(true).Render(truncate(header, cw))}
+	lines := []string{s.th.title.Render(truncate(header, cw))}
 	if s.plan.StateWarning != "" {
 		lines = append(lines, s.warn("State: "+s.plan.StateWarning, cw)...)
 	}
@@ -374,14 +373,14 @@ func (s *Sync) previewView(width, height int) []string {
 	}
 	rows := make([]listRow, len(s.plan.Items))
 	for i, it := range s.plan.Items {
-		rows[i] = listRow{text: s.itemText(it, width), muted: it.Blocked}
+		rows[i] = s.row(it, width)
 	}
-	list, at := listLines(newTheme(s.palette), rows, s.cursor, cw)
+	list, at := listLines(s.th, rows, s.cursor, cw)
 	return append(lines, windowAround(list, at, max(height-len(lines), 1))...)
 }
 
-// itemText is the plain row text; narrow panels drop the repo and PC times.
-func (s *Sync) itemText(it cfgsync.PlanItem, width int) string {
+// row is the plan item list row; narrow panels drop the repo and PC times.
+func (s *Sync) row(it cfgsync.PlanItem, width int) listRow {
 	box := "[ ]"
 	switch {
 	case it.Blocked:
@@ -393,17 +392,14 @@ func (s *Sync) itemText(it cfgsync.PlanItem, width int) string {
 	if width >= wideRowWidth {
 		line += fmt.Sprintf("  repo %s  pc %s", timeText(it.RepoTime), timeText(it.PCTime))
 	}
-	for _, badge := range badges(it) {
-		line += " [" + badge + "]"
-	}
-	return line
+	return listRow{text: line, badges: badges(it), muted: it.Blocked}
 }
 
 func (s *Sync) resultView(cw, height int) []string {
 	var lines []string
 	switch {
 	case s.err != nil:
-		lines = styled(s.palette.Error, wrap("Plan failed: "+s.err.Error(), cw))
+		lines = styled(s.th.err, wrap("Plan failed: "+s.err.Error(), cw))
 	case s.result.Nothing:
 		lines = []string{"Nothing was done."}
 	default:
@@ -411,7 +407,7 @@ func (s *Sync) resultView(cw, height int) []string {
 			lines = append(lines, wrap(l, cw)...)
 		}
 		if s.result.Err != nil {
-			lines = append(lines, styled(s.palette.Error, wrap("Failed: "+s.result.Err.Error(), cw))...)
+			lines = append(lines, styled(s.th.err, wrap("Failed: "+s.result.Err.Error(), cw))...)
 		}
 	}
 	if len(lines) > height {
@@ -434,6 +430,6 @@ func resultLines(res cfgsync.ApplyResult) []string {
 }
 
 func (s *Sync) muted(text string, cw int) []string {
-	return styled(s.palette.TextMuted, wrap(text, cw))
+	return styled(s.th.muted, wrap(text, cw))
 }
-func (s *Sync) warn(text string, cw int) []string { return styled(s.palette.Warning, wrap(text, cw)) }
+func (s *Sync) warn(text string, cw int) []string { return styled(s.th.warning, wrap(text, cw)) }

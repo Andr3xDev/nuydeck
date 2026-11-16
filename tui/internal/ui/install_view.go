@@ -24,12 +24,12 @@ var pageNames = []string{"profile", "hardware", "selection", "secrets", "summary
 
 func (s *Install) View(width, height int) string {
 	title := fmt.Sprintf("Install %d/%d %s", int(s.page)+1, len(pageNames), pageNames[s.page])
-	return screenBox(s.palette, title, s.body(width, innerHeight(height)), width, height)
+	return screenBox(s.th, title, s.body(width, innerHeight(height)), width, height)
 }
 
 // hint wraps muted help text to the content width.
 func (s *Install) hint(text string, cw int) []string {
-	return styled(s.palette.TextMuted, wrap(text, cw))
+	return styled(s.th.muted, wrap(text, cw))
 }
 
 func (s *Install) body(width, height int) []string {
@@ -63,32 +63,32 @@ func (s *Install) profileView(width int) []string {
 			rows[i].text += "  " + descriptions[p]
 		}
 	}
-	list, _ := listLines(newTheme(s.palette), rows, s.cursor, cw)
-	lines := append([]string{bold("Choose a profile")}, list...)
+	list, _ := listLines(s.th, rows, s.cursor, cw)
+	lines := append([]string{s.th.title.Render("Choose a profile")}, list...)
 	return append(append(lines, ""), s.hint("up/down move, enter next", cw)...)
 }
 
 func (s *Install) hardwareView(width int) []string {
 	cw := contentWidth(width)
-	lines := []string{bold("Hardware drivers")}
+	lines := []string{s.th.title.Render("Hardware drivers")}
 	switch {
 	case s.hwLoading:
 		return append(lines, s.hint("Detecting GPUs...", cw)...)
 	case !s.detected:
-		lines = append(lines, styled(s.palette.Warning, wrap(gpuFallback, cw))...)
+		lines = append(lines, styled(s.th.warning, wrap(gpuFallback, cw))...)
 	}
 	rows := make([]listRow, 0, len(s.deps.Drivers)+1)
 	for _, d := range s.deps.Drivers {
 		rows = append(rows, listRow{text: fmt.Sprintf("%s %s (%s)", checkbox(slices.Contains(s.draft.Drivers, d.ID)), d.ID, d.VendorID)})
 	}
 	rows = append(rows, listRow{text: checkbox(s.draft.SkipGPUEnvLink) + " skip the GPU env link (gpu_env.lua)"})
-	list, _ := listLines(newTheme(s.palette), rows, s.cursor, cw)
+	list, _ := listLines(s.th, rows, s.cursor, cw)
 	lines = append(lines, list...)
 	return append(append(lines, ""), s.hint("up/down move, space toggles, enter next, esc back", cw)...)
 }
 
 func (s *Install) selectionView(cw, height int) []string {
-	lines := []string{bold("Packages to install")}
+	lines := []string{s.th.title.Render("Packages to install")}
 	hint := s.hint("space toggles a package or a whole group, enter next, esc back", cw)
 	rows := make([]listRow, len(s.rows))
 	for i, row := range s.rows {
@@ -96,18 +96,18 @@ func (s *Install) selectionView(cw, height int) []string {
 		case row.name != "":
 			rows[i] = listRow{text: "  " + checkbox(s.selected[row.name]) + " " + row.name}
 		case row.group == "":
-			rows[i] = listRow{text: "other"}
+			rows[i] = listRow{text: "other", header: true}
 		default:
-			rows[i] = listRow{text: row.group}
+			rows[i] = listRow{text: row.group, header: true}
 		}
 	}
-	list, at := listLines(newTheme(s.palette), rows, s.cursor, cw)
+	list, at := listLines(s.th, rows, s.cursor, cw)
 	lines = append(lines, windowAround(list, at, max(height-len(lines)-len(hint), 1))...)
 	return append(lines, hint...)
 }
 
 func (s *Install) secretsView(cw int) []string {
-	lines := []string{bold("Secrets")}
+	lines := []string{s.th.title.Render("Secrets")}
 	switch {
 	case s.secretsExist:
 		lines = append(lines, wrap(s.deps.SecretsPath+" already exists and is left as is.", cw)...)
@@ -138,10 +138,10 @@ func (s *Install) showSummary() {
 		lines = append(lines, sanitizeLine(fmt.Sprintf("%2d. %s", i+1, detail)))
 	}
 	for _, n := range s.plan.Notices {
-		lines = append(lines, "", paint(s.palette.Warning, sanitizeLine("notice: "+n)))
+		lines = append(lines, "", s.th.warning.Render(sanitizeLine("notice: "+n)))
 	}
 	for _, err := range s.plan.Blocking {
-		lines = append(lines, "", paint(s.palette.Error, sanitizeLine("blocking: "+err.Error())))
+		lines = append(lines, "", s.th.err.Render(sanitizeLine("blocking: "+err.Error())))
 	}
 	lines = append(lines, "", finalNotices)
 	s.summary.SetContentLines(lines)
@@ -153,16 +153,16 @@ func (s *Install) summaryView(cw, height int) []string {
 	case s.planning:
 		return s.hint("Planning...", cw)
 	case s.planErr != nil:
-		lines := styled(s.palette.Error, wrap("Plan failed: "+s.planErr.Error(), cw))
+		lines := styled(s.th.err, wrap("Plan failed: "+s.planErr.Error(), cw))
 		return append(append(lines, ""), s.hint("esc back", cw)...)
 	}
 	s.summary.SetWidth(max(cw, 1))
 	s.summary.SetHeight(max(height-summaryChrome, 1))
 	footer := s.hint("up/down scroll, enter starts the install, esc back", cw)
 	if !s.canConfirm() {
-		footer = []string{paint(s.palette.Error, "The plan cannot run.") + " " + paint(s.palette.TextMuted, "esc back")}
+		footer = []string{s.th.err.Render("The plan cannot run.") + " " + s.th.muted.Render("esc back")}
 	}
-	lines := append([]string{bold("Summary")}, strings.Split(s.summary.View(), "\n")...)
+	lines := append([]string{s.th.title.Render("Summary")}, strings.Split(s.summary.View(), "\n")...)
 	return append(append(lines, ""), footer...)
 }
 
@@ -185,7 +185,7 @@ func (s *Install) statusMark(st stepStatus) string {
 	case statusSkipped:
 		return "[-]"
 	case statusFailed:
-		return paint(s.palette.Error, "[!]")
+		return s.th.err.Render("[!]")
 	}
 	return "[ ]"
 }
@@ -211,11 +211,11 @@ func (s *Install) runView(cw, height int) []string {
 func (s *Install) runStatus(cw int) []string {
 	switch {
 	case s.awaitAck:
-		return append(styled(s.palette.Warning, wrap("Install complete. Press Enter to reboot, ctrl+c to quit without rebooting.", cw)), wrap(finalNotices, cw)...)
+		return append(styled(s.th.warning, wrap("Install complete. Press Enter to reboot, ctrl+c to quit without rebooting.", cw)), wrap(finalNotices, cw)...)
 	case s.running:
 		return s.hint("Installing... ctrl+c cancels and quits.", cw)
 	case s.runErr != nil:
-		return append(styled(s.palette.Error, wrap("Install stopped: "+s.runErr.Error(), cw)), s.hint("esc back to the summary, ctrl+c quits.", cw)...)
+		return append(styled(s.th.err, wrap("Install stopped: "+s.runErr.Error(), cw)), s.hint("esc back to the summary, ctrl+c quits.", cw)...)
 	}
 	lines := append([]string{"Done. Nothing was rebooted."}, wrap(finalNotices, cw)...)
 	return append(lines, s.hint("esc back to the summary, ctrl+c quits.", cw)...)

@@ -70,7 +70,7 @@ func TestBackupsRefuseIncompleteAndUnreadableRestore(t *testing.T) {
 }
 
 func loadedBackups(f *fakeBackups) *Backups {
-	b := newBackups(Deps{Backups: f}, DefaultKeyMap(), NewRoot("", false, Deps{}).palette)
+	b := newBackups(Deps{Backups: f}, DefaultKeyMap(), NewRoot("", false, Deps{}).th)
 	b.Update(b.load()())
 	return b
 }

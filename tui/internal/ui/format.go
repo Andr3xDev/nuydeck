@@ -1,20 +1,11 @@
 package ui
 
 import (
-	"image/color"
 	"time"
-
-	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
-
-func paint(c color.Color, text string) string {
-	return lipgloss.NewStyle().Foreground(c).Render(text)
-}
-
-func bold(text string) string { return lipgloss.NewStyle().Bold(true).Render(text) }
 
 func cursorMark(on bool) string {
 	if on {

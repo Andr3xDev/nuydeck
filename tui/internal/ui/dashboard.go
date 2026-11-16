@@ -42,7 +42,7 @@ type Dashboard struct {
 	entries    []manifest.ResolvedEntry
 	state      dashboardInfo
 	keys       KeyMap
-	palette    Palette
+	th         theme
 	spinner    spinner.Model
 	results    map[manifest.Entry]drift.DriftResult
 	lastBackup *backup.Backup
@@ -58,14 +58,14 @@ type dashboardInfo struct {
 	lastSync *state.LastSync
 }
 
-func newDashboard(deps Deps, keys KeyMap, palette Palette) *Dashboard {
-	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(lipgloss.NewStyle().Foreground(palette.Accent)))
+func newDashboard(deps Deps, keys KeyMap, th theme) *Dashboard {
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(th.accent))
 	return &Dashboard{
 		drifter: deps.Drifter,
 		entries: deps.Entries,
 		state:   dashboardInfo{warning: deps.StateWarning, lastSync: deps.LastSync},
 		keys:    keys,
-		palette: palette,
+		th:      th,
 		spinner: sp,
 		results: map[manifest.Entry]drift.DriftResult{},
 	}
@@ -186,7 +186,7 @@ func (d *Dashboard) View(width, height int) string {
 		rows[i] = d.row(i, e, width)
 	}
 	lines = append(lines, windowAround(rows, d.cursor, visible)...)
-	return screenBox(d.palette, "Dashboard", clip(lines, cw), width, height)
+	return screenBox(d.th, "Dashboard", clip(lines, cw), width, height)
 }
 
 // row is the entry path with its status right-aligned; narrow panels drop the status.
@@ -215,13 +215,13 @@ func (d *Dashboard) errorDetail(cw int) string {
 	if !ok || r.State != drift.DriftError || r.Err == nil {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(d.palette.Error).Render(truncate(sanitizeLine(strings.Join(strings.Fields(r.Err.Error()), " ")), cw))
+	return d.th.err.Render(truncate(sanitizeLine(strings.Join(strings.Fields(r.Err.Error()), " ")), cw))
 }
 
 func (d *Dashboard) statusLines(cw int) []string {
 	lines := []string{d.muted("Last sync:   ") + d.lastSyncText(), d.muted("Last backup: ") + d.lastBackupText()}
 	if d.state.warning != "" {
-		lines = append(lines, styled(d.palette.Warning, wrap("State: "+d.state.warning, cw))...)
+		lines = append(lines, styled(d.th.warning, wrap("State: "+d.state.warning, cw))...)
 	}
 	return lines
 }
@@ -253,27 +253,25 @@ func (d *Dashboard) entryStatus(e manifest.Entry) string {
 	}
 	switch r.State {
 	case drift.DriftError:
-		return lipgloss.NewStyle().Foreground(d.palette.Error).Render("error")
+		return d.th.err.Render("error")
 	case drift.DriftDrifted:
 		switch r.Missing {
 		case drift.MissingInRepo:
-			return lipgloss.NewStyle().Foreground(d.palette.Warning).Render("only in live")
+			return d.th.warning.Render("only in live")
 		case drift.MissingOnPC:
-			return lipgloss.NewStyle().Foreground(d.palette.Warning).Render("not on PC")
+			return d.th.warning.Render("not on PC")
 		}
-		return lipgloss.NewStyle().Foreground(d.palette.Warning).Render(fmt.Sprintf("drifted (%d changes)", r.Changes))
+		return d.th.warning.Render(fmt.Sprintf("drifted (%d changes)", r.Changes))
 	}
-	return lipgloss.NewStyle().Foreground(d.palette.Success).Render("in sync")
+	return d.th.ok.Render("in sync")
 }
 
-func (d *Dashboard) muted(s string) string {
-	return lipgloss.NewStyle().Foreground(d.palette.TextMuted).Render(s)
-}
+func (d *Dashboard) muted(s string) string { return d.th.muted.Render(s) }
 
 // ManifestError replaces the sections that depend on an invalid manifest: no operation is offered.
 type ManifestError struct {
-	err     error
-	palette Palette
+	err error
+	th  theme
 	// fix names the file to repair; empty means manifest/paths.toml.
 	fix string
 }
@@ -285,8 +283,8 @@ func (m ManifestError) View(width, height int) string {
 	if fix == "" {
 		fix = "manifest/paths.toml"
 	}
-	lines := styled(m.palette.Error, wrap(m.err.Error(), contentWidth(width)))
+	lines := styled(m.th.err, wrap(m.err.Error(), contentWidth(width)))
 	lines = append(lines, "")
 	lines = append(lines, wrap("Fix "+fix+" and restart.", contentWidth(width))...)
-	return screenBox(m.palette, "Invalid manifest", lines, width, height)
+	return screenBox(m.th, "Invalid manifest", lines, width, height)
 }

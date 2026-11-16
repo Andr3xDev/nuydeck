@@ -18,7 +18,7 @@ func contentWidth(w int) int { return max(w-borderCells-boxPadding, 0) }
 // renderBox draws a rounded border w x h with the title embedded in the top border.
 // lines must already fit contentWidth(w); extra lines are cut, missing ones padded.
 func renderBox(t theme, title string, lines []string, w, h int, focused bool) string {
-	border := t.border(focused)
+	border := t.borderFor(focused)
 	innerW, innerH := w-borderCells, h-borderCells
 	b := lipgloss.RoundedBorder()
 

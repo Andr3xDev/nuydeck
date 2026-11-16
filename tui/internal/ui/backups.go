@@ -3,11 +3,9 @@ package ui
 import (
 	"context"
 	"fmt"
-	"image/color"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
@@ -42,7 +40,7 @@ type restorePlanMsg struct {
 type Backups struct {
 	manager BackupManager
 	keys    KeyMap
-	palette Palette
+	th      theme
 	backups []backup.Backup
 	cursor  int
 	err     error
@@ -50,8 +48,8 @@ type Backups struct {
 	notice  string
 }
 
-func newBackups(deps Deps, keys KeyMap, palette Palette) *Backups {
-	return &Backups{manager: deps.Backups, keys: keys, palette: palette}
+func newBackups(deps Deps, keys KeyMap, th theme) *Backups {
+	return &Backups{manager: deps.Backups, keys: keys, th: th}
 }
 
 // Init loads the list at startup; enter reloads it.
@@ -162,26 +160,26 @@ func (b *Backups) View(width, height int) string {
 	inner := innerHeight(height)
 	var lines []string
 	if b.err != nil {
-		lines = append(lines, styled(b.palette.Error, wrap(b.err.Error(), cw))...)
+		lines = append(lines, styled(b.th.err, wrap(b.err.Error(), cw))...)
 	}
 	if b.notice != "" {
-		lines = append(lines, styled(b.palette.Warning, wrap(b.notice, cw))...)
+		lines = append(lines, styled(b.th.warning, wrap(b.notice, cw))...)
 	}
 	if len(b.backups) == 0 {
-		lines = append(lines, b.colored(b.palette.TextMuted, "No backups yet."))
-		return screenBox(b.palette, "Backups", lines, width, height)
+		lines = append(lines, b.th.muted.Render("No backups yet."))
+		return screenBox(b.th, "Backups", lines, width, height)
 	}
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d backups, newest first", len(b.backups))))
+	lines = append(lines, b.th.title.Render(fmt.Sprintf("%d backups, newest first", len(b.backups))))
 	rows := make([]listRow, len(b.backups))
 	for i, bk := range b.backups {
-		rows[i] = listRow{text: b.rowText(bk, width)}
+		rows[i] = b.row(bk, width)
 	}
-	list, at := listLines(newTheme(b.palette), rows, b.cursor, cw)
+	list, at := listLines(b.th, rows, b.cursor, cw)
 	lines = append(lines, windowAround(list, at, max((inner-len(lines))/2, 1))...)
 	sel := b.backups[b.cursor]
-	lines = append(lines, "", lipgloss.NewStyle().Bold(true).Render(truncate(sanitizeLine(sel.Dir), cw)))
+	lines = append(lines, "", b.th.title.Render(truncate(sanitizeLine(sel.Dir), cw)))
 	if b.confirm {
-		lines = append(lines, styled(b.palette.Warning, wrap(fmt.Sprintf("Delete this backup (%d files)? (y/n)", len(sel.Files)), cw))...)
+		lines = append(lines, styled(b.th.warning, wrap(fmt.Sprintf("Delete this backup (%d files)? (y/n)", len(sel.Files)), cw))...)
 	}
 	room := max(inner-len(lines), 1)
 	files := make([]string, 0, min(len(sel.Files), room))
@@ -192,19 +190,19 @@ func (b *Backups) View(width, height int) string {
 		}
 		files = append(files, truncate(sanitizeLine(f), cw))
 	}
-	return screenBox(b.palette, "Backups", append(lines, files...), width, height)
+	return screenBox(b.th, "Backups", append(lines, files...), width, height)
 }
 
-// rowText is the plain backup row; narrow panels drop direction and file count.
-func (b *Backups) rowText(bk backup.Backup, width int) string {
-	line := bk.Created.Format(timeLayout)
+// row is the backup list row; narrow panels drop direction and file count.
+func (b *Backups) row(bk backup.Backup, width int) listRow {
+	row := listRow{text: bk.Created.Format(timeLayout)}
 	if width >= wideRowWidth {
-		line += fmt.Sprintf("  %s %d files", directionLabel(bk.Direction), len(bk.Files))
+		row.text += fmt.Sprintf("  %s %d files", directionLabel(bk.Direction), len(bk.Files))
 	}
 	if f := flag(bk); f != "" {
-		line += " [" + f + "]"
+		row.badges = []string{f}
 	}
-	return line
+	return row
 }
 
 func flag(bk backup.Backup) string {
@@ -215,8 +213,4 @@ func flag(bk backup.Backup) string {
 		return "incomplete"
 	}
 	return ""
-}
-
-func (b *Backups) colored(c color.Color, text string) string {
-	return lipgloss.NewStyle().Foreground(c).Render(text)
 }

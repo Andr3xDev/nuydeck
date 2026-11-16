@@ -10,7 +10,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
@@ -63,7 +62,7 @@ type addForm struct {
 type Packages struct {
 	manager PackageManager
 	keys    KeyMap
-	palette Palette
+	th      theme
 
 	names  []string
 	loaded bool
@@ -73,8 +72,8 @@ type Packages struct {
 	form   *addForm
 }
 
-func newPackages(deps Deps, keys KeyMap, palette Palette) *Packages {
-	return &Packages{manager: deps.Packages, keys: keys, palette: palette}
+func newPackages(deps Deps, keys KeyMap, th theme) *Packages {
+	return &Packages{manager: deps.Packages, keys: keys, th: th}
 }
 
 func (p *Packages) Init() tea.Cmd  { return p.load() }
@@ -248,16 +247,16 @@ func (p *Packages) submit() tea.Cmd {
 func (p *Packages) View(width, height int) string {
 	cw := contentWidth(width)
 	if p.form != nil {
-		return screenBox(p.palette, "Packages", p.formView(cw), width, height)
+		return screenBox(p.th, "Packages", p.formView(cw), width, height)
 	}
 	var lines []string
 	if p.err != nil {
-		lines = append(lines, styled(p.palette.Error, wrap(p.err.Error(), cw))...)
+		lines = append(lines, styled(p.th.err, wrap(p.err.Error(), cw))...)
 	}
 	if p.notice != "" {
-		lines = append(lines, styled(p.palette.Warning, wrap(p.notice, cw))...)
+		lines = append(lines, styled(p.th.warning, wrap(p.notice, cw))...)
 	}
-	muted := func(text string) []string { return styled(p.palette.TextMuted, wrap(text, cw)) }
+	muted := func(text string) []string { return styled(p.th.muted, wrap(text, cw)) }
 	var msg string
 	switch {
 	case p.manager == nil:
@@ -270,18 +269,18 @@ func (p *Packages) View(width, height int) string {
 		msg = "Every explicit package is registered or ignored."
 	}
 	if msg != "" {
-		return screenBox(p.palette, "Packages", append(lines, muted(msg)...), width, height)
+		return screenBox(p.th, "Packages", append(lines, muted(msg)...), width, height)
 	}
-	lines = append(lines, lipgloss.NewStyle().Bold(true).Render(fmt.Sprintf("%d unregistered packages", len(p.names))))
+	lines = append(lines, p.th.title.Render(fmt.Sprintf("%d unregistered packages", len(p.names))))
 	rows := make([]listRow, len(p.names))
 	for i, name := range p.names {
 		rows[i] = listRow{text: name}
 	}
-	list, at := listLines(newTheme(p.palette), rows, p.cursor, cw)
+	list, at := listLines(p.th, rows, p.cursor, cw)
 	lines = append(lines, windowAround(list, at, max(innerHeight(height)-len(lines)-2, 1))...)
 	lines = append(lines, "")
 	lines = append(lines, muted("a adds to the catalog, i ignores, r refreshes")...)
-	return screenBox(p.palette, "Packages", lines, width, height)
+	return screenBox(p.th, "Packages", lines, width, height)
 }
 
 func (p *Packages) formView(cw int) []string {
@@ -291,7 +290,7 @@ func (p *Packages) formView(cw int) []string {
 		source = "(not chosen, space cycles pacman and aur)"
 	}
 	lines := []string{
-		lipgloss.NewStyle().Bold(true).Render(truncate(sanitizeLine("Add "+f.name+" to the catalog"), cw)),
+		p.th.title.Render(truncate(sanitizeLine("Add"+f.name+" to the catalog"), cw)),
 		cursorMark(f.row == formRowSource) + "source: " + source,
 		cursorMark(f.row == formRowMinimal) + checkbox(f.minimal) + " minimal profile",
 		cursorMark(f.row == formRowFull) + checkbox(f.full) + " full profile",
@@ -300,8 +299,8 @@ func (p *Packages) formView(cw int) []string {
 	lines = clip(lines, cw)
 	if f.err != "" {
 		lines = append(lines, "")
-		lines = append(lines, styled(p.palette.Error, wrap(f.err, cw))...)
+		lines = append(lines, styled(p.th.err, wrap(f.err, cw))...)
 	}
 	lines = append(lines, "")
-	return append(lines, styled(p.palette.TextMuted, wrap("up/down move, space toggles, enter adds, esc cancels", cw))...)
+	return append(lines, styled(p.th.muted, wrap("up/down move, space toggles, enter adds, esc cancels", cw))...)
 }
