@@ -172,20 +172,7 @@ func loadEntries(repo, home string) ([]manifest.ResolvedEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	var entries []manifest.ResolvedEntry
-	for _, e := range loaded.Entries {
-		filter, whole := manifest.FiltersFor(e, loaded.Excludes)
-		if whole {
-			continue
-		}
-		entries = append(entries, manifest.ResolvedEntry{
-			Entry:    e,
-			RepoPath: filepath.Join(repo, string(e.Root), e.Path),
-			DestPath: filepath.Join(loaded.Roots[e.Root], e.Path),
-			Filter:   filter,
-		})
-	}
-	return entries, nil
+	return manifest.Resolve(loaded, repo), nil
 }
 
 // logRsyncVersion prints the rsync version line to stderr before the TUI takes the screen.
