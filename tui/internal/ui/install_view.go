@@ -3,11 +3,8 @@ package ui
 import (
 	"context"
 	"fmt"
-	"image/color"
 	"slices"
 	"strings"
-
-	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
@@ -23,12 +20,6 @@ const (
 )
 
 var pageNames = []string{"profile", "hardware", "selection", "secrets", "summary", "run"}
-
-func paint(c color.Color, text string) string {
-	return lipgloss.NewStyle().Foreground(c).Render(text)
-}
-
-func bold(text string) string { return lipgloss.NewStyle().Bold(true).Render(text) }
 
 func (s *Install) View(width, height int) string {
 	return renderPanel(width, height, s.body(width, max(height-2*panelPadY, 1)))
@@ -62,20 +53,6 @@ func (s *Install) body(width, height int) string {
 		return head + s.summaryView(width, height-2)
 	}
 	return head + s.runView(width, height-2)
-}
-
-func cursorMark(on bool) string {
-	if on {
-		return "> "
-	}
-	return "  "
-}
-
-func checkbox(on bool) string {
-	if on {
-		return "[x]"
-	}
-	return "[ ]"
 }
 
 func (s *Install) profileView() string {
