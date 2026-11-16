@@ -62,6 +62,10 @@ type Driver struct {
 	Services []string
 }
 
+func (p Package) ValidSource() bool {
+	return p.Source == SourcePacman || p.Source == SourceAUR
+}
+
 func ValidatePackages(pkgs []Package) error {
 	seen := make(map[string]int, len(pkgs))
 	for i, p := range pkgs {
@@ -71,7 +75,7 @@ func ValidatePackages(pkgs []Package) error {
 		if strings.HasPrefix(p.Name, "-") || strings.ContainsFunc(p.Name, unicode.IsSpace) {
 			return entryError(i, -1, fmt.Errorf("%w: %q", ErrInvalidPackageName, p.Name))
 		}
-		if p.Source != SourcePacman && p.Source != SourceAUR {
+		if !p.ValidSource() {
 			return entryError(i, -1, fmt.Errorf("%w: %q for %s", ErrUnknownSource, p.Source, p.Name))
 		}
 		for _, profile := range p.Profiles {

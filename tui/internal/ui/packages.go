@@ -226,12 +226,12 @@ func (f *addForm) toggle() {
 // submit rejects an empty source before anything is written.
 func (p *Packages) submit() tea.Cmd {
 	f := p.form
-	if sourceChoices[f.source] == "" {
+	pkg := manifest.Package{Name: f.name, Source: sourceChoices[f.source], Group: strings.TrimSpace(f.group.Value())}
+	if !pkg.ValidSource() {
 		f.err = "source is required: choose pacman or aur"
 		return nil
 	}
 	f.err = ""
-	pkg := manifest.Package{Name: f.name, Source: sourceChoices[f.source], Group: strings.TrimSpace(f.group.Value())}
 	if f.minimal {
 		pkg.Profiles = append(pkg.Profiles, manifest.ProfileMinimal)
 	}
