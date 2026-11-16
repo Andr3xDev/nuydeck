@@ -7,12 +7,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-// Plan is the computed difference for one direction.
-type Plan struct {
-	Direction plan.Direction
-	Changes   []plan.Change
-}
-
 // Backup describes one folder under ~/.nuydeck-backups.
 type Backup struct {
 	Dir        string
