@@ -1,4 +1,4 @@
-package fsx_test
+package osfs_test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -17,7 +17,7 @@ const sentinel = "SENTINEL-secret-value-9c1e"
 
 func run(t *testing.T, s plan.Step) plan.StepResult {
 	t.Helper()
-	return fsx.Runner{Home: t.TempDir()}.Run(context.Background(), s, nil)
+	return osfs.Runner{Home: t.TempDir()}.Run(context.Background(), s, nil)
 }
 
 func mode(t *testing.T, path string) os.FileMode {

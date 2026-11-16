@@ -1,4 +1,4 @@
-package fsx
+package backup
 
 import (
 	"context"
@@ -12,18 +12,17 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const (
 	backupsDirName = ".nuydeck-backups"
-	metaFileName   = "meta.toml"
-	partialSuffix  = ".partial"
+	MetaFileName   = "meta.toml"
+	PartialSuffix  = ".partial"
 )
 
-type backupMeta struct {
+type Meta struct {
 	Created   time.Time         `toml:"created"`
 	Direction int               `toml:"direction"`
 	Roots     map[string]string `toml:"roots"`
@@ -34,7 +33,7 @@ func BackupsDir(home string) string { return filepath.Join(home, backupsDirName)
 
 // ListBackups returns backups newest first; folders that cannot be read as a
 // backup are flagged rather than dropped.
-func ListBackups(_ context.Context, home string) ([]domain.Backup, error) {
+func ListBackups(_ context.Context, home string) ([]Backup, error) {
 	dir := BackupsDir(home)
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -43,14 +42,14 @@ func ListBackups(_ context.Context, home string) ([]domain.Backup, error) {
 	if err != nil {
 		return nil, err
 	}
-	var backups []domain.Backup
+	var backups []Backup
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
-		b := domain.Backup{Dir: filepath.Join(dir, e.Name())}
+		b := Backup{Dir: filepath.Join(dir, e.Name())}
 		switch meta, err := readMeta(b.Dir); {
-		case strings.HasSuffix(e.Name(), partialSuffix):
+		case strings.HasSuffix(e.Name(), PartialSuffix):
 			b.Incomplete = true
 		case err != nil:
 			b.Unreadable = true
@@ -72,9 +71,9 @@ func ListBackups(_ context.Context, home string) ([]domain.Backup, error) {
 	return backups, nil
 }
 
-func readMeta(dir string) (backupMeta, error) {
-	var meta backupMeta
-	data, err := os.ReadFile(filepath.Join(dir, metaFileName))
+func readMeta(dir string) (Meta, error) {
+	var meta Meta
+	data, err := os.ReadFile(filepath.Join(dir, MetaFileName))
 	if err != nil {
 		return meta, err
 	}

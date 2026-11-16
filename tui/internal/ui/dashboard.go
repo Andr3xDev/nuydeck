@@ -11,7 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
@@ -45,7 +45,7 @@ type Dashboard struct {
 	palette    theme.Palette
 	spinner    spinner.Model
 	results    map[manifest.Entry]app.DriftResult
-	lastBackup *domain.Backup
+	lastBackup *backup.Backup
 	cursor     int
 	gen        int
 	running    bool

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/gitx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/gitx"
 )
 
 func requireGit(t *testing.T) {

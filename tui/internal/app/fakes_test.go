@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
@@ -34,7 +34,7 @@ type fakeInspector struct {
 	kinds       map[string]plan.NodeKind
 	mtimes      map[string]time.Time
 	repoTimes   map[string]plan.RepoTimes
-	backups     []domain.Backup
+	backups     []backup.Backup
 	state       state.State
 	stateWarn   string
 	// listBackupsGate, when set, blocks ListBackups until it is closed.
@@ -65,7 +65,7 @@ func (f *fakeInspector) RepoTimes(_ context.Context, _, rel string) (plan.RepoTi
 	return f.repoTimes[rel], nil
 }
 
-func (f *fakeInspector) ListBackups(context.Context) ([]domain.Backup, error) {
+func (f *fakeInspector) ListBackups(context.Context) ([]backup.Backup, error) {
 	if f.listBackupsGate != nil {
 		<-f.listBackupsGate
 	}

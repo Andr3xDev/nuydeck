@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
@@ -224,7 +225,7 @@ func (s *Service) linkWarning(it PlanItem, managed []manifest.Entry) plan.LinkWa
 }
 
 // PlanRestore plans a restore from the backup; roots come from the backup metadata and deletions are never offered.
-func (s *Service) PlanRestore(ctx context.Context, b domain.Backup) (SyncPlan, error) {
+func (s *Service) PlanRestore(ctx context.Context, b backup.Backup) (SyncPlan, error) {
 	roots := make([]manifest.Root, 0, len(b.Roots))
 	for root := range b.Roots {
 		roots = append(roots, root)
@@ -474,13 +475,13 @@ type DriftResult struct {
 	Err        error
 	RepoTimes  plan.RepoTimes
 	PCTime     time.Time
-	LastBackup *domain.Backup
+	LastBackup *backup.Backup
 }
 
 // Drift diffs repo to PC per entry and streams one result per entry; the channel closes when all are done.
 func (s *Service) Drift(ctx context.Context, entries []manifest.ResolvedEntry) <-chan DriftResult {
 	out := make(chan DriftResult, len(entries))
-	var lastBackup *domain.Backup
+	var lastBackup *backup.Backup
 	backupDone := make(chan struct{})
 	go func() {
 		defer close(backupDone)
@@ -550,7 +551,7 @@ func (s *Service) driftEntry(ctx context.Context, e manifest.ResolvedEntry) Drif
 	return r
 }
 
-func (s *Service) lastCompleteBackup(ctx context.Context) *domain.Backup {
+func (s *Service) lastCompleteBackup(ctx context.Context) *backup.Backup {
 	backups, err := s.Inspector.ListBackups(ctx)
 	if err != nil {
 		return nil
@@ -564,7 +565,7 @@ func (s *Service) lastCompleteBackup(ctx context.Context) *domain.Backup {
 }
 
 // ListBackups returns the existing backups newest first.
-func (s *Service) ListBackups(ctx context.Context) ([]domain.Backup, error) {
+func (s *Service) ListBackups(ctx context.Context) ([]backup.Backup, error) {
 	return s.Inspector.ListBackups(ctx)
 }
 

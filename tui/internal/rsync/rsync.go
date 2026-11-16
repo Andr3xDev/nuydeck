@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )

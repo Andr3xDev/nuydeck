@@ -13,14 +13,14 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/dryrun"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/system"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/sysx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
+	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
+	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/sysx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui"
 )
 
@@ -87,7 +87,7 @@ func run(dryRun bool, repoFlag string) error {
 		wireCatalog(&deps, svc, repo, home, current.Username, dryRun, runner, inspector)
 	}
 
-	root := ui.NewRoot(fsx.ReadVariant(configDir), dryRun, deps)
+	root := ui.NewRoot(osfs.ReadVariant(configDir), dryRun, deps)
 	program := tea.NewProgram(root)
 	bridge.Attach(program)
 	_, err = program.Run()

@@ -8,13 +8,13 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/gitx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/rsync"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
+	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/gitx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/rsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
@@ -24,7 +24,7 @@ type Inspector struct {
 }
 
 func (i Inspector) Diff(ctx context.Context, e manifest.ResolvedEntry, src, dst plan.Endpoint) ([]plan.Change, error) {
-	kind, err := fsx.PathKind(src.Path)
+	kind, err := osfs.PathKind(src.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -39,19 +39,19 @@ func (i Inspector) Diff(ctx context.Context, e manifest.ResolvedEntry, src, dst 
 	return changes, nil
 }
 
-func (Inspector) LinkTarget(path string) (string, error)      { return fsx.LinkTarget(path) }
-func (Inspector) PathKind(path string) (plan.NodeKind, error) { return fsx.PathKind(path) }
+func (Inspector) LinkTarget(path string) (string, error)      { return osfs.LinkTarget(path) }
+func (Inspector) PathKind(path string) (plan.NodeKind, error) { return osfs.PathKind(path) }
 
 func (Inspector) NewestMTime(_ context.Context, path string, filter manifest.Filter) (time.Time, error) {
-	return fsx.NewestMTime(path, filter)
+	return osfs.NewestMTime(path, filter)
 }
 
 func (Inspector) RepoTimes(ctx context.Context, repo, rel string) (plan.RepoTimes, error) {
 	return gitx.Reader{}.RepoTimes(ctx, repo, rel)
 }
 
-func (i Inspector) ListBackups(ctx context.Context) ([]domain.Backup, error) {
-	return fsx.ListBackups(ctx, i.Home)
+func (i Inspector) ListBackups(ctx context.Context) ([]backup.Backup, error) {
+	return backup.ListBackups(ctx, i.Home)
 }
 
 func (i Inspector) LoadState(context.Context) (state.State, string) {
@@ -92,12 +92,12 @@ func (r Runner) Run(ctx context.Context, s plan.Step, progress func(plan.StepPro
 	case plan.AppendLogStep:
 		return done(state.AppendLog(state.LogsDir(r.ConfigDir), s.Entry))
 	case plan.DeleteStep, plan.BackupStep, plan.DeleteBackupStep, plan.SymlinkStep, plan.WriteSecretsStep:
-		return fsx.Runner{Home: r.Home}.Run(ctx, s, progress)
+		return osfs.Runner{Home: r.Home}.Run(ctx, s, progress)
 	case plan.WriteFileStep:
 		if s.Privileged {
 			return r.writePrivileged(ctx, s)
 		}
-		return fsx.Runner{Home: r.Home}.Run(ctx, s, progress)
+		return osfs.Runner{Home: r.Home}.Run(ctx, s, progress)
 	case plan.AppendPackageStep:
 		return done(manifest.AppendPackage(s.Path, s.Entry))
 	case plan.CommandStep:

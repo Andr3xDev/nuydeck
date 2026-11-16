@@ -11,20 +11,20 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 // BackupManager is the backup use-case surface the screen needs; *app.Service implements it.
 type BackupManager interface {
-	ListBackups(ctx context.Context) ([]domain.Backup, error)
-	PlanRestore(ctx context.Context, b domain.Backup) (app.SyncPlan, error)
+	ListBackups(ctx context.Context) ([]backup.Backup, error)
+	PlanRestore(ctx context.Context, b backup.Backup) (app.SyncPlan, error)
 	DeleteBackup(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
 }
 
 type backupsMsg struct {
-	backups []domain.Backup
+	backups []backup.Backup
 	err     error
 }
 
@@ -45,7 +45,7 @@ type Backups struct {
 	manager BackupManager
 	keys    KeyMap
 	palette theme.Palette
-	backups []domain.Backup
+	backups []backup.Backup
 	cursor  int
 	err     error
 	confirm bool
@@ -75,9 +75,9 @@ func (b *Backups) load() tea.Cmd {
 	}
 }
 
-func (b *Backups) selected() (domain.Backup, bool) {
+func (b *Backups) selected() (backup.Backup, bool) {
 	if b.cursor >= len(b.backups) {
-		return domain.Backup{}, false
+		return backup.Backup{}, false
 	}
 	return b.backups[b.cursor], true
 }
@@ -128,7 +128,7 @@ func (b *Backups) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 	return b, nil
 }
 
-func (b *Backups) restore(sel domain.Backup) tea.Cmd {
+func (b *Backups) restore(sel backup.Backup) tea.Cmd {
 	if sel.Incomplete || sel.Unreadable {
 		b.err = fmt.Errorf("backup %s is %s and cannot be restored", sel.Dir, flag(sel))
 		return nil
@@ -193,7 +193,7 @@ func (b *Backups) body(width, height int) string {
 	return strings.Join(append(lines, files...), "\n")
 }
 
-func (b *Backups) row(i int, bk domain.Backup) string {
+func (b *Backups) row(i int, bk backup.Backup) string {
 	cursor := "  "
 	if i == b.cursor {
 		cursor = "> "
@@ -205,7 +205,7 @@ func (b *Backups) row(i int, bk domain.Backup) string {
 	return line
 }
 
-func flag(bk domain.Backup) string {
+func flag(bk backup.Backup) string {
 	switch {
 	case bk.Unreadable:
 		return "unreadable"

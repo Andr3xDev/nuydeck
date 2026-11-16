@@ -12,8 +12,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
 )
 
 const (

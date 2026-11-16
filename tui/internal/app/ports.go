@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
@@ -21,7 +22,7 @@ type Inspector interface {
 	// RepoTimes receives the repo root and the entry path relative to it ("<root>/<path>").
 	RepoTimes(ctx context.Context, repo, rel string) (plan.RepoTimes, error)
 	// ListBackups returns backups newest first.
-	ListBackups(ctx context.Context) ([]domain.Backup, error)
+	ListBackups(ctx context.Context) ([]backup.Backup, error)
 	// LoadState never fails; a non-empty warning means defaults were used.
 	LoadState(ctx context.Context) (state.State, string)
 }

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/execx"
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/sysx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/sysx"
 )
 
 type call struct {

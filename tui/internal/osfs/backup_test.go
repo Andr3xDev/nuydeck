@@ -1,4 +1,4 @@
-package fsx_test
+package osfs_test
 
 import (
 	"context"
@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -39,12 +40,12 @@ func TestBackupStep_WritesCompleteBackupWithoutPartial(t *testing.T) {
 	writeFile(t, filepath.Join(dest, "nvim", "init.lua"), "old")
 	ts := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
 
-	res := fsx.Runner{Home: home, Now: fixedNow(ts)}.Run(context.Background(), backupStep(dest, "nvim/init.lua"), nil)
+	res := osfs.Runner{Home: home, Now: fixedNow(ts)}.Run(context.Background(), backupStep(dest, "nvim/init.lua"), nil)
 
 	if res.Status != plan.StepOK {
 		t.Fatalf("status = %v, err = %v", res.Status, res.Err)
 	}
-	final := filepath.Join(fsx.BackupsDir(home), "20260301-100000")
+	final := filepath.Join(backup.BackupsDir(home), "20260301-100000")
 	if b, err := os.ReadFile(filepath.Join(final, "config", "nvim", "init.lua")); err != nil || string(b) != "old" {
 		t.Fatalf("backed up file = %q, %v", b, err)
 	}
@@ -54,7 +55,7 @@ func TestBackupStep_WritesCompleteBackupWithoutPartial(t *testing.T) {
 	if exists(final + ".partial") {
 		t.Fatal(".partial left behind after successful backup")
 	}
-	backups, err := fsx.ListBackups(context.Background(), home)
+	backups, err := backup.ListBackups(context.Background(), home)
 	if err != nil || len(backups) != 1 {
 		t.Fatalf("ListBackups = %v, %v", backups, err)
 	}
@@ -70,7 +71,7 @@ func TestBackupStep_SameTimestampGetsCollisionSuffix(t *testing.T) {
 	home := t.TempDir()
 	dest := filepath.Join(home, ".config")
 	writeFile(t, filepath.Join(dest, "a"), "1")
-	r := fsx.Runner{Home: home, Now: fixedNow(time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC))}
+	r := osfs.Runner{Home: home, Now: fixedNow(time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC))}
 
 	for range 2 {
 		if res := r.Run(context.Background(), backupStep(dest, "a"), nil); res.Status != plan.StepOK {
@@ -79,7 +80,7 @@ func TestBackupStep_SameTimestampGetsCollisionSuffix(t *testing.T) {
 	}
 
 	for _, name := range []string{"20260301-100000", "20260301-100000-1"} {
-		if !exists(filepath.Join(fsx.BackupsDir(home), name, "meta.toml")) {
+		if !exists(filepath.Join(backup.BackupsDir(home), name, "meta.toml")) {
 			t.Fatalf("backup %s missing", name)
 		}
 	}
@@ -91,13 +92,13 @@ func TestBackupStep_FailureReturnsErrorAndNoCompleteBackup(t *testing.T) {
 	dest := filepath.Join(home, ".config")
 	_ = os.MkdirAll(dest, 0o755)
 
-	res := fsx.Runner{Home: home, Now: fixedNow(time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC))}.
+	res := osfs.Runner{Home: home, Now: fixedNow(time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC))}.
 		Run(context.Background(), backupStep(dest, "does-not-exist"), nil)
 
 	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("status = %v, err = %v; want failure", res.Status, res.Err)
 	}
-	entries, _ := os.ReadDir(fsx.BackupsDir(home))
+	entries, _ := os.ReadDir(backup.BackupsDir(home))
 	for _, e := range entries {
 		if !strings.HasSuffix(e.Name(), ".partial") {
 			t.Fatalf("complete-looking backup %q exists after failure", e.Name())
@@ -113,14 +114,14 @@ func TestBackupStep_RefusedWhenBackupsDirInsideDestinationEntry(t *testing.T) {
 		Files: []plan.BackupFile{{Root: manifest.RootHome, Path: ".nuydeck-backups"}},
 		Roots: map[manifest.Root]string{manifest.RootHome: home},
 	}
-	_ = os.MkdirAll(fsx.BackupsDir(home), 0o755)
+	_ = os.MkdirAll(backup.BackupsDir(home), 0o755)
 
-	res := fsx.Runner{Home: home}.Run(context.Background(), step, nil)
+	res := osfs.Runner{Home: home}.Run(context.Background(), step, nil)
 
 	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("status = %v, err = %v; want refusal", res.Status, res.Err)
 	}
-	if entries, _ := os.ReadDir(fsx.BackupsDir(home)); len(entries) != 0 {
+	if entries, _ := os.ReadDir(backup.BackupsDir(home)); len(entries) != 0 {
 		t.Fatalf("refused backup still created %d entries", len(entries))
 	}
 }
@@ -128,7 +129,7 @@ func TestBackupStep_RefusedWhenBackupsDirInsideDestinationEntry(t *testing.T) {
 func TestBackupStep_RefusedWhenBackupsDirReachedThroughSymlinkedRoot(t *testing.T) {
 	requireRsync(t)
 	home := t.TempDir()
-	_ = os.MkdirAll(fsx.BackupsDir(home), 0o755)
+	_ = os.MkdirAll(backup.BackupsDir(home), 0o755)
 	linkedRoot := filepath.Join(t.TempDir(), "root")
 	if err := os.Symlink(home, linkedRoot); err != nil {
 		t.Fatal(err)
@@ -138,12 +139,12 @@ func TestBackupStep_RefusedWhenBackupsDirReachedThroughSymlinkedRoot(t *testing.
 		Roots: map[manifest.Root]string{manifest.RootHome: linkedRoot},
 	}
 
-	res := fsx.Runner{Home: home}.Run(context.Background(), step, nil)
+	res := osfs.Runner{Home: home}.Run(context.Background(), step, nil)
 
 	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("status = %v, err = %v; want refusal", res.Status, res.Err)
 	}
-	if entries, _ := os.ReadDir(fsx.BackupsDir(home)); len(entries) != 0 {
+	if entries, _ := os.ReadDir(backup.BackupsDir(home)); len(entries) != 0 {
 		t.Fatalf("refused backup still created %d entries", len(entries))
 	}
 }
@@ -151,14 +152,14 @@ func TestBackupStep_RefusedWhenBackupsDirReachedThroughSymlinkedRoot(t *testing.
 func TestBackupStep_RefusedWhenEntryLiesInsideBackupsDir(t *testing.T) {
 	requireRsync(t)
 	home := t.TempDir()
-	backups := fsx.BackupsDir(home)
+	backups := backup.BackupsDir(home)
 	writeFile(t, filepath.Join(backups, "20260101-000000", "f"), "x")
 	step := plan.BackupStep{
 		Files: []plan.BackupFile{{Root: manifest.RootHome, Path: "20260101-000000/f"}},
 		Roots: map[manifest.Root]string{manifest.RootHome: backups},
 	}
 
-	res := fsx.Runner{Home: home}.Run(context.Background(), step, nil)
+	res := osfs.Runner{Home: home}.Run(context.Background(), step, nil)
 
 	if res.Status != plan.StepFailed || res.Err == nil {
 		t.Fatalf("status = %v, err = %v; want refusal", res.Status, res.Err)
@@ -170,12 +171,12 @@ func TestBackupStep_RefusedWhenEntryLiesInsideBackupsDir(t *testing.T) {
 
 func TestDeleteBackupStep(t *testing.T) {
 	home := t.TempDir()
-	root := fsx.BackupsDir(home)
+	root := backup.BackupsDir(home)
 	inside := filepath.Join(root, "20260301-100000")
 	writeFile(t, filepath.Join(inside, "meta.toml"), "x")
 	elsewhere := filepath.Join(home, "precious")
 	writeFile(t, filepath.Join(elsewhere, "f"), "x")
-	r := fsx.Runner{Home: home}
+	r := osfs.Runner{Home: home}
 	del := func(dir string) plan.StepResult {
 		return r.Run(context.Background(), plan.DeleteBackupStep{Dir: dir}, nil)
 	}

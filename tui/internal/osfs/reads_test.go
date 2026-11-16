@@ -1,11 +1,11 @@
-package fsx_test
+package osfs_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -18,7 +18,7 @@ func TestPathKind_MissingPathIsKindNoneNotError(t *testing.T) {
 	for name, want := range map[string]plan.NodeKind{
 		"f": plan.KindFile, "d": plan.KindDir, "l": plan.KindLink, "nope": plan.KindNone,
 	} {
-		got, err := fsx.PathKind(filepath.Join(dir, name))
+		got, err := osfs.PathKind(filepath.Join(dir, name))
 		if err != nil || got != want {
 			t.Errorf("PathKind(%s) = %v, %v; want %v, nil", name, got, err, want)
 		}
@@ -40,7 +40,7 @@ func TestReadVariant_TrimsAndFallsBackToNadir(t *testing.T) {
 		if name == "zenit trimmed" {
 			want = "zenit"
 		}
-		if got := fsx.ReadVariant(cfg); got != want {
+		if got := osfs.ReadVariant(cfg); got != want {
 			t.Errorf("%s: got %q, want %q", name, got, want)
 		}
 	}

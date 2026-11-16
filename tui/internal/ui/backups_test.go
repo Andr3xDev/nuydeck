@@ -10,23 +10,23 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/app"
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 type fakeBackups struct {
-	list    []domain.Backup
+	list    []backup.Backup
 	deleted []string
 	listed  int
 	dryRun  bool
 }
 
-func (f *fakeBackups) ListBackups(context.Context) ([]domain.Backup, error) {
+func (f *fakeBackups) ListBackups(context.Context) ([]backup.Backup, error) {
 	f.listed++
 	return f.list, nil
 }
 
-func (f *fakeBackups) PlanRestore(context.Context, domain.Backup) (app.SyncPlan, error) {
+func (f *fakeBackups) PlanRestore(context.Context, backup.Backup) (app.SyncPlan, error) {
 	return app.SyncPlan{Direction: plan.Restore, Items: []app.PlanItem{planItem("a", false)}}, nil
 }
 
@@ -42,7 +42,7 @@ func (f *fakeBackups) DeleteBackup(_ context.Context, dir string, confirmed bool
 }
 
 func TestBackupsDryRunDeleteShowsWouldDelete(t *testing.T) {
-	f := &fakeBackups{list: []domain.Backup{sampleBackup("/b/1")}, dryRun: true}
+	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}, dryRun: true}
 	b := loadedBackups(f)
 
 	b.Update(keyPress('d'))
@@ -54,13 +54,13 @@ func TestBackupsDryRunDeleteShowsWouldDelete(t *testing.T) {
 }
 
 func TestBackupsRefuseIncompleteAndUnreadableRestore(t *testing.T) {
-	for _, mark := range []func(*domain.Backup){
-		func(bk *domain.Backup) { bk.Incomplete = true },
-		func(bk *domain.Backup) { bk.Unreadable = true },
+	for _, mark := range []func(*backup.Backup){
+		func(bk *backup.Backup) { bk.Incomplete = true },
+		func(bk *backup.Backup) { bk.Unreadable = true },
 	} {
 		bad := sampleBackup("/b/1")
 		mark(&bad)
-		b := loadedBackups(&fakeBackups{list: []domain.Backup{bad}})
+		b := loadedBackups(&fakeBackups{list: []backup.Backup{bad}})
 
 		_, cmd := b.Update(keyPress(tea.KeyEnter))
 		if cmd != nil || b.err == nil {
@@ -75,12 +75,12 @@ func loadedBackups(f *fakeBackups) *Backups {
 	return b
 }
 
-func sampleBackup(dir string) domain.Backup {
-	return domain.Backup{Dir: dir, Created: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC), Direction: plan.Pull, Files: []string{"home/a"}}
+func sampleBackup(dir string) backup.Backup {
+	return backup.Backup{Dir: dir, Created: time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC), Direction: plan.Pull, Files: []string{"home/a"}}
 }
 
 func TestBackupsDeleteDeclineMakesNoCall(t *testing.T) {
-	f := &fakeBackups{list: []domain.Backup{sampleBackup("/b/1")}}
+	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}}
 	b := loadedBackups(f)
 
 	b.Update(keyPress('d'))
@@ -94,7 +94,7 @@ func TestBackupsDeleteDeclineMakesNoCall(t *testing.T) {
 }
 
 func TestBackupsDeleteConfirmDeletesAndReloads(t *testing.T) {
-	f := &fakeBackups{list: []domain.Backup{sampleBackup("/b/1")}}
+	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}}
 	b := loadedBackups(f)
 
 	b.Update(keyPress('d'))
@@ -111,7 +111,7 @@ func TestBackupsDeleteConfirmDeletesAndReloads(t *testing.T) {
 }
 
 func TestBackupsRestoreOpensSyncWithRestorePlan(t *testing.T) {
-	f := &fakeBackups{list: []domain.Backup{sampleBackup("/b/1")}}
+	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}}
 	r := NewRoot("", false, Deps{Backups: f, Syncer: &fakeSyncer{}})
 	r.selected, r.panelFocus = 2, true
 	b := r.sections[2].screen.(*Backups)
@@ -136,7 +136,7 @@ func TestBackupsEmptyState(t *testing.T) {
 func TestBackupsIncompleteListedFlaggedAndDeletable(t *testing.T) {
 	bad := sampleBackup("/b/1")
 	bad.Incomplete = true
-	f := &fakeBackups{list: []domain.Backup{bad}}
+	f := &fakeBackups{list: []backup.Backup{bad}}
 	b := loadedBackups(f)
 
 	if !strings.Contains(ansi.Strip(b.View(80, 20)), "[incomplete]") {

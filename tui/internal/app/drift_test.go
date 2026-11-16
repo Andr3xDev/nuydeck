@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -120,12 +120,12 @@ func TestDrift_RunsAtMostFourDiffsAtOnce(t *testing.T) {
 func TestDrift_AttachesTimesAndNewestCompleteBackup(t *testing.T) {
 	e := resolved(manifest.RootConfig, "hypr")
 	pcT, repoT := testNow.Add(-time.Hour), testNow.Add(-72*time.Hour)
-	complete := domain.Backup{Dir: "/home/u/.nuydeck-backups/20261103-100000", Created: testNow.Add(-26 * time.Hour)}
+	complete := backup.Backup{Dir: "/home/u/.nuydeck-backups/20261103-100000", Created: testNow.Add(-26 * time.Hour)}
 	in := &fakeInspector{
 		diff:      diffReturning(),
 		mtimes:    map[string]time.Time{e.DestPath: pcT},
 		repoTimes: map[string]plan.RepoTimes{"config/hypr": {Entry: repoT}},
-		backups:   []domain.Backup{{Dir: "/home/u/.nuydeck-backups/x.partial", Incomplete: true}, complete},
+		backups:   []backup.Backup{{Dir: "/home/u/.nuydeck-backups/x.partial", Incomplete: true}, complete},
 	}
 	r := collectDrift(newService(t, in, &fakeRunner{}), []manifest.ResolvedEntry{e})["hypr"]
 
@@ -186,8 +186,8 @@ func TestDrift_ReturnsBeforeListBackupsFinishes(t *testing.T) {
 	}
 }
 
-func testBackup() domain.Backup {
-	return domain.Backup{
+func testBackup() backup.Backup {
+	return backup.Backup{
 		Dir:       "/home/u/.nuydeck-backups/20261103-100000",
 		Direction: plan.Push,
 		Roots:     map[manifest.Root]string{manifest.RootConfig: "/home/u/.config"},

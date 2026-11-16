@@ -1,4 +1,4 @@
-package fsx
+package osfs
 
 import (
 	"context"
@@ -12,16 +12,17 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/rsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/rsync"
 )
 
 const backupTimeLayout = "20060102-150405"
 
 func (r Runner) backup(ctx context.Context, s plan.BackupStep) plan.StepResult {
-	backupsDir := BackupsDir(r.Home)
+	backupsDir := backup.BackupsDir(r.Home)
 	realBackupsDir, err := fsutil.ResolveExisting(backupsDir)
 	if err != nil {
 		return failed(err)
@@ -62,7 +63,7 @@ func reserveBackupDir(backupsDir, ts string) (final, partial string, err error) 
 		if i > 0 {
 			name = fmt.Sprintf("%s-%d", ts, i)
 		}
-		final, partial = filepath.Join(backupsDir, name), filepath.Join(backupsDir, name+partialSuffix)
+		final, partial = filepath.Join(backupsDir, name), filepath.Join(backupsDir, name+backup.PartialSuffix)
 		if _, statErr := os.Lstat(final); statErr == nil {
 			continue
 		}
@@ -78,7 +79,7 @@ func reserveBackupDir(backupsDir, ts string) (final, partial string, err error) 
 
 func writeBackup(ctx context.Context, s plan.BackupStep, dir string, created time.Time) error {
 	byRoot := map[manifest.Root][]string{}
-	meta := backupMeta{Created: created, Direction: int(s.Direction), Roots: map[string]string{}}
+	meta := backup.Meta{Created: created, Direction: int(s.Direction), Roots: map[string]string{}}
 	for _, f := range s.Files {
 		byRoot[f.Root] = append(byRoot[f.Root], f.Path)
 		meta.Roots[string(f.Root)] = s.Roots[f.Root]
@@ -102,13 +103,13 @@ func writeBackup(ctx context.Context, s plan.BackupStep, dir string, created tim
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, metaFileName), data, 0o644)
+	return os.WriteFile(filepath.Join(dir, backup.MetaFileName), data, 0o644)
 }
 
 func (r Runner) deleteBackup(s plan.DeleteBackupStep) plan.StepResult {
 	dir := filepath.Clean(s.Dir)
-	if filepath.Dir(dir) != BackupsDir(r.Home) {
-		return failed(fmt.Errorf("refusing to delete %s: not inside %s", dir, BackupsDir(r.Home)))
+	if filepath.Dir(dir) != backup.BackupsDir(r.Home) {
+		return failed(fmt.Errorf("refusing to delete %s: not inside %s", dir, backup.BackupsDir(r.Home)))
 	}
 	if err := os.RemoveAll(dir); err != nil {
 		return failed(err)

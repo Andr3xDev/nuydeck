@@ -1,4 +1,4 @@
-package fsx
+package osfs
 
 import (
 	"errors"

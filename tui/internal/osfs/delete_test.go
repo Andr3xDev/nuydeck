@@ -1,4 +1,4 @@
-package fsx_test
+package osfs_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Andr3xDev/nuydeck/tui/internal/adapters/fsx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -90,7 +90,7 @@ func TestDeleteStep(t *testing.T) {
 			_ = os.MkdirAll(outside, 0o755)
 			path := tc.setup(root, outside)
 
-			res := fsx.Runner{Home: base}.Run(context.Background(), plan.DeleteStep{Path: path, Root: root}, nil)
+			res := osfs.Runner{Home: base}.Run(context.Background(), plan.DeleteStep{Path: path, Root: root}, nil)
 
 			if gotFail := res.Status == plan.StepFailed; gotFail != tc.wantFail {
 				t.Fatalf("status = %v, err = %v; wantFail %v", res.Status, res.Err, tc.wantFail)
