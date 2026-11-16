@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"io/fs"
+
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
@@ -50,31 +52,58 @@ type AppendLogStep struct {
 	Entry state.LogEntry
 }
 
-func (CopyStep) isStep()         {}
-func (DeleteStep) isStep()       {}
-func (BackupStep) isStep()       {}
-func (DeleteBackupStep) isStep() {}
-func (SaveStateStep) isStep()    {}
-func (AppendLogStep) isStep()    {}
-
-type StepStatus int
-
-const (
-	StepOK StepStatus = iota
-	StepFailed
-	StepWouldApply
-)
-
-type StepResult struct {
-	Status StepStatus
-	Detail string
-	Err    error
-	// Applied lists the items done before a failure.
-	Applied []string
+// CommandStep runs an external command.
+type CommandStep struct {
+	Label string
+	Argv  []string
+	Dir   string
+	Sudo  bool
+	// UsesSudo marks a command that calls sudo itself, so the Runner must not prefix it but the run still guards its credentials.
+	UsesSudo    bool
+	Interactive bool
+	Quiet       bool
 }
 
-// StepProgress reports one transferred item.
-type StepProgress struct {
-	Path string
-	Line string
+// WriteFileStep writes a file, optionally through sudo, keeping the previous copy in BackupTo.
+type WriteFileStep struct {
+	Path       string
+	Content    []byte
+	Mode       fs.FileMode
+	Privileged bool
+	BackupTo   string
 }
+
+type SymlinkStep struct {
+	Path   string
+	Target string
+}
+
+// WriteSecretsStep creates the secrets file from variable names; values stay redacted outside Reveal.
+type WriteSecretsStep struct {
+	Path    string
+	Entries []SecretEntry
+}
+
+type SecretEntry struct {
+	Name string
+	// go-toml encodes string-kind types raw and ignores TextMarshaler, so the tag is the only guard there.
+	Value Secret `toml:"-"`
+}
+
+// AppendPackageStep adds one package block to the catalog file.
+type AppendPackageStep struct {
+	Path  string
+	Entry manifest.Package
+}
+
+func (CopyStep) isStep()          {}
+func (DeleteStep) isStep()        {}
+func (BackupStep) isStep()        {}
+func (DeleteBackupStep) isStep()  {}
+func (SaveStateStep) isStep()     {}
+func (AppendLogStep) isStep()     {}
+func (CommandStep) isStep()       {}
+func (WriteFileStep) isStep()     {}
+func (SymlinkStep) isStep()       {}
+func (WriteSecretsStep) isStep()  {}
+func (AppendPackageStep) isStep() {}

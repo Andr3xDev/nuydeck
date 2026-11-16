@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"os/exec"
 	"time"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/domain"
@@ -24,16 +23,6 @@ type Inspector interface {
 	ListBackups(ctx context.Context) ([]domain.Backup, error)
 	// LoadState never fails; a non-empty warning means defaults were used.
 	LoadState(ctx context.Context) (state.State, string)
-}
-
-// Runner is the only way anything is modified; dry-run swaps in a recorder.
-type Runner interface {
-	Run(ctx context.Context, s domain.Step, progress func(domain.StepProgress)) domain.StepResult
-}
-
-// Terminal hands the real terminal to a child process, for the one interactive step.
-type Terminal interface {
-	Run(ctx context.Context, cmd *exec.Cmd) error
 }
 
 // SystemProbe holds the read-only machine queries of the install and the package screens; always the real implementation.
