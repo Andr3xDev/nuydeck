@@ -20,6 +20,19 @@ func writeFile(s plan.WriteFileStep) plan.StepResult {
 	if s.Privileged {
 		return failed(fmt.Errorf("privileged write of %s needs the system runner", s.Path))
 	}
+	if s.Root != "" {
+		root, path := filepath.Clean(s.Root), filepath.Clean(s.Path)
+		if !fsutil.StrictlyWithin(root, path) {
+			return failed(fmt.Errorf("refusing to write %s: not inside %s", path, root))
+		}
+		inside, err := parentInsideRoot(root, path)
+		if err != nil {
+			return failed(err)
+		}
+		if !inside {
+			return failed(fmt.Errorf("refusing to write %s: parent resolves outside %s", path, root))
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(s.Path), userDirMode); err != nil {
 		return failed(err)
 	}
