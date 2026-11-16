@@ -22,6 +22,7 @@ const (
 	PartialSuffix  = ".partial"
 )
 
+// Meta is the metadata persisted next to each backup snapshot.
 type Meta struct {
 	Created   time.Time         `toml:"created"`
 	Direction int               `toml:"direction"`

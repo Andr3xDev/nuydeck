@@ -15,6 +15,7 @@ func Within(base, p string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
+// StrictlyWithin reports whether p is inside base and not base itself.
 func StrictlyWithin(base, p string) bool {
 	return Within(base, p) && filepath.Clean(base) != filepath.Clean(p)
 }

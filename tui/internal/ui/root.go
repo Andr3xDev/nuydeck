@@ -66,7 +66,7 @@ const (
 	packagesSection = 4
 )
 
-// Deps is what the shell needs from the app layer and startup.
+// Deps is what the shell needs from the use cases and startup.
 type Deps struct {
 	Drifter       Drifter
 	Syncer        Syncer

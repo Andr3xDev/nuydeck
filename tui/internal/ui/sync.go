@@ -17,7 +17,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-// Syncer is the sync use-case surface the screen needs; *app.Service implements it.
+// Syncer is the sync use-case surface the screen needs; *cfgsync.Service implements it.
 type Syncer interface {
 	PlanSync(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.SyncPlan, error)
 	NeedsBackup(plan cfgsync.SyncPlan, sel cfgsync.Selection) bool

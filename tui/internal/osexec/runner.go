@@ -14,7 +14,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
-// Runner is the real app.Runner.
+// Runner is the real plan.Runner.
 type Runner struct {
 	Home      string
 	ConfigDir string

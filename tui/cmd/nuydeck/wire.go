@@ -13,7 +13,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
-// Inspector is the real app.Inspector.
+// Inspector is the real cfgsync.Inspector.
 type Inspector struct {
 	Home string
 }

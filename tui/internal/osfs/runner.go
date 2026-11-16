@@ -34,7 +34,7 @@ func (r Runner) Run(ctx context.Context, s plan.Step, _ func(plan.StepProgress))
 	case plan.WriteSecretsStep:
 		return writeSecrets(s)
 	}
-	return failed(fmt.Errorf("fsx cannot run %T", s))
+	return failed(fmt.Errorf("osfs cannot run %T", s))
 }
 
 func (r Runner) now() time.Time {

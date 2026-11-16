@@ -27,7 +27,7 @@ func (r execRequestMsg) finish(err error) tea.Msg {
 	return execFinishedMsg{err: err}
 }
 
-// TerminalBridge implements app.Terminal on top of tea.ExecProcess; cmd/nuydeck attaches the program before Run.
+// TerminalBridge implements plan.Terminal on top of tea.ExecProcess; cmd/nuydeck attaches the program before Run.
 type TerminalBridge struct{ sender messageSender }
 
 func NewTerminalBridge() *TerminalBridge { return &TerminalBridge{} }

@@ -8,7 +8,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-// Recorder is an app.Runner that renders what each Step would do and performs no I/O.
+// Recorder is a plan.Runner that renders what each Step would do and performs no I/O.
 type Recorder struct{}
 
 func (Recorder) Run(_ context.Context, s plan.Step, _ func(plan.StepProgress)) plan.StepResult {

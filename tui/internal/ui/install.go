@@ -22,7 +22,7 @@ const logLineCap = 2000
 
 var errInstallUnavailable = errors.New("install is not available")
 
-// Installer is the install use-case surface the screen needs; *app.Installer implements it.
+// Installer is the install use-case surface the screen needs; *install.Installer implements it.
 type Installer interface {
 	Plan(ctx context.Context, d install.Draft) (install.InstallPlan, error)
 	Run(ctx context.Context, p install.InstallPlan, events chan<- plan.InstallEvent, ack <-chan struct{}) install.InstallResult

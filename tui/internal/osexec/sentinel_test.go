@@ -28,6 +28,7 @@ import (
 )
 
 // sentinelInspector duplicates cmd/nuydeck's Inspector glue, which tests here cannot import.
+// It mirrors cmd/nuydeck/wire.go Inspector and must match it until the glue becomes funcs (task 3.3).
 type sentinelInspector struct {
 	Home string
 }
@@ -225,7 +226,7 @@ func TestSentinelRecorderPlanAndRun(t *testing.T) {
 	run.assertNoSentinel(t)
 }
 
-// Test 2 runs the real osexec.Runner (real fsx secrets, file and log adapters); only external commands and the sudo handoff are faked.
+// Test 2 runs the real osexec.Runner (real osfs secrets, file and log adapters); only external commands and the sudo handoff are faked.
 func TestSentinelRealRunnerSecretsWriteFailure(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("read-only target is not enforced for root")
