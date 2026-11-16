@@ -207,6 +207,19 @@ func TestPrivilegedWriteFile_PathsOutsideAllowListAreRefusedBeforeAnyExec(t *tes
 	}
 }
 
+func TestPrivilegedWriteFile_RootIsRefusedBeforeAnyExec(t *testing.T) {
+	f := &fakeExec{}
+	r := newRunner(f)
+	r.TempDir = t.TempDir()
+	res := r.Run(context.Background(), plan.WriteFileStep{Path: logindDropIn, Content: []byte("x"), Mode: 0o644, Privileged: true, Root: "/etc"}, nil)
+	if res.Status != plan.StepFailed || res.Err == nil {
+		t.Errorf("result = %+v, want failure", res)
+	}
+	if len(f.calls) != 0 {
+		t.Errorf("exec was called: %+v", f.calls)
+	}
+}
+
 func TestPrivilegedWriteFile_PacmanConfIsAllowed(t *testing.T) {
 	f := &fakeExec{}
 	r := newRunner(f)

@@ -58,6 +58,9 @@ func (r Runner) lstat(path string) (fs.FileInfo, error) {
 
 // writePrivileged backs up the target, stages the content as root beside it and moves it into place.
 func (r Runner) writePrivileged(ctx context.Context, s plan.WriteFileStep) plan.StepResult {
+	if s.Root != "" {
+		return failure(fmt.Errorf("privileged write of %s refused: Root confinement is not supported", s.Path))
+	}
 	if !sysx.IsAllowedSystemPath(s.Path) {
 		return failure(fmt.Errorf("privileged write refused: %s is not allow-listed", s.Path))
 	}

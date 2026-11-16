@@ -71,7 +71,7 @@ type WriteFileStep struct {
 	Mode       fs.FileMode
 	Privileged bool
 	BackupTo   string
-	Root       string // when set, the path must stay inside this directory
+	Root       string // confines unprivileged writes to this directory; it must exist; not allowed with Privileged
 }
 
 type SymlinkStep struct {
