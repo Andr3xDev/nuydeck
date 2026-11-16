@@ -352,10 +352,7 @@ func (s *Install) toggleDriver(id string) {
 func (s *Install) seedSelection() {
 	if !s.seeded {
 		s.seeded = true
-		s.selected = map[string]bool{}
-		for _, p := range s.deps.Catalog {
-			s.selected[p.Name] = slices.Contains(p.Profiles, manifest.ProfileMinimal)
-		}
+		s.selected = install.DefaultSelection(s.draft.Profile, s.deps.Catalog)
 	}
 	pkgs := slices.Clone(s.deps.Catalog)
 	sort.SliceStable(pkgs, func(i, j int) bool {
