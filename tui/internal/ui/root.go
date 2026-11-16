@@ -11,7 +11,6 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
-	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 const (
@@ -97,14 +96,14 @@ type Root struct {
 	dryRun        bool
 	keys          KeyMap
 	help          help.Model
-	palette       theme.Palette
+	palette       Palette
 }
 
 // NewRoot builds the shell. variant is the raw theme variant string read by
 // the caller; unknown values fall back to Nadir. A manifest error leaves only
 // the error screen, so no sync, backup or restore action exists.
 func NewRoot(variant string, dryRun bool, deps Deps) Root {
-	palette := theme.ForVariant(variant)
+	palette := ForVariant(variant)
 	h := help.New()
 	h.Styles = help.DefaultStyles(palette.Dark)
 	keys := DefaultKeyMap()

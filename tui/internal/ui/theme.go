@@ -1,5 +1,4 @@
-// Package theme holds the Nuytek terminal palettes.
-package theme
+package ui
 
 import (
 	"image/color"

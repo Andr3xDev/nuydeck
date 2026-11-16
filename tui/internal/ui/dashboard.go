@@ -16,7 +16,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
-	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 const timeLayout = "2006-01-02 15:04"
@@ -43,7 +42,7 @@ type Dashboard struct {
 	entries    []manifest.ResolvedEntry
 	state      dashboardInfo
 	keys       KeyMap
-	palette    theme.Palette
+	palette    Palette
 	spinner    spinner.Model
 	results    map[manifest.Entry]drift.DriftResult
 	lastBackup *backup.Backup
@@ -59,7 +58,7 @@ type dashboardInfo struct {
 	lastSync *state.LastSync
 }
 
-func newDashboard(deps Deps, keys KeyMap, palette theme.Palette) *Dashboard {
+func newDashboard(deps Deps, keys KeyMap, palette Palette) *Dashboard {
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(lipgloss.NewStyle().Foreground(palette.Accent)))
 	return &Dashboard{
 		drifter: deps.Drifter,
@@ -260,7 +259,7 @@ func (d *Dashboard) muted(s string) string {
 // ManifestError replaces the sections that depend on an invalid manifest: no operation is offered.
 type ManifestError struct {
 	err     error
-	palette theme.Palette
+	palette Palette
 	// fix names the file to repair; empty means manifest/paths.toml.
 	fix string
 }

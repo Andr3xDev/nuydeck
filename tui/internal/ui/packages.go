@@ -14,7 +14,6 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
-	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 // PackageManager is the packages use-case surface the screen needs; *packages.Packages implements it.
@@ -64,7 +63,7 @@ type addForm struct {
 type Packages struct {
 	manager PackageManager
 	keys    KeyMap
-	palette theme.Palette
+	palette Palette
 
 	names  []string
 	loaded bool
@@ -74,7 +73,7 @@ type Packages struct {
 	form   *addForm
 }
 
-func newPackages(deps Deps, keys KeyMap, palette theme.Palette) *Packages {
+func newPackages(deps Deps, keys KeyMap, palette Palette) *Packages {
 	return &Packages{manager: deps.Packages, keys: keys, palette: palette}
 }
 

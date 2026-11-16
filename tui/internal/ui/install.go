@@ -15,7 +15,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
-	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 // logLineCap is how many output lines the run page keeps.
@@ -115,7 +114,7 @@ type selectionRow struct {
 type Install struct {
 	deps    InstallDeps
 	keys    KeyMap
-	palette theme.Palette
+	palette Palette
 
 	page   installPage
 	draft  install.Draft
@@ -155,7 +154,7 @@ type Install struct {
 	runErr   error
 }
 
-func newInstall(deps InstallDeps, keys KeyMap, palette theme.Palette) *Install {
+func newInstall(deps InstallDeps, keys KeyMap, palette Palette) *Install {
 	input := textinput.New()
 	input.EchoMode = textinput.EchoNone
 	return &Install{

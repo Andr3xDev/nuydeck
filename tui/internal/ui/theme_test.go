@@ -1,4 +1,4 @@
-package theme
+package ui
 
 import "testing"
 

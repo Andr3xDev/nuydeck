@@ -13,7 +13,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
-	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 // BackupManager is the backup use-case surface the screen needs; *backup.Service implements it.
@@ -44,7 +43,7 @@ type restorePlanMsg struct {
 type Backups struct {
 	manager BackupManager
 	keys    KeyMap
-	palette theme.Palette
+	palette Palette
 	backups []backup.Backup
 	cursor  int
 	err     error
@@ -52,7 +51,7 @@ type Backups struct {
 	notice  string
 }
 
-func newBackups(deps Deps, keys KeyMap, palette theme.Palette) *Backups {
+func newBackups(deps Deps, keys KeyMap, palette Palette) *Backups {
 	return &Backups{manager: deps.Backups, keys: keys, palette: palette}
 }
 

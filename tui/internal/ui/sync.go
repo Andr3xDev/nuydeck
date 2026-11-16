@@ -15,7 +15,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
-	"github.com/Andr3xDev/nuydeck/tui/internal/ui/theme"
 )
 
 // Syncer is the sync use-case surface the screen needs; *app.Service implements it.
@@ -71,7 +70,7 @@ type Sync struct {
 	entries []manifest.ResolvedEntry
 	dryRun  bool
 	keys    KeyMap
-	palette theme.Palette
+	palette Palette
 
 	gen       int
 	phase     syncPhase
@@ -90,7 +89,7 @@ type Sync struct {
 
 const applyBusyNotice = "Another sync was ignored: an apply is in progress."
 
-func newSync(deps Deps, dryRun bool, keys KeyMap, palette theme.Palette) *Sync {
+func newSync(deps Deps, dryRun bool, keys KeyMap, palette Palette) *Sync {
 	return &Sync{syncer: deps.Syncer, entries: deps.Entries, dryRun: dryRun, keys: keys, palette: palette}
 }
 
