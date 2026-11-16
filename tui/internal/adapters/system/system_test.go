@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,5 +126,36 @@ func TestRunnerDispatch(t *testing.T) {
 	}
 	if _, err := os.Lstat(victim); !os.IsNotExist(err) {
 		t.Errorf("victim still exists: %v", err)
+	}
+}
+
+func TestAppendPackageStep_AppendsThroughTomlx(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "packages.toml")
+	if err := os.WriteFile(path, []byte("version = 1\n\n[[package]]\nname = \"a\"\nsource = \"pacman\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res := newRunner(&fakeExec{}).Run(context.Background(), plan.AppendPackageStep{Path: path, Entry: manifest.Package{Name: "htop", Source: manifest.SourceAUR}}, nil)
+	if res.Status != plan.StepOK {
+		t.Fatalf("result = %+v", res)
+	}
+	if b, _ := os.ReadFile(path); !strings.Contains(string(b), `name = "htop"`) {
+		t.Errorf("file = %q, want htop appended", b)
+	}
+}
+
+func TestFileStepsDelegateToFsx(t *testing.T) {
+	dir := t.TempDir()
+	r := newRunner(&fakeExec{})
+	ctx := context.Background()
+
+	steps := map[string]plan.Step{
+		"theme":   plan.WriteFileStep{Path: filepath.Join(dir, "theme", "name"), Content: []byte("nuytek"), Mode: 0o644},
+		"link":    plan.SymlinkStep{Path: filepath.Join(dir, "gpu_env.lua"), Target: "gpu_env_amd.lua"},
+		"secrets": plan.WriteSecretsStep{Path: filepath.Join(dir, ".secrets")},
+	}
+	for name, s := range steps {
+		if res := r.Run(ctx, s, nil); res.Status != plan.StepOK {
+			t.Errorf("%s: %+v", name, res)
+		}
 	}
 }
