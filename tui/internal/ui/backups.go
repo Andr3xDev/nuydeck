@@ -128,8 +128,8 @@ func (b *Backups) handleKey(msg tea.KeyPressMsg) (Screen, tea.Cmd) {
 }
 
 func (b *Backups) restore(sel backup.Backup) tea.Cmd {
-	if sel.Incomplete || sel.Unreadable {
-		b.err = fmt.Errorf("backup %s is %s and cannot be restored", sel.Dir, flag(sel))
+	if err := backup.CheckRestorable(sel); err != nil {
+		b.err = fmt.Errorf("backup %s cannot be restored: %w", sel.Dir, err)
 		return nil
 	}
 	b.err = nil

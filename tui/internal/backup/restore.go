@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"errors"
 	"path"
 	"slices"
 
@@ -10,8 +11,27 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
+var (
+	ErrIncomplete = errors.New("backup is incomplete")
+	ErrUnreadable = errors.New("backup is unreadable")
+)
+
+// CheckRestorable refuses backups that cannot be restored.
+func CheckRestorable(b Backup) error {
+	switch {
+	case b.Unreadable:
+		return ErrUnreadable
+	case b.Incomplete:
+		return ErrIncomplete
+	}
+	return nil
+}
+
 // PlanRestore plans a restore from the backup; roots come from the backup metadata and deletions are never offered.
 func (s *Service) PlanRestore(ctx context.Context, b Backup) (cfgsync.SyncPlan, error) {
+	if err := CheckRestorable(b); err != nil {
+		return cfgsync.SyncPlan{}, err
+	}
 	roots := make([]manifest.Root, 0, len(b.Roots))
 	for root := range b.Roots {
 		roots = append(roots, root)
