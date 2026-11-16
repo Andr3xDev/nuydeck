@@ -4,6 +4,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -41,6 +42,55 @@ var domainEdges = map[string][]string{
 	"drift":    {"cfgsync", "backup", "plan", "manifest", "state"},
 	"packages": {"plan", "manifest", "state"},
 	"install":  {"plan", "cfgsync", "packages", "manifest", "state"},
+}
+
+// Package-only leftovers of the old layout; they must import nothing and go once the owner deletes them.
+var legacyPackages = []string{"app", "domain", "adapters"}
+
+func TestInternalPackages_AreAllClassified(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		_, isDomain := domainEdges[name]
+		if !isDomain && name != uiPackage && !slices.Contains(adapterPackages, name) && !slices.Contains(legacyPackages, name) {
+			t.Errorf("internal/%s is in no layer list: classify it in adapterPackages, domainEdges or uiPackage", name)
+		}
+	}
+}
+
+func TestViolation(t *testing.T) {
+	cases := []struct {
+		name       string
+		pkg        string
+		importPath string
+		wantReject bool
+	}{
+		{"ui to adapter", "ui", internalPrefix + "osexec", true},
+		{"domain to adapter", "cfgsync", internalPrefix + "rsync", true},
+		{"unlisted adapter edge", "rsync", internalPrefix + "gitx", true},
+		{"execx imports a module package", "execx", internalPrefix + "plan", true},
+		{"fsutil imports a module package", "fsutil", internalPrefix + "manifest", true},
+		{"editor imports a module package", "editor", internalPrefix + "state", true},
+		{"domain outside its row", "manifest", internalPrefix + "plan", true},
+		{"legacy package imports a module package", "app", internalPrefix + "plan", true},
+		{"allowed adapter edge", "rsync", internalPrefix + "execx", false},
+		{"allowed domain edge", "cfgsync", internalPrefix + "plan", false},
+		{"ui to domain", "ui", internalPrefix + "install", false},
+		{"standard library", "execx", "os/exec", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := violation(tc.pkg, tc.importPath) != ""; got != tc.wantReject {
+				t.Errorf("violation(%q, %q) rejected = %v, want %v", tc.pkg, tc.importPath, got, tc.wantReject)
+			}
+		})
+	}
 }
 
 func TestInternalPackages_RespectLayerImportRules(t *testing.T) {
@@ -101,8 +151,8 @@ func violation(pkg, importPath string) string {
 	if allowed, ok := domainEdges[pkg]; ok && !slices.Contains(allowed, target) {
 		return "not in the allowed imports of " + pkg
 	}
-	if pkg == "execx" {
-		return "execx imports nothing inside the module"
+	if pkg == "execx" || slices.Contains(legacyPackages, pkg) {
+		return pkg + " imports nothing inside the module"
 	}
 	return ""
 }
