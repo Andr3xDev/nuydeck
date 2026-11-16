@@ -56,6 +56,29 @@ var zenit = Palette{
 	Success:       lipgloss.Color("#1E8A3B"),
 }
 
+// theme is the styles the shared render primitives need; its zero value renders unstyled.
+type theme struct {
+	title, selected, muted       lipgloss.Style
+	focusedBorder, blurredBorder lipgloss.Style
+}
+
+func newTheme(p Palette) theme {
+	return theme{
+		title:         lipgloss.NewStyle().Bold(true),
+		selected:      lipgloss.NewStyle().Bold(true).Foreground(p.OnAccent).Background(p.Accent),
+		muted:         lipgloss.NewStyle().Foreground(p.TextMuted),
+		focusedBorder: lipgloss.NewStyle().Foreground(p.Accent),
+		blurredBorder: lipgloss.NewStyle().Foreground(p.Border),
+	}
+}
+
+func (t theme) border(focused bool) lipgloss.Style {
+	if focused {
+		return t.focusedBorder
+	}
+	return t.blurredBorder
+}
+
 // ForVariant returns Zenit for "zenit" and Nadir for anything else, so a
 // missing or invalid variant never surfaces as an error.
 func ForVariant(variant string) Palette {
