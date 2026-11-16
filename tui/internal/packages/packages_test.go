@@ -182,10 +182,10 @@ func TestPackages_IgnorePackageAppendsToIgnoredPackagesAndKeepsSyncState(t *test
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			state := state.State{Version: 1, RepoPath: "/repo", Ignores: []string{"config:hypr/a.conf"}, IgnoredPackages: tc.existing}
+			saved := state.State{Version: 1, RepoPath: "/repo", Ignores: []string{"config:hypr/a.conf"}, IgnoredPackages: tc.existing}
 			r := &fakeRunner{}
 
-			newPackages(&fakeProbe{}, &fakeInspector{state: state}, r).IgnorePackage(context.Background(), "htop")
+			newPackages(&fakeProbe{}, &fakeInspector{state: saved}, r).IgnorePackage(context.Background(), "htop")
 
 			saves := stepsOfType[plan.SaveStateStep](r.steps)
 			if len(saves) != 1 {
@@ -195,7 +195,7 @@ func TestPackages_IgnorePackageAppendsToIgnoredPackagesAndKeepsSyncState(t *test
 			if !slices.Equal(got.IgnoredPackages, tc.want) {
 				t.Errorf("IgnoredPackages = %v, want %v", got.IgnoredPackages, tc.want)
 			}
-			if !slices.Equal(got.Ignores, state.Ignores) || got.RepoPath != "/repo" || got.Version != 1 {
+			if !slices.Equal(got.Ignores, saved.Ignores) || got.RepoPath != "/repo" || got.Version != 1 {
 				t.Errorf("sync state changed: %+v", got)
 			}
 		})
