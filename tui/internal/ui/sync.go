@@ -57,7 +57,7 @@ func (s *Sync) Update(msg tea.Msg) (screen, tea.Cmd) {
 		if s.flow.active() {
 			s.flow.reset()
 		}
-	case plannedMsg:
+	case plannedMsg, sidesMsg, editedMsg:
 		if s.flow.active() {
 			return s, s.flow.Update(msg)
 		}
@@ -138,43 +138,57 @@ type syncStaged struct {
 	svc       *services
 	syncPlan  cfgsync.SyncPlan
 	sel       cfgsync.Selection
+	res       cfgsync.Resolutions // edits the owner accepted; only selected items reach the apply
 	cursor    int
 	confirmed *syncApply
+
+	sides       map[cfgsync.ItemKey]*sideState
+	sub         subStage
+	subScroll   scroller
+	pending     *editedMsg // the edit result waiting for y or n
+	editNotices []string
 }
 
 func newSyncStaged(svc *services, p cfgsync.SyncPlan, confirmed *syncApply) *syncStaged {
 	sel := cfgsync.Selection{}
 	maps.Copy(sel, p.Selection)
-	return &syncStaged{svc: svc, syncPlan: p, sel: sel, confirmed: confirmed}
-}
-
-func (st *syncStaged) Keys() []key.Binding {
-	k := st.svc.keys
-	return []key.Binding{k.Up, k.Down, k.Toggle, k.All}
+	return &syncStaged{
+		svc: svc, syncPlan: p, sel: sel, res: cfgsync.Resolutions{}, confirmed: confirmed,
+		sides: map[cfgsync.ItemKey]*sideState{},
+	}
 }
 
 func (st *syncStaged) Update(msg tea.KeyPressMsg) tea.Cmd {
 	k := st.svc.keys
+	if st.sub != subNone {
+		return st.updateSub(msg)
+	}
 	switch {
 	case key.Matches(msg, k.Up):
 		st.cursor = max(st.cursor-1, 0)
+		return st.Load()
 	case key.Matches(msg, k.Down):
 		st.cursor = max(min(st.cursor+1, len(st.syncPlan.Items)-1), 0)
+		return st.Load()
 	case key.Matches(msg, k.Toggle):
 		st.toggle()
 	case key.Matches(msg, k.All):
 		st.toggleAll()
+	case key.Matches(msg, k.Edit):
+		return st.edit()
+	case key.Matches(msg, k.Diff):
+		st.openDiff()
 	}
 	return nil
 }
 
-// Notices lists the plan's state warning, unless the shell already shows it, and its notices.
+// Notices lists the plan's state warning, unless the shell already shows it, its notices and the editor's.
 func (st *syncStaged) Notices() []string {
 	var out []string
 	if w := st.syncPlan.StateWarning; w != "" && w != st.svc.StateWarning {
 		out = append(out, "State: "+w)
 	}
-	return append(out, st.syncPlan.Notices...)
+	return append(append(out, st.syncPlan.Notices...), st.editNotices...)
 }
 
 func (st *syncStaged) CanApply() bool { return st.svc.ApplySync != nil && st.selectedCount() > 0 }
@@ -187,34 +201,55 @@ func (st *syncStaged) Offer() (string, bool) {
 }
 
 func (st *syncStaged) Build(offer bool) plan.Plan {
-	*st.confirmed = syncApply{plan: st.syncPlan, sel: maps.Clone(st.sel), backup: offer}
+	applied := st.syncPlan
+	applied.Resolutions = maps.Clone(st.res)
+	*st.confirmed = syncApply{plan: applied, sel: maps.Clone(st.sel), backup: offer}
 	return plan.Plan{Confirm: fmt.Sprintf("Apply %d items (%s)?", st.selectedCount(), directionLabel(st.syncPlan.Direction))}
 }
 
-func (st *syncStaged) toggle() {
+func (st *syncStaged) current() (cfgsync.PlanItem, bool) {
 	if st.cursor >= len(st.syncPlan.Items) {
-		return
+		return cfgsync.PlanItem{}, false
 	}
-	if it := st.syncPlan.Items[st.cursor]; !it.Blocked {
-		st.sel[it.Key()] = !st.sel[it.Key()]
-	}
+	return st.syncPlan.Items[st.cursor], true
 }
 
-// toggleAll clears the selection when every selectable item is selected, else selects them all.
+// selectable items offer a choice; extras and blocked items are information only.
+func selectable(it cfgsync.PlanItem) bool { return !it.Blocked && it.Change.Type != plan.Delete }
+
+// toggle cycles keep and take; an edited item goes back to keep and loses its edit.
+func (st *syncStaged) toggle() {
+	it, ok := st.current()
+	if !ok || !selectable(it) {
+		return
+	}
+	k := it.Key()
+	if _, edited := st.res[k]; edited {
+		delete(st.res, k)
+		st.sel[k] = false
+		return
+	}
+	st.sel[k] = !st.sel[k]
+}
+
+// toggleAll clears the selection (and the edits) when every selectable item is selected, else selects them all.
 func (st *syncStaged) toggleAll() {
 	all := true
 	for _, it := range st.syncPlan.Items {
-		all = all && (it.Blocked || st.sel[it.Key()])
+		all = all && (!selectable(it) || st.sel[it.Key()])
+	}
+	if all {
+		clear(st.res)
 	}
 	for _, it := range st.syncPlan.Items {
-		st.sel[it.Key()] = !all && !it.Blocked
+		st.sel[it.Key()] = !all && selectable(it)
 	}
 }
 
 func (st *syncStaged) selectedCount() int {
 	n := 0
 	for _, it := range st.syncPlan.Items {
-		if st.sel[it.Key()] && !it.Blocked {
+		if st.sel[it.Key()] && selectable(it) {
 			n++
 		}
 	}
@@ -222,29 +257,52 @@ func (st *syncStaged) selectedCount() int {
 }
 
 func (st *syncStaged) View(th theme, w, h int) []string {
+	if st.sub == subDiff {
+		return st.diffView(th, w, h)
+	}
 	header := fmt.Sprintf("%d of %d selected", st.selectedCount(), len(st.syncPlan.Items))
 	lines := []string{th.title.Render(truncate(header, w))}
 	if len(st.syncPlan.Items) == 0 {
 		return append(lines, styled(th.muted, wrap("Nothing to sync.", w))...)
+	}
+	var popup []string
+	if st.sub == subResult {
+		popup = st.resultView(th, w, max(h/2, minPopupLines))
 	}
 	rows := make([]listRow, len(st.syncPlan.Items))
 	for i, it := range st.syncPlan.Items {
 		rows[i] = st.row(it, w)
 	}
 	list, at := listLines(th, rows, st.cursor, w)
-	return append(lines, windowAround(list, at, max(h-len(lines), 1))...)
+	lines = append(lines, windowAround(list, at, max(h-len(lines)-len(popup), 1))...)
+	return append(lines, popup...)
+}
+
+// marker is the row's state: the choice offered, or "extra" for information-only deletes.
+func (st *syncStaged) marker(it cfgsync.PlanItem) string {
+	k := it.Key()
+	_, edited := st.res[k]
+	switch {
+	case it.Blocked:
+		return "[-]"
+	case it.Change.Type == plan.Delete:
+		return "extra"
+	case edited && st.sel[k]:
+		return "[e] edit"
+	case st.sel[k]:
+		return "[x] take"
+	case it.Change.Type == plan.Create:
+		return "[ ] skip"
+	}
+	return "[ ] keep"
 }
 
 // row is the plan item list row; narrow panels drop the repo and PC times.
 func (st *syncStaged) row(it cfgsync.PlanItem, w int) listRow {
-	box := "[ ]"
-	switch {
-	case it.Blocked:
-		box = "[-]"
-	case st.sel[it.Key()]:
-		box = "[x]"
+	line := fmt.Sprintf("%s %s %s:%s", st.marker(it), changeLabel(it.Change.Type), it.Change.Entry.Root, it.Key().Path)
+	if s := st.sides[it.Key()]; s != nil && !s.loaded {
+		line += "  loading"
 	}
-	line := fmt.Sprintf("%s %s %s:%s", box, changeLabel(it.Change.Type), it.Change.Entry.Root, it.Key().Path)
 	if w >= wideRowWidth {
 		line += fmt.Sprintf("  repo %s  pc %s", timeText(it.RepoTime), timeText(it.PCTime))
 	}

@@ -17,6 +17,7 @@ type keyMap struct {
 	Pull, Push, Delete       key.Binding
 	Add, Ignore, SkipSecrets key.Binding
 	CancelRun                key.Binding
+	Edit, Diff               key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -41,6 +42,8 @@ func newKeyMap() keyMap {
 		Ignore:      key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "ignore package")),
 		SkipSecrets: key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "skip secrets file")),
 		CancelRun:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "cancel")),
+		Edit:        key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
+		Diff:        key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "view diff")),
 	}
 }
 

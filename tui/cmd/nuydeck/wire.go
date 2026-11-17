@@ -74,6 +74,7 @@ func wireSync(deps *ui.Deps, svc *cfgsync.Service, backups *backup.Service, drif
 	deps.ListBackups = backups.ListBackups
 	deps.PlanRestore = backups.PlanRestore
 	deps.DeleteBackup = backups.DeleteBackup
+	deps.ReadSide = osfs.ReadSide
 }
 
 // wireEdit binds the conflict editor to the real environment, the temp dir and the shared terminal.

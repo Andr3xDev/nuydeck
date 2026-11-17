@@ -24,11 +24,11 @@ func checkbox(on bool) string {
 func directionLabel(d plan.Direction) string {
 	switch d {
 	case plan.Pull:
-		return "Pull"
+		return "Pull: PC -> repo"
 	case plan.Restore:
 		return "Restore"
 	}
-	return "Push"
+	return "Push: repo -> PC"
 }
 
 func changeLabel(t plan.ChangeType) string {

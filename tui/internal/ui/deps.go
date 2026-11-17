@@ -31,7 +31,9 @@ type Deps struct {
 	ListBackups  func(ctx context.Context) ([]backup.Backup, error)
 	PlanRestore  func(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
 	DeleteBackup func(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
-	Edit         func(ctx context.Context, req cfgsync.EditRequest) (cfgsync.EditResult, error)
+	// ReadSide reads one end of a plan item for the resolver's row state and diff view.
+	ReadSide func(path string) (cfgsync.Side, error)
+	Edit     func(ctx context.Context, req cfgsync.EditRequest) (cfgsync.EditResult, error)
 
 	Install  InstallDeps
 	Packages PackagesDeps
