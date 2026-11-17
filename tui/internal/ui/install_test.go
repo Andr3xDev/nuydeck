@@ -242,9 +242,16 @@ func TestInstallForgetsSecretValuesAfterTheRun(t *testing.T) {
 	d.launch(tap(in, specialKey(tea.KeyEnter)))
 	d.must(t, "the run to finish", d.runDone)
 
-	dump := fmt.Sprintf("%+v %#v", in.draft, in.plan) + in.View(100, 30) + d.view()
+	dump := fmt.Sprintf("%#v", in.plan) + in.View(100, 30) + d.view()
 	if strings.Contains(dump, sentinel) {
-		t.Errorf("secret value still in memory or view after the run: %s", dump)
+		t.Errorf("secret value in the plan or a view after the run: %s", dump)
+	}
+	if w := in.draft.Secrets; len(w) != 1 || w[0].Value.Reveal() != sentinel {
+		t.Errorf("draft secrets = %v, want the value kept for a retry", w)
+	}
+	in.Leave()
+	if len(in.draft.Secrets) != 0 {
+		t.Errorf("draft secrets after Leave = %v, want none", in.draft.Secrets)
 	}
 }
 

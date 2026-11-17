@@ -615,7 +615,7 @@ func TestPlan_SecretsFileIsCreatedOnlyWhenMissingAndOmitsEmptyValues(t *testing.
 		wantNames []string
 	}{
 		{name: "values entered", mutate: func(f *planFixture) { f.draft.Secrets = entries }, wantStep: true, wantNames: []string{"API_KEY"}},
-		{name: "no names configured", mutate: func(*planFixture) {}, wantStep: true},
+		{name: "no names configured", mutate: func(*planFixture) {}},
 		{
 			name:   "file exists",
 			mutate: func(f *planFixture) { f.in.kinds[secretsPath] = plan.KindFile; f.draft.Secrets = entries },

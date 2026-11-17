@@ -144,6 +144,15 @@ func (i *Installer) planEnv(b *planBuilder, d Draft) error {
 		return nil
 	}
 	secrets := path.Join(i.Home, ".secrets")
+	step := plan.WriteSecretsStep{Path: secrets}
+	for _, e := range d.Secrets {
+		if e.Value != "" {
+			step.Entries = append(step.Entries, e)
+		}
+	}
+	if len(step.Entries) == 0 {
+		return nil
+	}
 	kind, err := i.Service.Inspector.PathKind(secrets)
 	if err != nil {
 		return err
@@ -151,12 +160,6 @@ func (i *Installer) planEnv(b *planBuilder, d Draft) error {
 	skip := ""
 	if kind != plan.KindNone {
 		skip = "left as is"
-	}
-	step := plan.WriteSecretsStep{Path: secrets}
-	for _, e := range d.Secrets {
-		if e.Value != "" {
-			step.Entries = append(step.Entries, e)
-		}
 	}
 	b.add(PhaseEnv, step, skip)
 	return nil

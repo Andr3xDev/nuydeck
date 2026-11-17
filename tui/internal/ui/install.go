@@ -121,6 +121,9 @@ func (s *Install) secretPrompting() bool {
 	return !s.secretsExist && s.secretIdx < len(s.deps.SecretNames)
 }
 
+// Leave forgets the typed secret values once the owner moves off Install or quits.
+func (s *Install) Leave() { s.draft.Secrets = nil }
+
 // Cancel stops the running plan or install, if any.
 func (s *Install) Cancel() {
 	if s.cancel != nil {
@@ -231,8 +234,7 @@ func (s *Install) startRun() tea.Cmd {
 	s.gen++
 	s.started = true
 	run, installPlan := s.deps.Run, s.plan
-	// The run owns the values from here: neither the draft nor the screen's plan keeps them.
-	s.draft.Secrets = nil
+	// The draft keeps the values for a retry until Leave; the screen's plan never shows them.
 	s.plan = withoutSecretValues(s.plan)
 	steps := make([]string, len(installPlan.Steps))
 	for i, ps := range installPlan.Steps {

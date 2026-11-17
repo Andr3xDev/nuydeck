@@ -13,6 +13,13 @@ import (
 
 const dryRunBadge = "DRY-RUN"
 
+const (
+	sidebarMax     = 30 // sidebar block width cap, border included
+	minWidth       = 40
+	minHeight      = 8
+	noticeMaxLines = 2
+)
+
 // wideRowWidth is the panel width below which list rows drop their secondary columns.
 const wideRowWidth = 60
 
@@ -204,6 +211,9 @@ func (r *Root) quit() (tea.Model, tea.Cmd) {
 		if c, ok := s.screen.(canceller); ok {
 			c.Cancel()
 		}
+		if l, ok := s.screen.(leaver); ok {
+			l.Leave()
+		}
 	}
 	r.cancel()
 	return r, tea.Quit
@@ -300,11 +310,16 @@ func (r *Root) View() tea.View {
 }
 
 func (r *Root) render() string {
-	if r.width <= 0 || r.height <= 1 {
+	if r.width <= 0 || r.height <= 0 {
 		return ""
 	}
-	bodyHeight := r.height - 1
-	panelWidth := max(r.width-sidebarWidth, 0)
+	if r.width < minWidth || r.height < minHeight {
+		return lipgloss.NewStyle().MaxWidth(r.width).Render("Terminal too small")
+	}
+	band := r.renderNoticeBand()
+	bodyHeight := r.height - 1 - len(band)
+	sidebarCells := min(sidebarMax, r.width*2/5)
+	panelWidth := r.width - sidebarCells
 
 	var panel string
 	if r.run != nil {
@@ -317,11 +332,20 @@ func (r *Root) render() string {
 	for i, s := range r.sections {
 		titles[i] = s.title
 	}
-	body := lipgloss.JoinHorizontal(lipgloss.Top, renderSidebar(r.svc.th, titles, r.selected, r.focus == focusPanel, bodyHeight), panel)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, renderSidebar(r.svc.th, titles, r.selected, r.focus == focusPanel, sidebarCells, bodyHeight), panel)
 	if r.showHelp {
 		body = overlayCentered(body, helpPopup(r.svc.th, r.help, r.helpGroups(), r.width, bodyHeight), r.width, bodyHeight)
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, body, r.renderKeybar())
+	return lipgloss.JoinVertical(lipgloss.Left, slices.Concat([]string{body}, band, []string{r.renderKeybar()})...)
+}
+
+// renderNoticeBand wraps the state warning under the panel, cut to noticeMaxLines so the panel keeps its rows.
+func (r *Root) renderNoticeBand() []string {
+	if r.svc.StateWarning == "" {
+		return nil
+	}
+	lines := wrap(r.svc.StateWarning, r.width)
+	return styled(r.svc.th.warning, lines[:min(len(lines), noticeMaxLines)])
 }
 
 // focusedKeys are the bindings valid in the current focus; the keybar and help derive from them.
