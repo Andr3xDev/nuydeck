@@ -37,7 +37,7 @@ var domainEdges = map[string][]string{
 	"manifest": {"fsutil"},
 	"state":    {"fsutil"},
 	"plan":     {"manifest", "state"},
-	"cfgsync":  {"plan", "manifest", "state", "fsutil"},
+	"cfgsync":  {"plan", "manifest", "state", "fsutil", "editor"},
 	"backup":   {"cfgsync", "plan", "manifest", "fsutil"},
 	"drift":    {"cfgsync", "backup", "plan", "manifest", "state"},
 	"packages": {"plan", "manifest", "state"},
