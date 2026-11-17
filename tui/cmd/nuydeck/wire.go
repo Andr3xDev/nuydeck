@@ -45,6 +45,8 @@ func (i Inspector) Diff(ctx context.Context, e manifest.ResolvedEntry, src, dst 
 func (Inspector) LinkTarget(path string) (string, error)      { return osfs.LinkTarget(path) }
 func (Inspector) PathKind(path string) (plan.NodeKind, error) { return osfs.PathKind(path) }
 
+func (Inspector) ReadSide(path string) (cfgsync.Side, error) { return osfs.ReadSide(path) }
+
 func (Inspector) NewestMTime(_ context.Context, path string, filter manifest.Filter) (time.Time, error) {
 	return osfs.NewestMTime(path, filter)
 }

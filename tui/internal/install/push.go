@@ -26,13 +26,8 @@ func (i *Installer) pushSteps(ctx context.Context, entries []manifest.ResolvedEn
 		}
 		sel[it.Key()] = syncPlan.Selection[it.Key()]
 	}
-	items := cfgsync.SelectedItems(syncPlan, sel)
-	if files := cfgsync.BackupFiles(items, false); len(files) > 0 {
-		steps = append(steps, cfgsync.BackupStep(plan.Push, files))
-	}
-	for _, g := range cfgsync.GroupByEntry(items) {
-		paths, _ := cfgsync.CopyPaths(g)
-		steps = append(steps, plan.CopyStep{Entry: g[0].Resolved, Direction: plan.Push, Src: g[0].Src, Dst: g[0].Dst, Paths: paths, Dir: !g[0].FileEntry})
+	for _, b := range cfgsync.Steps(syncPlan, sel, nil, cfgsync.ApplyOptions{Backup: true}) {
+		steps = append(steps, b.Step)
 	}
 	return steps, syncPlan.Notices, blocking, nil
 }

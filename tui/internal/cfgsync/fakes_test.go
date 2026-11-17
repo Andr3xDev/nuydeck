@@ -53,6 +53,8 @@ func (f *fakeInspector) PathKind(p string) (plan.NodeKind, error) {
 	return plan.KindDir, nil
 }
 
+func (f *fakeInspector) ReadSide(string) (Side, error) { return Side{}, nil }
+
 func (f *fakeInspector) NewestMTime(_ context.Context, p string, _ manifest.Filter) (time.Time, error) {
 	return f.mtimes[p], nil
 }

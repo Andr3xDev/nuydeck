@@ -33,6 +33,8 @@ func (f *fakeInspector) Diff(_ context.Context, e manifest.ResolvedEntry, src, d
 
 func (f *fakeInspector) LinkTarget(string) (string, error) { return "", nil }
 
+func (f *fakeInspector) ReadSide(string) (cfgsync.Side, error) { return cfgsync.Side{}, nil }
+
 func (f *fakeInspector) PathKind(string) (plan.NodeKind, error) { return plan.KindDir, nil }
 
 func (f *fakeInspector) NewestMTime(context.Context, string, manifest.Filter) (time.Time, error) {

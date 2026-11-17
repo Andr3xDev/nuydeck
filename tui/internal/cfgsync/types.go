@@ -60,6 +60,8 @@ type SyncPlan struct {
 	StateWarning string
 	// Notices lists entries left out of the plan, e.g. a missing source.
 	Notices []string
+	// Resolutions holds the edited content per item; entries of deselected items are ignored.
+	Resolutions Resolutions
 }
 
 type ApplyOptions struct {

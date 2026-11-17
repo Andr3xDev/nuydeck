@@ -52,6 +52,7 @@ func (i sentinelInspector) Diff(ctx context.Context, e manifest.ResolvedEntry, s
 func (sentinelInspector) LinkTarget(path string) (string, error)      { return osfs.LinkTarget(path) }
 func (sentinelInspector) PathKind(path string) (plan.NodeKind, error) { return osfs.PathKind(path) }
 
+func (sentinelInspector) ReadSide(path string) (cfgsync.Side, error) { return osfs.ReadSide(path) }
 func (sentinelInspector) NewestMTime(_ context.Context, path string, filter manifest.Filter) (time.Time, error) {
 	return osfs.NewestMTime(path, filter)
 }

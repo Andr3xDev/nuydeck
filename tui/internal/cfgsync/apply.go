@@ -17,32 +17,15 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 		return ApplyResult{Nothing: true}
 	}
 	var res ApplyResult
-	var steps []plan.Item
-	// owners[i] are the plan items that steps[i] applies.
-	var owners [][]PlanItem
-	add := func(step plan.Step, owned ...PlanItem) {
-		steps = append(steps, plan.Item{Step: step})
-		owners = append(owners, owned)
-	}
-
-	if files := BackupFiles(items, opts.Hard); opts.Backup && len(files) > 0 {
-		add(BackupStep(syncPlan.Direction, files))
-	}
-	for _, g := range GroupByEntry(items) {
-		paths, group := CopyPaths(g)
-		if len(paths) == 0 {
-			continue
-		}
-		add(plan.CopyStep{Entry: g[0].Resolved, Direction: syncPlan.Direction, Src: g[0].Src, Dst: g[0].Dst, Paths: paths, Dir: !g[0].FileEntry}, group...)
-	}
-	if opts.Hard {
-		for _, it := range orderedDeletes(items) {
-			add(plan.DeleteStep{Path: it.DstPath(), Root: it.Dst}, it)
-		}
-	}
+	batches := Steps(syncPlan, sel, syncPlan.Resolutions, opts)
 	if syncPlan.Direction != plan.Restore {
-		add(plan.SaveStateStep{State: s.syncedState(ctx, syncPlan.Direction)})
+		batches = append(batches, Batch{Step: plan.SaveStateStep{State: s.syncedState(ctx, syncPlan.Direction)}})
 	}
+	steps := make([]plan.Item, len(batches))
+	for i, b := range batches {
+		steps[i] = plan.Item{Step: b.Step}
+	}
+	owners := func(i int) []PlanItem { return batches[i].Items }
 
 	// The recorder keeps every outcome, failed ones too, and hands progress straight to the caller.
 	recorder := runnerFunc(func(ctx context.Context, step plan.Step, _ func(plan.StepProgress)) plan.StepResult {
@@ -54,7 +37,7 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 
 	applied := map[ItemKey]bool{}
 	for i, o := range res.Outcomes {
-		for _, it := range owners[i] {
+		for _, it := range owners(i) {
 			_, isCopy := o.Step.(plan.CopyStep)
 			if o.Result.Status != plan.StepFailed || isCopy && slices.Contains(o.Result.Applied, it.Change.Path) {
 				applied[it.Key()] = true
@@ -76,6 +59,48 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 		res.Err = cmp.Or(r.Err, errors.New(cmp.Or(r.Detail, "step failed")))
 	}
 	return res
+}
+
+// Batch is one step with the plan items it applies.
+type Batch struct {
+	Step  plan.Step
+	Items []PlanItem
+}
+
+// Steps lists the steps that apply the selection, without the final state step.
+// Items with a resolution are written from it instead of copied.
+func Steps(p SyncPlan, sel Selection, res Resolutions, opts ApplyOptions) []Batch {
+	items := SelectedItems(p, sel)
+	var batches []Batch
+	var edited, plain []PlanItem
+	for _, it := range items {
+		if _, ok := res[it.Key()]; ok {
+			edited = append(edited, it)
+		} else {
+			plain = append(plain, it)
+		}
+	}
+
+	if files := BackupFiles(items, opts.Hard); opts.Backup && len(files) > 0 {
+		batches = append(batches, Batch{Step: BackupStep(p.Direction, files)})
+	}
+	for _, g := range GroupByEntry(plain) {
+		paths, group := CopyPaths(g)
+		if len(paths) == 0 {
+			continue
+		}
+		batches = append(batches, Batch{Step: plan.CopyStep{Entry: g[0].Resolved, Direction: p.Direction, Src: g[0].Src, Dst: g[0].Dst, Paths: paths, Dir: !g[0].FileEntry}, Items: group})
+	}
+	for _, it := range edited {
+		e := res[it.Key()]
+		batches = append(batches, Batch{Step: plan.WriteFileStep{Path: it.DstPath(), Content: e.Content, Mode: e.Mode, Root: it.Dst}, Items: []PlanItem{it}})
+	}
+	if opts.Hard {
+		for _, it := range orderedDeletes(plain) {
+			batches = append(batches, Batch{Step: plan.DeleteStep{Path: it.DstPath(), Root: it.Dst}, Items: []PlanItem{it}})
+		}
+	}
+	return batches
 }
 
 type runnerFunc func(ctx context.Context, s plan.Step, progress func(plan.StepProgress)) plan.StepResult
