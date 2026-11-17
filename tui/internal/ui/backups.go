@@ -59,7 +59,11 @@ func (b *Backups) Keys() []key.Binding {
 	if b.confirm {
 		return []key.Binding{b.keys.Yes, b.keys.No, b.keys.Back}
 	}
-	return []key.Binding{b.keys.Up, b.keys.Down, b.keys.Refresh, b.keys.Delete, b.keys.Confirm}
+	keys := []key.Binding{b.keys.Up, b.keys.Down, b.keys.Refresh}
+	if _, ok := b.selected(); ok && b.wired() {
+		keys = append(keys, b.keys.Delete, b.keys.Confirm)
+	}
+	return keys
 }
 
 // wired is false when restore and delete are not available.
@@ -93,6 +97,9 @@ func (b *Backups) Update(msg tea.Msg) (screen, tea.Cmd) {
 		}
 		return b, nil
 	case applyDoneMsg, runClosed:
+		if b.flow.active() {
+			b.flow.reset()
+		}
 		return b, b.load()
 	case plannedMsg:
 		if b.flow.active() {

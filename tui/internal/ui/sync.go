@@ -53,6 +53,10 @@ func (s *Sync) startPlan(dir plan.Direction) tea.Cmd {
 
 func (s *Sync) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
+	case runClosed, applyDoneMsg:
+		if s.flow.active() {
+			s.flow.reset()
+		}
 	case plannedMsg:
 		if s.flow.active() {
 			return s, s.flow.Update(msg)
@@ -173,7 +177,7 @@ func (st *syncStaged) Notices() []string {
 	return append(out, st.syncPlan.Notices...)
 }
 
-func (st *syncStaged) CanApply() bool { return st.selectedCount() > 0 }
+func (st *syncStaged) CanApply() bool { return st.svc.ApplySync != nil && st.selectedCount() > 0 }
 
 func (st *syncStaged) Offer() (string, bool) {
 	if st.svc.NeedsBackup == nil || !st.svc.NeedsBackup(st.syncPlan, st.sel) {

@@ -295,7 +295,7 @@ func (p *Packages) formView(cw int) []string {
 		source = "(not chosen, space cycles pacman and aur)"
 	}
 	lines := []string{
-		p.th.title.Render(truncate(sanitizeLine("Add"+f.name+" to the catalog"), cw)),
+		p.th.title.Render(truncate(sanitizeLine("Add "+f.name+" to the catalog"), cw)),
 		cursorMark(f.row == formRowSource) + "source: " + source,
 		cursorMark(f.row == formRowMinimal) + checkbox(f.minimal) + " minimal profile",
 		cursorMark(f.row == formRowFull) + checkbox(f.full) + " full profile",

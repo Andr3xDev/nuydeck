@@ -81,6 +81,8 @@ type Install struct {
 func newInstall(svc *services) *Install {
 	input := textinput.New()
 	input.EchoMode = textinput.EchoNone
+	summary := viewport.New()
+	summary.SoftWrap = true
 	return &Install{
 		ctx:         svc.ctx,
 		deps:        svc.Install,
@@ -88,7 +90,7 @@ func newInstall(svc *services) *Install {
 		th:          svc.th,
 		draft:       install.Draft{Profile: manifest.ProfileMinimal},
 		secretInput: input,
-		summary:     viewport.New(),
+		summary:     summary,
 	}
 }
 
@@ -122,7 +124,11 @@ func (s *Install) secretPrompting() bool {
 }
 
 // Leave forgets the typed secret values once the owner moves off Install or quits.
-func (s *Install) Leave() { s.draft.Secrets = nil }
+func (s *Install) Leave() {
+	s.draft.Secrets = nil
+	s.plan = withoutSecretValues(s.plan)
+	s.secretInput.Reset()
+}
 
 // Cancel stops the running plan or install, if any.
 func (s *Install) Cancel() {
