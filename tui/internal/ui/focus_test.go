@@ -13,6 +13,8 @@ type probeScreen struct {
 	captures bool
 	received []string
 	entered  int
+	// broadcasts are the non-key messages Root delivered.
+	broadcasts []tea.Msg
 }
 
 func (p *probeScreen) Title() string  { return "Probe" }
@@ -25,6 +27,8 @@ func (p *probeScreen) CapturesText() bool  { return p.captures }
 func (p *probeScreen) Update(msg tea.Msg) (screen, tea.Cmd) {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
 		p.received = append(p.received, k.String())
+	} else {
+		p.broadcasts = append(p.broadcasts, msg)
 	}
 	return p, nil
 }
@@ -132,6 +136,29 @@ func TestEscIsDeliveredWhenTheScreenClaimsIt(t *testing.T) {
 
 	if r.focus != focusPanel || len(probe.received) != 1 {
 		t.Errorf("focus=%v received=%v, want esc delivered and focus kept", r.focus, probe.received)
+	}
+}
+
+// The keybar lists "r refresh" for every screen that does not claim r, so r must act for them.
+func TestUnclaimedRRefreshesTheFocusedScreen(t *testing.T) {
+	probe := &probeScreen{keys: probeKeys()}
+	r, _ := probeRoot(probe, focusPanel)
+
+	press(t, r, keyPress('r'))
+
+	if probe.entered != 1 {
+		t.Errorf("Enter calls after r = %d, want 1 (the screen reloads)", probe.entered)
+	}
+}
+
+func TestClaimedRIsDeliveredAndNotAlsoRefreshed(t *testing.T) {
+	probe := &probeScreen{keys: append(probeKeys(), bindingFor("r"))}
+	r, _ := probeRoot(probe, focusPanel)
+
+	press(t, r, keyPress('r'))
+
+	if probe.entered != 0 || len(probe.received) != 1 {
+		t.Errorf("entered=%d received=%v, want r delivered once and no refresh", probe.entered, probe.received)
 	}
 }
 

@@ -67,6 +67,7 @@ type Root struct {
 	svc           *services
 	help          help.Model
 	cancel        context.CancelFunc
+	run           *run
 }
 
 // NewRoot builds the shell. variant is the raw theme variant string read by
@@ -97,8 +98,14 @@ func sectionOf[T screen](r *Root) (found T, index int, ok bool) {
 	return found, -1, false
 }
 
-// WaitInstall blocks after the program exits until a started install has finished its bookkeeping, up to timeout.
+// WaitInstall blocks after the program exits until a started run has finished its bookkeeping, up to timeout.
 func (r *Root) WaitInstall(timeout time.Duration) {
+	if r.run != nil && r.run.started.Load() {
+		select {
+		case <-r.run.finished:
+		case <-time.After(timeout):
+		}
+	}
 	if in, _, ok := sectionOf[*Install](r); ok {
 		in.WaitRun(timeout)
 	}
@@ -138,6 +145,24 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case execRequestMsg:
 		return r, tea.ExecProcess(msg.cmd, msg.finish)
+	case runRequest:
+		if r.run != nil {
+			return r, nil
+		}
+		workCtx, cancel := context.WithCancel(r.svc.ctx)
+		r.run = newRun(msg, cancel)
+		return r, r.run.start(r.svc.ctx, workCtx, msg.work)
+	case runEventMsg:
+		if r.run != nil {
+			r.run.add(msg.event)
+			return r, r.run.next()
+		}
+		return r, nil
+	case runDoneMsg:
+		if r.run != nil {
+			r.run.finish(msg.end)
+		}
+		return r, nil
 	}
 	return r.broadcast(msg)
 }
@@ -152,8 +177,7 @@ func (r *Root) broadcast(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return r, tea.Batch(cmds...)
 }
 
-// route sends a key to one place, in this order: help, text capture, global keys, focus.
-// The run modal slots in after help once it exists.
+// route sends a key to one place, in this order: help, run, text capture, global keys, focus.
 func (r *Root) route(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	keys := r.svc.keys
 	switch {
@@ -162,16 +186,12 @@ func (r *Root) route(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			r.showHelp = false
 		}
 		return r, nil
+	case r.run != nil:
+		return r.routeRun(msg)
 	case r.focus == focusPanel && r.panelCapturesText() && msg.String() != "ctrl+c":
 		return r.forward(msg)
 	case key.Matches(msg, keys.Quit):
-		for _, s := range r.sections {
-			if c, ok := s.screen.(canceller); ok {
-				c.Cancel()
-			}
-		}
-		r.cancel()
-		return r, tea.Quit
+		return r.quit()
 	case key.Matches(msg, keys.Help):
 		r.showHelp = true
 		return r, nil
@@ -182,6 +202,43 @@ func (r *Root) route(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return r.routeSidebar(msg)
 	}
 	return r.routePanel(msg)
+}
+
+func (r *Root) quit() (tea.Model, tea.Cmd) {
+	for _, s := range r.sections {
+		if c, ok := s.screen.(canceller); ok {
+			c.Cancel()
+		}
+	}
+	r.cancel()
+	return r, tea.Quit
+}
+
+// routeRun keeps the output pane modal: a live run takes only scrolling, ctrl+c and the reboot enter; a finished one also esc and q.
+func (r *Root) routeRun(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	keys, run := r.svc.keys, r.run
+	ctrlC := msg.String() == "ctrl+c"
+	switch {
+	case keys.step(msg) != 0:
+		run.scrollBy(keys.step(msg))
+	case run.done && key.Matches(msg, keys.Quit), ctrlC && run.awaitAck:
+		return r.quit()
+	case run.done && key.Matches(msg, keys.Back):
+		r.run = nil
+		return r.broadcast(runClosed{})
+	case run.done:
+	case ctrlC:
+		run.cancel()
+	case run.awaitAck && key.Matches(msg, keys.Confirm):
+		run.awaitAck = false
+		select {
+		case run.ack <- struct{}{}:
+		default:
+		}
+	default:
+		run.notice = true
+	}
+	return r, nil
 }
 
 func (r *Root) toggleFocus() {
@@ -209,6 +266,8 @@ func (r *Root) routePanel(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, r.active().Keys()...):
 		return r.forward(msg)
+	case key.Matches(msg, keys.Refresh):
+		return r, r.active().Enter()
 	case key.Matches(msg, keys.Back):
 		r.focus = focusSidebar
 	}
@@ -252,7 +311,12 @@ func (r *Root) render() string {
 	bodyHeight := r.height - 1
 	panelWidth := max(r.width-sidebarWidth, 0)
 
-	panel := r.active().View(panelWidth, bodyHeight)
+	var panel string
+	if r.run != nil {
+		panel = r.run.view(r.svc.th, panelWidth, bodyHeight)
+	} else {
+		panel = r.active().View(panelWidth, bodyHeight)
+	}
 	panel = lipgloss.NewStyle().MaxWidth(panelWidth).MaxHeight(bodyHeight).Render(panel)
 	titles := make([]string, len(r.sections))
 	for i, s := range r.sections {

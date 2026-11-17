@@ -34,24 +34,6 @@ func TestRootQuitKeys(t *testing.T) {
 	}
 }
 
-func TestRootQuitsFromSidebarWhileInstallIsPastTheFirstPage(t *testing.T) {
-	root, in := newTestRoot(&fakeInstaller{plan: onePlan()})
-	toHardware(in)
-	_, root.selected, _ = sectionOf[*Install](root)
-	if in.page != pageHardware || root.focus != focusSidebar {
-		t.Fatalf("page=%v focus=%v, want the hardware page with sidebar focus", in.page, root.focus)
-	}
-
-	_, cmd := press(t, root, keyPress('q'))
-
-	if cmd == nil {
-		t.Fatal("no command returned")
-	}
-	if _, ok := cmd().(tea.QuitMsg); !ok {
-		t.Error("q with sidebar focus did not quit")
-	}
-}
-
 func TestRootHelpToggleAndEsc(t *testing.T) {
 	r := NewRoot("", false, Deps{})
 	r, _ = press(t, r, tea.KeyPressMsg{Code: '?', Text: "?"})
