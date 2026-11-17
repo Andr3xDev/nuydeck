@@ -107,9 +107,6 @@ func (r *Root) WaitInstall(timeout time.Duration) {
 		case <-time.After(timeout):
 		}
 	}
-	if in, _, ok := sectionOf[*Install](r); ok {
-		in.WaitRun(timeout)
-	}
 }
 
 func (r *Root) Init() tea.Cmd {
@@ -131,19 +128,12 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return r.route(msg)
 	case startSyncMsg:
-		if s, i, ok := sectionOf[*Sync](r); ok {
+		if s, i, ok := sectionOf[*Sync](r); ok && r.run == nil {
 			r.selectSection(i)
 			r.focus = focusPanel
 			return r, s.startPlan(msg.direction)
 		}
 		return r, nil
-	case restorePlanMsg:
-		if s, i, ok := sectionOf[*Sync](r); ok && msg.err == nil {
-			s.showPlan(msg.plan)
-			r.selectSection(i)
-			r.focus = focusPanel
-			return r, nil
-		}
 	case execRequestMsg:
 		return r, tea.ExecProcess(msg.cmd, msg.finish)
 	case runRequest:
@@ -160,8 +150,12 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return r, nil
 	case runDoneMsg:
-		if r.run != nil {
-			r.run.finish(msg.end)
+		if r.run == nil {
+			return r, nil
+		}
+		r.run.finish(msg.end)
+		if msg.end.msg != nil {
+			return r.broadcast(msg.end.msg)
 		}
 		return r, nil
 	}
@@ -332,6 +326,9 @@ func (r *Root) render() string {
 
 // focusedKeys are the bindings valid in the current focus; the keybar and help derive from them.
 func (r *Root) focusedKeys() []key.Binding {
+	if r.run != nil {
+		return r.run.keys(r.svc.keys)
+	}
 	if r.focus == focusSidebar {
 		return r.svc.keys.sidebarKeys()
 	}
@@ -343,6 +340,17 @@ func (r *Root) helpGroups() [][]key.Binding {
 	return [][]key.Binding{r.focusedKeys(), slices.Concat([]key.Binding{r.svc.keys.Focus}, r.svc.keys.pinnedKeys())}
 }
 
+// pinnedKeys are the right-hand keys: a live run answers neither ? nor q, a finished one only q.
+func (r *Root) pinnedKeys() []key.Binding {
+	switch {
+	case r.run == nil:
+		return r.svc.keys.pinnedKeys()
+	case r.run.done:
+		return []key.Binding{r.svc.keys.Quit}
+	}
+	return nil
+}
+
 func (r *Root) renderKeybar() string {
-	return keybar(r.svc.th, r.help, r.focusedKeys(), r.svc.keys.pinnedKeys(), r.dryRun, r.width)
+	return keybar(r.svc.th, r.help, r.focusedKeys(), r.pinnedKeys(), r.dryRun, r.width)
 }

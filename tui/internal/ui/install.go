@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
@@ -16,9 +15,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-// logLineCap is how many output lines the run page keeps.
-const logLineCap = 2000
-
 var errInstallUnavailable = errors.New("install is not available")
 
 type installPage int
@@ -29,20 +25,9 @@ const (
 	pageSelection
 	pageSecrets
 	pageSummary
-	pageRun
 )
 
 var profileChoices = []string{manifest.ProfileMinimal, manifest.ProfileFull, install.ProfileCustom}
-
-type stepStatus int
-
-const (
-	statusPending stepStatus = iota
-	statusRunning
-	statusDone
-	statusSkipped
-	statusFailed
-)
 
 type gpuDetectedMsg struct {
 	ids      []string
@@ -55,32 +40,12 @@ type installPlanMsg struct {
 	err  error
 }
 
-type installStream struct {
-	events <-chan plan.Event
-	result <-chan install.InstallResult
-}
-
-type installStartedMsg struct {
-	gen    int
-	stream installStream
-}
-
-type installEventMsg struct {
-	gen   int
-	event plan.Event
-}
-
-type installDoneMsg struct {
-	gen    int
-	result install.InstallResult
-}
-
 type selectionRow struct {
 	group string
 	name  string // empty for a group header
 }
 
-// Install is the guided install wizard: profile, hardware, selection, secrets, summary, run.
+// Install is the guided install wizard: profile, hardware, selection, secrets, summary. The run belongs to the shell.
 type Install struct {
 	ctx  context.Context
 	deps InstallDeps
@@ -92,8 +57,8 @@ type Install struct {
 	cursor int
 	gen    int
 	cancel context.CancelFunc
-
-	runDone chan struct{}
+	// started is true from the confirmed summary until the run pane closes, when the summary plans again.
+	started bool
 
 	hwLoading bool
 	hwLoaded  bool
@@ -111,18 +76,6 @@ type Install struct {
 	planErr  error
 	plan     install.InstallPlan
 	summary  viewport.Model
-
-	stream   installStream
-	statuses []stepStatus
-	current  int
-	log      []string
-	logView  viewport.Model
-	follow   bool
-	ack      chan struct{}
-	awaitAck bool
-	running  bool
-	finished bool
-	runErr   error
 }
 
 func newInstall(svc *services) *Install {
@@ -136,15 +89,13 @@ func newInstall(svc *services) *Install {
 		draft:       install.Draft{Profile: manifest.ProfileMinimal},
 		secretInput: input,
 		summary:     viewport.New(),
-		logView:     viewport.New(),
-		follow:      true,
 	}
 }
 
 func (s *Install) Title() string  { return "Install" }
 func (s *Install) Enter() tea.Cmd { return nil }
 
-// Keys lists the current page's bindings. Pages after the first claim esc to go back; the run page claims it only once finished.
+// Keys lists the current page's bindings. Pages after the first claim esc to go back one step.
 func (s *Install) Keys() []key.Binding {
 	switch s.page {
 	case pageProfile:
@@ -157,17 +108,8 @@ func (s *Install) Keys() []key.Binding {
 			keys = append(keys, s.keys.SkipSecrets)
 		}
 		return keys
-	case pageSummary:
-		return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Confirm, s.keys.Back}
 	}
-	keys := []key.Binding{s.keys.Up, s.keys.Down}
-	if s.awaitAck {
-		keys = append(keys, s.keys.Confirm)
-	}
-	if s.finished {
-		keys = append(keys, s.keys.Back)
-	}
-	return keys
+	return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Confirm, s.keys.Back}
 }
 
 // CapturesText reports whether printable keys belong to the hidden input, so the shell must not act on them.
@@ -197,19 +139,10 @@ func (s *Install) Update(msg tea.Msg) (screen, tea.Cmd) {
 			s.planning, s.plan, s.planErr = false, msg.plan, msg.err
 			s.showSummary()
 		}
-	case installStartedMsg:
-		if msg.gen == s.gen {
-			s.stream = msg.stream
-			return s, waitInstall(msg.gen, msg.stream)
-		}
-	case installEventMsg:
-		if msg.gen == s.gen {
-			s.handleEvent(msg.event)
-			return s, waitInstall(msg.gen, s.stream)
-		}
-	case installDoneMsg:
-		if msg.gen == s.gen {
-			s.finishRun(msg.result)
+	case runClosed:
+		if s.started {
+			s.started = false
+			return s, s.startPlan()
 		}
 	case tea.KeyPressMsg:
 		return s, s.handleKey(msg)
@@ -227,10 +160,8 @@ func (s *Install) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return s.selectionKey(msg)
 	case pageSecrets:
 		return s.secretsKey(msg)
-	case pageSummary:
-		return s.summaryKey(msg)
 	}
-	return s.runKey(msg)
+	return s.summaryKey(msg)
 }
 
 // moveCursor applies up and down over n rows and reports whether the key was a move.
@@ -298,83 +229,29 @@ func (s *Install) enterPage() tea.Cmd {
 func (s *Install) startRun() tea.Cmd {
 	s.Cancel()
 	s.gen++
-	s.page = pageRun
-	s.statuses = make([]stepStatus, len(s.plan.Steps))
-	s.current, s.log, s.follow = 0, nil, true
-	s.running, s.finished, s.awaitAck, s.runErr = true, false, false, nil
-	s.logView.SetContentLines(nil)
-	ctx, cancel := context.WithCancel(s.ctx)
-	s.cancel = cancel
-	ack := make(chan struct{}, 1)
-	s.ack = ack
-	gen, run, installPlan := s.gen, s.deps.Run, s.plan
-	// The plan snapshot carries the values Run needs; the draft must not keep them.
+	s.started = true
+	run, installPlan := s.deps.Run, s.plan
+	// The run owns the values from here: neither the draft nor the screen's plan keeps them.
 	s.draft.Secrets = nil
-	runDone := make(chan struct{})
-	s.runDone = runDone
-	return func() tea.Msg {
+	s.plan = withoutSecretValues(s.plan)
+	steps := make([]string, len(installPlan.Steps))
+	for i, ps := range installPlan.Steps {
+		steps[i] = stepLabel(ps.Step)
+	}
+	ack := make(chan struct{}, 1)
+	req := runRequest{title: "Install", ack: ack, steps: steps, footer: installFooter, work: func(ctx context.Context, emit func(plan.Event)) runEnd {
 		events := make(chan plan.Event)
 		result := make(chan install.InstallResult, 1)
-		go func() {
-			defer close(runDone)
-			result <- run(ctx, installPlan, events, ack)
-		}()
-		return installStartedMsg{gen: gen, stream: installStream{events: events, result: result}}
-	}
-}
-
-// waitInstall reads one event and is re-issued by Update until Run closes the channel, as for the sync apply.
-func waitInstall(gen int, st installStream) tea.Cmd {
-	return func() tea.Msg {
-		if ev, ok := <-st.events; ok {
-			return installEventMsg{gen: gen, event: ev}
+		go func() { result <- run(ctx, installPlan, events, ack) }()
+		for ev := range events {
+			emit(ev)
 		}
-		return installDoneMsg{gen: gen, result: <-st.result}
-	}
+		return runEnd{err: (<-result).Err}
+	}}
+	return func() tea.Msg { return req }
 }
 
-func (s *Install) handleEvent(ev plan.Event) {
-	if ev.Kind == plan.EventLine {
-		s.appendLog(ev.Line)
-		return
-	}
-	if ev.Index < 0 || ev.Index >= len(s.statuses) {
-		return
-	}
-	s.current = ev.Index
-	switch ev.Kind {
-	case plan.EventStarted, plan.EventAwaitAck:
-		s.statuses[ev.Index] = statusRunning
-		s.awaitAck = ev.Kind == plan.EventAwaitAck
-	case plan.EventDone:
-		s.statuses[ev.Index] = statusDone
-	case plan.EventSkipped:
-		s.statuses[ev.Index] = statusSkipped
-	case plan.EventFailed:
-		s.statuses[ev.Index] = statusFailed
-		s.runErr = ev.Err
-	}
-}
-
-func (s *Install) appendLog(line string) {
-	s.log = append(s.log, sanitizeLine(line))
-	if len(s.log) > logLineCap {
-		s.log = s.log[len(s.log)-logLineCap:]
-	}
-	s.logView.SetContentLines(s.log)
-}
-
-// finishRun does not depend on trailing events: after a cancel they may have been dropped.
-func (s *Install) finishRun(result install.InstallResult) {
-	s.running, s.finished, s.awaitAck = false, true, false
-	if s.runErr == nil {
-		s.runErr = result.Err
-	}
-	s.cancel = nil
-	s.plan = withoutSecretValues(s.plan)
-}
-
-// withoutSecretValues keeps the step list for the run page but drops the secret values.
+// withoutSecretValues keeps the step list for the summary but drops the secret values.
 func withoutSecretValues(installPlan install.InstallPlan) install.InstallPlan {
 	installPlan.Steps = slices.Clone(installPlan.Steps)
 	for i, ps := range installPlan.Steps {
@@ -387,15 +264,4 @@ func withoutSecretValues(installPlan install.InstallPlan) install.InstallPlan {
 		}
 	}
 	return installPlan
-}
-
-// WaitRun blocks until the install goroutine has returned (log persisted, child reaped) or timeout passes.
-func (s *Install) WaitRun(timeout time.Duration) {
-	if s.runDone == nil {
-		return
-	}
-	select {
-	case <-s.runDone:
-	case <-time.After(timeout):
-	}
 }

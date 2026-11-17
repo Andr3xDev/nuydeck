@@ -86,6 +86,9 @@ func (f *flow) reset() {
 // finished is true once the flow is at its entry and can be dropped.
 func (f *flow) finished() bool { return f.stage == stageIdle }
 
+// active is true while a flow exists and is past its entry; a nil flow is not active.
+func (f *flow) active() bool { return f != nil && !f.finished() }
+
 func (f *flow) canApply() bool { return f.err == nil && f.st != nil && f.st.CanApply() }
 
 func (f *flow) Update(msg tea.Msg) tea.Cmd {
@@ -121,12 +124,12 @@ func (f *flow) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch f.stage {
 	case stagePreview:
 		switch {
+		case f.st != nil && key.Matches(msg, f.st.Keys()...):
+			return f.st.Update(msg)
 		case k.step(msg) != 0:
 			f.body.by(k.step(msg))
 		case key.Matches(msg, k.Confirm):
 			f.accept()
-		case f.st != nil:
-			return f.st.Update(msg)
 		}
 	case stageOffer:
 		switch {

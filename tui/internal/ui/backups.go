@@ -13,38 +13,30 @@ import (
 )
 
 type backupsMsg struct {
+	gen     int
 	backups []backup.Backup
 	err     error
 }
 
-// deleteDoneMsg carries a failure or, in dry-run, the "would delete" detail.
-type deleteDoneMsg struct {
-	err    error
-	notice string
-}
-
-// restorePlanMsg is intercepted by Root, which opens the Sync preview on success.
-type restorePlanMsg struct {
-	plan cfgsync.SyncPlan
-	err  error
-}
-
-// Backups lists existing backups and starts restore and delete.
+// Backups lists existing backups and owns the restore flow and the delete confirm.
 type Backups struct {
+	svc          *services
 	listBackups  func(ctx context.Context) ([]backup.Backup, error)
 	planRestore  func(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
 	deleteBackup func(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
 	keys         keyMap
 	th           theme
+	gen          int // drops a list that arrives after a newer load
 	backups      []backup.Backup
 	cursor       int
 	err          error
 	confirm      bool
-	notice       string
+	flow         *flow
 }
 
 func newBackups(svc *services) *Backups {
 	return &Backups{
+		svc:          svc,
 		listBackups:  svc.ListBackups,
 		planRestore:  svc.PlanRestore,
 		deleteBackup: svc.DeleteBackup,
@@ -59,8 +51,11 @@ func (b *Backups) Title() string { return "Backups" }
 func (b *Backups) Init() tea.Cmd  { return b.load() }
 func (b *Backups) Enter() tea.Cmd { return b.load() }
 
-// Keys claims esc while the delete dialog is open, so esc closes it instead of leaving the panel.
+// Keys claims esc while the restore flow or the delete dialog is open, so esc steps back instead of leaving the panel.
 func (b *Backups) Keys() []key.Binding {
+	if b.flow.active() {
+		return b.flow.Keys()
+	}
 	if b.confirm {
 		return []key.Binding{b.keys.Yes, b.keys.No, b.keys.Back}
 	}
@@ -74,10 +69,11 @@ func (b *Backups) load() tea.Cmd {
 	if b.listBackups == nil {
 		return nil
 	}
-	listBackups := b.listBackups
+	b.gen++
+	gen, listBackups := b.gen, b.listBackups
 	return func() tea.Msg {
 		list, err := listBackups(context.Background())
-		return backupsMsg{backups: list, err: err}
+		return backupsMsg{gen: gen, backups: list, err: err}
 	}
 }
 
@@ -91,15 +87,17 @@ func (b *Backups) selected() (backup.Backup, bool) {
 func (b *Backups) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case backupsMsg:
-		b.backups, b.err = msg.backups, msg.err
-		b.cursor = max(min(b.cursor, len(b.backups)-1), 0)
+		if msg.gen == b.gen {
+			b.backups, b.err = msg.backups, msg.err
+			b.cursor = max(min(b.cursor, len(b.backups)-1), 0)
+		}
 		return b, nil
-	case deleteDoneMsg:
-		b.err, b.notice = msg.err, msg.notice
+	case applyDoneMsg, runClosed:
 		return b, b.load()
-	case restorePlanMsg:
-		b.err = msg.err
-		return b, nil
+	case plannedMsg:
+		if b.flow.active() {
+			return b, b.flow.Update(msg)
+		}
 	case tea.KeyPressMsg:
 		return b.handleKey(msg)
 	}
@@ -107,6 +105,9 @@ func (b *Backups) Update(msg tea.Msg) (screen, tea.Cmd) {
 }
 
 func (b *Backups) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
+	if b.flow.active() {
+		return b, b.flow.Update(msg)
+	}
 	if b.confirm {
 		switch {
 		case key.Matches(msg, b.keys.Yes):
@@ -141,39 +142,41 @@ func (b *Backups) restore(sel backup.Backup) tea.Cmd {
 	}
 	b.err = nil
 	planRestore := b.planRestore
-	return func() tea.Msg {
-		plan, err := planRestore(context.Background(), sel)
-		return restorePlanMsg{plan: plan, err: err}
-	}
+	b.flow = newFlow(b.svc, syncSource(b.svc, directionLabel(plan.Restore), func(ctx context.Context) (cfgsync.SyncPlan, error) {
+		return planRestore(ctx, sel)
+	}))
+	return b.flow.start()
 }
 
+// delete asks the run to remove the selected backup; a refusal or failure ends the run with an error.
 func (b *Backups) delete() tea.Cmd {
 	sel, ok := b.selected()
 	if !ok {
 		return nil
 	}
 	deleteBackup := b.deleteBackup
-	return func() tea.Msg {
-		res, _ := deleteBackup(context.Background(), sel.Dir, true)
+	req := runRequest{title: "Delete backup", work: func(ctx context.Context, emit func(plan.Event)) runEnd {
+		res, _ := deleteBackup(ctx, sel.Dir, true)
 		switch res.Status {
 		case plan.StepFailed:
-			return deleteDoneMsg{err: fmt.Errorf("delete failed: %s", res.Detail)}
+			return runEnd{err: fmt.Errorf("delete failed: %s", res.Detail)}
 		case plan.StepWouldApply:
-			return deleteDoneMsg{notice: res.Detail}
+			emit(plan.Event{Kind: plan.EventLine, Line: res.Detail})
 		}
-		return deleteDoneMsg{}
-	}
+		return runEnd{}
+	}}
+	return func() tea.Msg { return req }
 }
 
 func (b *Backups) View(width, height int) string {
+	if b.flow.active() {
+		return b.flow.box(b.Title(), width, height)
+	}
 	cw := contentWidth(width)
 	inner := innerHeight(height)
 	var lines []string
 	if b.err != nil {
 		lines = append(lines, styled(b.th.err, wrap(b.err.Error(), cw))...)
-	}
-	if b.notice != "" {
-		lines = append(lines, styled(b.th.warning, wrap(b.notice, cw))...)
 	}
 	if len(b.backups) == 0 {
 		lines = append(lines, b.th.muted.Render("No backups yet."))

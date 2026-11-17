@@ -174,6 +174,21 @@ func TestRunRefusesEveryKeyButCtrlCWithANotice(t *testing.T) {
 	}
 }
 
+func TestRunKeybarShowsTheRunKeysNotThePanelKeys(t *testing.T) {
+	cancelled := make(chan struct{}, 1)
+	d := runningRoot(t, false, focusPanel, nil, blockedUntilCancelled(cancelled))
+
+	live := d.view()
+	if !strings.Contains(live, "ctrl+c cancel") || strings.Contains(live, "q quit") || strings.Contains(live, "esc back") {
+		t.Errorf("live run keybar wrong:\n%s", live)
+	}
+	d.press(keyCtrlC)
+	d.must(t, "the run to report done", d.runDone)
+	if done := d.view(); !strings.Contains(done, "esc close") || !strings.Contains(done, "q quit") {
+		t.Errorf("finished run keybar wrong:\n%s", done)
+	}
+}
+
 func TestRunCtrlCCancelsAndTheProgramStaysOpen(t *testing.T) {
 	cancelled := make(chan struct{}, 1)
 	d := runningRoot(t, false, focusSidebar, nil, blockedUntilCancelled(cancelled))

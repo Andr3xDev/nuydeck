@@ -204,11 +204,11 @@ func TestDashboardPullPushRequestSync(t *testing.T) {
 }
 
 func TestRootOpensSyncOnStartSync(t *testing.T) {
-	r := NewRoot("", false, Deps{})
-	r.Update(startSyncMsg{direction: plan.Push})
+	r := NewRoot("", false, (&fakeSyncDeps{}).deps())
+	_, cmd := r.Update(startSyncMsg{direction: plan.Push})
 	sync, at, _ := sectionOf[*Sync](r)
-	if r.selected != at || sync.direction != plan.Push {
-		t.Errorf("selected=%d direction=%v", r.selected, sync.direction)
+	if r.selected != at || cmd == nil || !sync.flow.active() || sync.flow.stage != stagePlanning || sync.flow.src.Title != directionLabel(plan.Push) {
+		t.Errorf("selected=%d cmd=%v flow active=%v, want Sync open at the plan stage for a push", r.selected, cmd != nil, sync.flow.active())
 	}
 }
 

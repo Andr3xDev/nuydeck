@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,8 +21,9 @@ type fakeSyncDeps struct {
 	needsBackup   bool
 	progressPaths []string
 	blockUntilCtx bool
+	result        cfgsync.ApplyResult
 	opts          cfgsync.ApplyOptions
-	applyCalls    int
+	applyCalls    atomic.Int32
 }
 
 func (f *fakeSyncDeps) deps() Deps {
@@ -35,7 +37,7 @@ func (f *fakeSyncDeps) PlanSync(context.Context, plan.Direction, []manifest.Reso
 func (f *fakeSyncDeps) NeedsBackup(cfgsync.SyncPlan, cfgsync.Selection) bool { return f.needsBackup }
 
 func (f *fakeSyncDeps) Apply(ctx context.Context, _ cfgsync.SyncPlan, _ cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult {
-	f.applyCalls++
+	f.applyCalls.Add(1)
 	f.opts = opts
 	for _, p := range f.progressPaths {
 		progress(plan.StepProgress{Path: p})
@@ -43,7 +45,7 @@ func (f *fakeSyncDeps) Apply(ctx context.Context, _ cfgsync.SyncPlan, _ cfgsync.
 	if f.blockUntilCtx {
 		<-ctx.Done()
 	}
-	return cfgsync.ApplyResult{}
+	return f.result
 }
 
 func selectedPlan() cfgsync.SyncPlan {
@@ -58,6 +60,8 @@ func runCmds(s *Sync, cmd tea.Cmd) {
 	}
 }
 
+func stagedOf(s *Sync) *syncStaged { return s.flow.st.(*syncStaged) }
+
 func planItem(path string, blocked bool) cfgsync.PlanItem {
 	return cfgsync.PlanItem{Change: plan.Change{Entry: manifest.Entry{Root: "home", Path: path}, Type: plan.Update}, Blocked: blocked}
 }
@@ -66,8 +70,25 @@ func newPreview(f *fakeSyncDeps, dryRun bool) *Sync {
 	svc := testServices(f.deps())
 	svc.dryRun = dryRun
 	s := newSync(svc)
-	s.Update(planMsg{gen: s.gen, plan: f.plan})
+	runCmds(s, s.startPlan(plan.Push))
 	return s
+}
+
+// confirmedRequest accepts the preview and the confirm (the plan must need no backup) and returns the run the flow asks for.
+func confirmedRequest(t *testing.T, s *Sync) runRequest {
+	t.Helper()
+	s.Update(keyPress(tea.KeyEnter))
+	_, cmd := s.Update(keyPress('y'))
+	if !isRunRequest(cmd) {
+		t.Fatalf("stage = %v, want the confirm to return a run request", s.flow.stage)
+	}
+	return cmd().(runRequest)
+}
+
+// runWork runs the request's work to its end and returns the lines it emitted.
+func runWork(req runRequest) (lines []string, end runEnd) {
+	end = req.work(context.Background(), func(e plan.Event) { lines = append(lines, e.Line) })
+	return lines, end
 }
 
 func keyPress(code rune) tea.KeyPressMsg {
@@ -95,22 +116,26 @@ func TestSyncToggleRespectsBlockedItems(t *testing.T) {
 	plan := cfgsync.SyncPlan{Items: []cfgsync.PlanItem{planItem("a", false), planItem("b", true)}, Selection: cfgsync.Selection{}}
 	plan.Selection[plan.Items[0].Key()] = true
 	s := newPreview(&fakeSyncDeps{plan: plan}, false)
+	st := stagedOf(s)
 
 	s.Update(keyPress(tea.KeySpace))
-	if s.sel[plan.Items[0].Key()] {
+	if st.sel[plan.Items[0].Key()] {
 		t.Error("space must deselect the selected item")
 	}
 	s.Update(keyPress('j'))
+	if st.cursor != 1 {
+		t.Fatalf("cursor = %d, want j to move the item cursor", st.cursor)
+	}
 	s.Update(keyPress(tea.KeySpace))
-	if s.sel[plan.Items[1].Key()] {
+	if st.sel[plan.Items[1].Key()] {
 		t.Error("blocked item must not be selectable")
 	}
 	s.Update(keyPress('a'))
-	if !s.sel[plan.Items[0].Key()] || s.sel[plan.Items[1].Key()] || s.selectedCount() != 1 {
-		t.Errorf("a must select only selectable items: %v", s.sel)
+	if !st.sel[plan.Items[0].Key()] || st.sel[plan.Items[1].Key()] || st.selectedCount() != 1 {
+		t.Errorf("a must select only selectable items: %v", st.sel)
 	}
 	s.Update(keyPress('a'))
-	if s.selectedCount() != 0 {
+	if st.selectedCount() != 0 {
 		t.Error("a on a full selection must clear it")
 	}
 }
@@ -121,26 +146,38 @@ func TestSyncEnterDialogsDeclineBackup(t *testing.T) {
 	s := newPreview(&fakeSyncDeps{plan: plan, needsBackup: true}, false)
 
 	s.Update(keyPress(tea.KeyEnter))
-	if s.phase != phaseBackupDialog || !claims(s.Keys(), "esc") {
-		t.Fatalf("phase = %v, want backup dialog", s.phase)
+	if s.flow.stage != stageOffer || !claims(s.Keys(), "esc") {
+		t.Fatalf("stage = %v, want the backup offer", s.flow.stage)
+	}
+	if prompt, _ := stagedOf(s).Offer(); prompt != backupOfferText {
+		t.Errorf("offer = %q, want %q", prompt, backupOfferText)
 	}
 	s.Update(keyPress('n'))
-	if s.phase != phaseConfirmDialog || s.backup {
-		t.Fatalf("phase = %v backup = %v, want confirm dialog without backup", s.phase, s.backup)
+	if s.flow.stage != stageConfirm {
+		t.Fatalf("stage = %v, want the confirm after declining the backup", s.flow.stage)
 	}
 	s.Update(specialKey(tea.KeyEscape))
-	if s.phase != phasePreview {
-		t.Error("esc must close the dialog")
+	s.Update(specialKey(tea.KeyEscape))
+	if s.flow.stage != stagePreview {
+		t.Errorf("stage = %v, want esc to step back through the offer to the preview", s.flow.stage)
+	}
+}
+
+func TestSyncOffersNoBackupWhenNothingIsOverwritten(t *testing.T) {
+	s := newPreview(&fakeSyncDeps{plan: selectedPlan()}, false)
+
+	s.Update(keyPress(tea.KeyEnter))
+	if s.flow.stage != stageConfirm {
+		t.Errorf("stage = %v, want the confirm without an offer", s.flow.stage)
 	}
 }
 
 func TestSyncDiscardsStalePlan(t *testing.T) {
 	s := newPreview(&fakeSyncDeps{}, false)
-	s.startPlan(plan.Push)
-	stale := s.gen
+	stale := s.startPlan(plan.Push)()
 	s.startPlan(plan.Pull)
-	s.Update(planMsg{gen: stale, plan: cfgsync.SyncPlan{Items: []cfgsync.PlanItem{planItem("a", false)}}})
-	if s.phase != phasePlanning || len(s.plan.Items) != 0 {
+	s.Update(stale)
+	if s.flow.stage != stagePlanning {
 		t.Error("stale plan must be discarded")
 	}
 }
@@ -163,14 +200,14 @@ func TestSyncApplyLoopForwardsOptions(t *testing.T) {
 			s.Update(keyPress(tea.KeyEnter))
 			s.Update(keyPress(tt.backupKey))
 			_, cmd := s.Update(keyPress('y'))
-			if s.phase != phaseApplying {
-				t.Fatalf("phase = %v, want applying", s.phase)
+			if !isRunRequest(cmd) {
+				t.Fatalf("stage = %v, want a run request", s.flow.stage)
 			}
-			runCmds(s, cmd)
+			lines, end := runWork(cmd().(runRequest))
 
 			want := cfgsync.ApplyOptions{Backup: tt.wantBackup, DryRun: tt.dryRun}
-			if f.opts != want || s.progress != 2 || s.phase != phaseResult {
-				t.Errorf("opts=%+v progress=%d phase=%v", f.opts, s.progress, s.phase)
+			if _, broadcast := end.msg.(applyDoneMsg); f.opts != want || len(lines) != 2 || !broadcast {
+				t.Errorf("opts=%+v lines=%v end=%+v", f.opts, lines, end)
 			}
 		})
 	}
@@ -181,75 +218,72 @@ func TestSyncNothingSelectedDoesNotApply(t *testing.T) {
 	s := newPreview(f, false)
 
 	_, cmd := s.Update(keyPress(tea.KeyEnter))
-	if cmd != nil || s.phase != phaseResult || !s.result.Nothing || f.applyCalls != 0 {
-		t.Errorf("cmd=%v phase=%v nothing=%v applyCalls=%d", cmd != nil, s.phase, s.result.Nothing, f.applyCalls)
+	if cmd != nil || s.flow.stage != stagePreview || claims(s.Keys(), "enter") || f.applyCalls.Load() != 0 {
+		t.Errorf("cmd=%v stage=%v applyCalls=%d, want the preview with no apply key", cmd != nil, s.flow.stage, f.applyCalls.Load())
 	}
 }
 
-func applyingRoot(t *testing.T, f *fakeSyncDeps) (*Root, *Sync, tea.Cmd) {
+// syncRunningRoot drives a Root through push, preview, confirm and run, and returns once the apply is blocked in the run.
+func syncRunningRoot(t *testing.T, f *fakeSyncDeps) *driver {
 	t.Helper()
-	r := NewRoot("", false, f.deps())
-	s, _, _ := sectionOf[*Sync](r)
-	s.Update(planMsg{gen: s.gen, plan: f.plan})
-	s.Update(keyPress(tea.KeyEnter))
-	_, cmd := s.Update(keyPress('y'))
-	if s.phase != phaseApplying {
-		t.Fatalf("phase = %v, want applying", s.phase)
-	}
-	return r, s, cmd
+	f.blockUntilCtx = true
+	root := NewRoot("", false, f.deps())
+	root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	d := newDriver(t, root)
+	_, cmd := root.Update(startSyncMsg{direction: plan.Push})
+	d.launch(cmd)
+	s, _, _ := sectionOf[*Sync](root)
+	d.must(t, "the preview", func() bool { return s.flow.stage == stagePreview })
+	d.press(keyEnter)
+	d.press(keyPress('y'))
+	d.must(t, "the apply to start", func() bool { return root.run != nil && f.applyCalls.Load() == 1 })
+	return d
 }
 
 func TestRootIgnoresNewPlansWhileApplying(t *testing.T) {
-	r, s, _ := applyingRoot(t, &fakeSyncDeps{plan: selectedPlan()})
-	gen := s.gen
+	d := syncRunningRoot(t, &fakeSyncDeps{plan: selectedPlan()})
+	s, _, _ := sectionOf[*Sync](d.root)
+	before, run := s.flow, d.root.run
 
-	for _, msg := range []tea.Msg{startSyncMsg{direction: plan.Pull}, restorePlanMsg{plan: selectedPlan()}} {
-		r.Update(msg)
-		if s.phase != phaseApplying || s.gen != gen {
-			t.Fatalf("%T changed the running apply: phase=%v gen=%d want gen %d", msg, s.phase, s.gen, gen)
-		}
-	}
-	if !strings.Contains(ansi.Strip(s.View(120, 20)), applyBusyNotice) {
-		t.Error("busy notice not shown")
+	_, cmd := d.root.Update(startSyncMsg{direction: plan.Pull})
+
+	if cmd != nil || s.flow != before || d.root.run != run || d.runDone() {
+		t.Errorf("a new plan changed the running apply: cmd=%v sameFlow=%v sameRun=%v done=%v", cmd != nil, s.flow == before, d.root.run == run, d.runDone())
 	}
 }
 
 func TestRootQuitCancelsRunningApplyWithoutHanging(t *testing.T) {
-	r, _, startCmd := applyingRoot(t, &fakeSyncDeps{plan: selectedPlan(), blockUntilCtx: true, progressPaths: []string{"a"}})
-	started := startCmd().(applyStartedMsg)
+	d := syncRunningRoot(t, &fakeSyncDeps{plan: selectedPlan(), progressPaths: []string{"a"}})
 
-	press(t, r, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	d.press(keyCtrlC)
+	d.must(t, "the cancelled apply to end", d.runDone)
+	d.press(keyPress('q'))
+	d.must(t, "the program to quit", func() bool { return d.quit })
 
-	done := make(chan struct{})
-	go func() {
-		for range started.ch {
-		}
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("apply stream still open after quit")
+	begin := time.Now()
+	d.root.WaitInstall(shutdownTimeout)
+	if elapsed := time.Since(begin); elapsed > promptReturn {
+		t.Errorf("WaitInstall took %v, want the apply to be over already", elapsed)
 	}
 }
 
-func TestSyncResultView(t *testing.T) {
-	s := newPreview(&fakeSyncDeps{}, true)
-	view := func() string { return ansi.Strip(s.View(100, 20)) }
-
-	s.Update(applyDoneMsg{gen: s.gen, result: cfgsync.ApplyResult{Nothing: true}})
-	if !strings.Contains(view(), "Nothing was done") {
-		t.Errorf("missing nothing-done line:\n%s", view())
-	}
-
-	s.Update(applyDoneMsg{gen: s.gen, result: cfgsync.ApplyResult{
+func TestSyncApplyReportsItsResultAsRunLines(t *testing.T) {
+	f := &fakeSyncDeps{plan: selectedPlan(), result: cfgsync.ApplyResult{
 		Outcomes: []cfgsync.StepOutcome{{Result: plan.StepResult{Status: plan.StepWouldApply, Detail: "would append log entry"}}},
 		Items:    []cfgsync.ItemResult{{Key: cfgsync.ItemKey{Root: "home", Path: "a"}, Result: cfgsync.ItemNotApplied}},
 		Err:      errors.New("boom"),
-	}})
-	for _, want := range []string{"would append log entry", "not applied: home:a", "Failed: boom"} {
-		if !strings.Contains(view(), want) {
-			t.Errorf("view missing %q:\n%s", want, view())
-		}
+	}}
+	lines, end := runWork(confirmedRequest(t, newPreview(f, true)))
+
+	if got := strings.Join(lines, "\n"); !strings.Contains(got, "would append log entry") || !strings.Contains(got, "not applied: home:a") {
+		t.Errorf("run lines = %q, want the dry-run detail and the item result", got)
+	}
+	if end.err == nil || end.err.Error() != "boom" {
+		t.Errorf("end error = %v, want boom", end.err)
+	}
+
+	lines, _ = runWork(confirmedRequest(t, newPreview(&fakeSyncDeps{plan: selectedPlan(), result: cfgsync.ApplyResult{Nothing: true}}, false)))
+	if len(lines) != 1 || lines[0] != nothingDoneText {
+		t.Errorf("run lines = %q, want the nothing-done line", lines)
 	}
 }

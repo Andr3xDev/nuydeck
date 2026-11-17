@@ -212,30 +212,8 @@ func (s *Install) summaryKey(msg tea.KeyPressMsg) tea.Cmd {
 		s.summary.ScrollUp(1)
 	case key.Matches(msg, s.keys.Down):
 		s.summary.ScrollDown(1)
-	case key.Matches(msg, s.keys.Confirm) && s.canConfirm():
+	case key.Matches(msg, s.keys.Confirm) && s.canConfirm() && !s.started:
 		return s.startRun()
-	}
-	return nil
-}
-
-func (s *Install) runKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch {
-	case key.Matches(msg, s.keys.Up):
-		s.logView.ScrollUp(1)
-		s.follow = false
-	case key.Matches(msg, s.keys.Down):
-		s.logView.ScrollDown(1)
-		s.follow = s.logView.AtBottom()
-	case s.awaitAck:
-		if key.Matches(msg, s.keys.Confirm) {
-			s.awaitAck = false
-			select {
-			case s.ack <- struct{}{}:
-			default:
-			}
-		}
-	case s.finished && key.Matches(msg, s.keys.Back):
-		return s.step(-1)
 	}
 	return nil
 }

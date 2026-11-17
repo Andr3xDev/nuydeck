@@ -31,6 +31,12 @@ func (f *flow) View(w, h int) string {
 	return ""
 }
 
+// box draws the flow inside a screen's box of w x h cells.
+func (f *flow) box(title string, w, h int) string {
+	body := f.View(contentWidth(w), innerHeight(h))
+	return screenBox(f.svc.th, title, strings.Split(body, "\n"), w, h)
+}
+
 func (f *flow) header(w int) []string {
 	return styled(f.svc.th.section, wrap(f.src.Title, w))
 }

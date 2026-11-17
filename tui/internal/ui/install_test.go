@@ -109,9 +109,9 @@ func TestInstallBackKeepsDraftIncludingSkipGPUEnvLink(t *testing.T) {
 }
 
 func TestInstallRunsNothingBeforeExplicitConfirm(t *testing.T) {
-	t.Run("confirm starts the run page", func(t *testing.T) {
+	t.Run("confirm hands the run to the shell", func(t *testing.T) {
 		f := &fakeInstaller{plan: onePlan()}
-		_, in := newTestRoot(f)
+		root, in := newTestRoot(f)
 		toSummary(in)
 
 		for _, k := range []tea.KeyPressMsg{keyPress('x'), specialKey(tea.KeyDown), keyPress(tea.KeySpace)} {
@@ -122,13 +122,15 @@ func TestInstallRunsNothingBeforeExplicitConfirm(t *testing.T) {
 		}
 
 		cmd := tap(in, specialKey(tea.KeyEnter))
-		if in.page != pageRun {
-			t.Fatalf("page after confirm = %v, want the run page", in.page)
+		if !isRunRequest(cmd) || f.runs.Load() != 0 {
+			t.Fatalf("confirm: run request=%v runs=%d, want a request and nothing run yet", isRunRequest(cmd), f.runs.Load())
 		}
-		settle(in, cmd)
-		if f.runs.Load() != 1 {
-			t.Errorf("runs = %d, want 1", f.runs.Load())
+		if again := tap(in, specialKey(tea.KeyEnter)); again != nil {
+			t.Error("a second confirm must not ask for another run")
 		}
+		d := newDriver(t, root)
+		d.launch(cmd)
+		d.must(t, "the install to run", func() bool { return f.runs.Load() == 1 })
 	})
 
 	t.Run("blocking errors offer no confirm", func(t *testing.T) {
@@ -145,7 +147,7 @@ func TestInstallRunsNothingBeforeExplicitConfirm(t *testing.T) {
 }
 
 // awaitingAck drives a run to the reboot acknowledgement; the fake reports how Run ended.
-func awaitingAck(t *testing.T) (root *Root, in *Install, acked, cancelled chan struct{}) {
+func awaitingAck(t *testing.T) (d *driver, acked, cancelled chan struct{}) {
 	t.Helper()
 	acked, cancelled = make(chan struct{}, 1), make(chan struct{}, 1)
 	f := &fakeInstaller{plan: onePlan(), run: func(ctx context.Context, events chan<- plan.Event, ack <-chan struct{}) install.InstallResult {
@@ -158,17 +160,16 @@ func awaitingAck(t *testing.T) (root *Root, in *Install, acked, cancelled chan s
 		}
 		return install.InstallResult{}
 	}}
-	root, in = newTestRoot(f)
+	root, in := newTestRoot(f)
+	root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	toSummary(in)
-	cmd := tap(in, specialKey(tea.KeyEnter))
-	for cmd != nil && !in.awaitAck {
-		_, cmd = in.Update(cmd())
+	d = newDriver(t, root)
+	d.launch(tap(in, specialKey(tea.KeyEnter)))
+	d.must(t, "the reboot prompt", func() bool { return root.run != nil && root.run.awaitAck })
+	if view := d.view(); !strings.Contains(view, "Press Enter to reboot") || !strings.Contains(view, "[>] reboot") {
+		t.Errorf("want the reboot prompt and the running step mark:\n%s", view)
 	}
-	if !in.awaitAck {
-		t.Fatal("the run never reached the reboot acknowledgement")
-	}
-	in.View(100, 30)
-	return root, in, acked, cancelled
+	return d, acked, cancelled
 }
 
 func receives(ch chan struct{}) bool {
@@ -182,16 +183,17 @@ func receives(ch chan struct{}) bool {
 
 func TestInstallRebootAckAcceptsEnterOnly(t *testing.T) {
 	t.Run("other keys do nothing, enter acknowledges", func(t *testing.T) {
-		_, in, acked, cancelled := awaitingAck(t)
+		d, acked, cancelled := awaitingAck(t)
 
-		for _, k := range []tea.KeyPressMsg{keyPress('x'), keyPress('y'), keyPress(tea.KeySpace), specialKey(tea.KeyEscape)} {
-			tap(in, k)
+		for _, k := range []tea.KeyPressMsg{keyPress('x'), keyPress('y'), keyPress(tea.KeySpace), specialKey(tea.KeyEscape), keyPress('q')} {
+			d.press(k)
 		}
-		if in.page != pageRun || !in.awaitAck || len(in.ack) != 0 {
-			t.Fatalf("after other keys: page=%v awaitAck=%v pendingAck=%d, want the prompt untouched", in.page, in.awaitAck, len(in.ack))
+		d.settle()
+		if d.quit || !d.root.run.awaitAck || len(d.root.run.ack) != 0 {
+			t.Fatalf("after other keys: quit=%v awaitAck=%v pendingAck=%d, want the prompt untouched", d.quit, d.root.run.awaitAck, len(d.root.run.ack))
 		}
 
-		tap(in, specialKey(tea.KeyEnter))
+		d.press(specialKey(tea.KeyEnter))
 		if !receives(acked) {
 			t.Fatal("enter did not reach Run")
 		}
@@ -201,16 +203,11 @@ func TestInstallRebootAckAcceptsEnterOnly(t *testing.T) {
 	})
 
 	t.Run("ctrl+c cancels and quits", func(t *testing.T) {
-		root, _, acked, cancelled := awaitingAck(t)
+		d, acked, cancelled := awaitingAck(t)
 
-		_, cmd := press(t, root, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+		d.press(keyCtrlC)
 
-		if cmd == nil {
-			t.Fatal("no command returned")
-		}
-		if _, ok := cmd().(tea.QuitMsg); !ok {
-			t.Error("ctrl+c did not quit")
-		}
+		d.must(t, "the program to quit", func() bool { return d.quit })
 		if !receives(cancelled) {
 			t.Error("ctrl+c did not cancel the run")
 		}
@@ -226,7 +223,7 @@ func TestInstallForgetsSecretValuesAfterTheRun(t *testing.T) {
 		Path: "/home/u/.secrets", Entries: []plan.SecretEntry{{Name: "TOKEN", Value: sentinel}},
 	}}}}
 	f := &fakeInstaller{plan: plan}
-	_, in := newTestRoot(f, "TOKEN")
+	root, in := newTestRoot(f, "TOKEN")
 	toHardware(in)
 	settle(in, tap(in, specialKey(tea.KeyEnter)))
 	for _, r := range sentinel {
@@ -240,12 +237,12 @@ func TestInstallForgetsSecretValuesAfterTheRun(t *testing.T) {
 		t.Fatalf("plan draft secrets = %v, want the typed value", w)
 	}
 
-	settle(in, tap(in, specialKey(tea.KeyEnter)))
+	root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	d := newDriver(t, root)
+	d.launch(tap(in, specialKey(tea.KeyEnter)))
+	d.must(t, "the run to finish", d.runDone)
 
-	if !in.finished {
-		t.Fatal("run did not finish")
-	}
-	dump := fmt.Sprintf("%+v %#v", in.draft, in.plan) + in.View(100, 30)
+	dump := fmt.Sprintf("%+v %#v", in.draft, in.plan) + in.View(100, 30) + d.view()
 	if strings.Contains(dump, sentinel) {
 		t.Errorf("secret value still in memory or view after the run: %s", dump)
 	}

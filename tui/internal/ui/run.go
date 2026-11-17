@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sync/atomic"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
@@ -19,15 +20,37 @@ const (
 	runFinishedText = "Finished."
 )
 
-// runEnd is how a run's work ended; err is nil on success.
-type runEnd struct{ err error }
+// runEnd is how a run's work ended; err is nil on success. msg, when set, is broadcast to every screen once the run ends.
+type runEnd struct {
+	err error
+	msg tea.Msg
+}
 
 // runRequest asks the shell to run work in the output pane. ack carries the reboot confirmation, if the work waits for one.
+// steps adds a status mark per step above the output; footer replaces the default hint under it when it returns lines.
 type runRequest struct {
-	title string
-	work  func(ctx context.Context, emit func(plan.Event)) runEnd
-	ack   chan struct{}
+	title  string
+	work   func(ctx context.Context, emit func(plan.Event)) runEnd
+	ack    chan struct{}
+	steps  []string
+	footer func(th theme, cw int, r *run) []string
 }
+
+type stepStatus int
+
+const (
+	statusPending stepStatus = iota
+	statusRunning
+	statusDone
+	statusSkipped
+	statusFailed
+)
+
+const (
+	markWidth       = 3 // "[x]"
+	stepListShare   = 3 // the step list takes at most 1/3 of the pane
+	minStepListRows = 3
+)
 
 // runClosed tells every screen the output pane was dismissed.
 type runClosed struct{}
@@ -51,6 +74,11 @@ type run struct {
 	notice   bool
 	follow   bool
 	scroll   scroller
+	steps    []string
+	statuses []stepStatus
+	current  int
+	footer   func(th theme, cw int, r *run) []string
+	err      error // how the work ended, set when done
 	// started and finished let WaitInstall tell a run whose command never executed from one still winding down.
 	started  atomic.Bool
 	finished chan struct{}
@@ -58,7 +86,10 @@ type run struct {
 
 // newRun creates the handle synchronously so a quit before the command executes sees an unstarted run.
 func newRun(req runRequest, cancel context.CancelFunc) *run {
-	return &run{title: req.title, cancel: cancel, events: make(chan tea.Msg), ack: req.ack, follow: true, finished: make(chan struct{})}
+	return &run{
+		title: req.title, cancel: cancel, events: make(chan tea.Msg), ack: req.ack, follow: true, finished: make(chan struct{}),
+		steps: req.steps, statuses: make([]stepStatus, len(req.steps)), footer: req.footer,
+	}
 }
 
 // start returns the command that launches work; ctx is the Root context, so a quit unblocks pending sends.
@@ -90,7 +121,26 @@ func (r *run) push(lines ...outLine) {
 	}
 }
 
+// mark records a step event in the status list; line events and unknown steps are ignored.
+func (r *run) mark(e plan.Event) {
+	if e.Kind == plan.EventLine || e.Index < 0 || e.Index >= len(r.statuses) {
+		return
+	}
+	r.current = e.Index
+	switch e.Kind {
+	case plan.EventStarted, plan.EventAwaitAck:
+		r.statuses[e.Index] = statusRunning
+	case plan.EventDone:
+		r.statuses[e.Index] = statusDone
+	case plan.EventSkipped:
+		r.statuses[e.Index] = statusSkipped
+	case plan.EventFailed:
+		r.statuses[e.Index] = statusFailed
+	}
+}
+
 func (r *run) add(e plan.Event) {
+	r.mark(e)
 	switch {
 	case e.Kind == plan.EventAwaitAck:
 		r.awaitAck = true
@@ -102,7 +152,7 @@ func (r *run) add(e plan.Event) {
 }
 
 func (r *run) finish(end runEnd) {
-	r.done, r.awaitAck = true, false
+	r.done, r.awaitAck, r.err = true, false, end.err
 	if end.err != nil {
 		r.push(outLine{"error: " + end.err.Error()})
 		return
@@ -130,20 +180,70 @@ func (r *run) hint() string {
 	return ""
 }
 
+// keys are the bindings the pane answers to now, for the keybar.
+func (r *run) keys(k keyMap) []key.Binding {
+	scroll := []key.Binding{k.Up, k.Down}
+	switch {
+	case r.done:
+		return append(scroll, described(k.Back, "close"))
+	case r.awaitAck:
+		return append(scroll, described(k.Confirm, "continue"), described(k.CancelRun, "quit"))
+	}
+	return append(scroll, k.CancelRun)
+}
+
+func statusMark(th theme, st stepStatus) string {
+	switch st {
+	case statusRunning:
+		return "[>]"
+	case statusDone:
+		return "[x]"
+	case statusSkipped:
+		return "[-]"
+	case statusFailed:
+		return th.err.Render("[!]")
+	}
+	return "[ ]"
+}
+
+// stepList is the status list, windowed around the current step, followed by a blank line.
+func (r *run) stepList(th theme, cw, inner int) []string {
+	if len(r.steps) == 0 {
+		return nil
+	}
+	rows := make([]string, len(r.steps))
+	for i, label := range r.steps {
+		rows[i] = statusMark(th, r.statuses[i]) + " " + truncate(sanitizeLine(label), max(cw-markWidth-1, 0))
+	}
+	return append(windowAround(rows, r.current, min(len(rows), max(inner/stepListShare, minStepListRows))), "")
+}
+
+// footerLines is the hook's text, or the default hint while the owner has a notice to read or the hook has nothing to say.
+func (r *run) footerLines(th theme, cw int) []string {
+	if r.footer != nil && !r.notice {
+		if lines := r.footer(th, cw, r); lines != nil {
+			return lines
+		}
+	}
+	return []string{th.muted.Render(r.hint())}
+}
+
 // view re-wraps every line each frame; shortcut: fine at 2000 lines, cache wrapped lines if it shows in profiling.
 func (r *run) view(th theme, w, h int) string {
+	cw := contentWidth(w)
 	var lines []string
 	for _, l := range r.lines {
-		lines = append(lines, styled(th.plain, wrap(l.text, contentWidth(w)))...)
+		lines = append(lines, styled(th.plain, wrap(l.text, cw))...)
 	}
 	if r.follow {
 		r.scroll.offset = len(lines)
 	}
 	inner := innerHeight(h)
-	lines = r.scroll.window(lines, inner-1)
-	for len(lines) < inner-1 {
+	head, foot := r.stepList(th, cw, inner), r.footerLines(th, cw)
+	room := max(inner-len(head)-len(foot), 1)
+	lines = r.scroll.window(lines, room)
+	for len(lines) < room {
 		lines = append(lines, "")
 	}
-	lines = append(lines, th.muted.Render(r.hint()))
-	return screenBox(th, runTitlePrefix+sanitizeLine(r.title), lines, w, h)
+	return screenBox(th, runTitlePrefix+sanitizeLine(r.title), slices.Concat(head, lines, foot), w, h)
 }

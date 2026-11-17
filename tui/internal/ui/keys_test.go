@@ -141,14 +141,14 @@ func TestKeyOutsideTheStageKeysIsIgnored(t *testing.T) {
 	root.sections[at].screen = s
 	root.selected, root.focus = at, focusPanel
 	press(t, root, keyEnter)
-	if s.phase != phaseBackupDialog {
-		t.Fatalf("phase = %v, want the backup dialog", s.phase)
+	if s.flow.stage != stageOffer {
+		t.Fatalf("stage = %v, want the backup offer", s.flow.stage)
 	}
 
 	for _, outside := range []tea.KeyPressMsg{keyPress('p'), keyPress('P'), keyPress('a'), keyPress(tea.KeySpace)} {
 		_, cmd := press(t, root, outside)
-		if cmd != nil || s.phase != phaseBackupDialog {
-			t.Errorf("%q: cmd=%v phase=%v, want it ignored by the dialog", outside.String(), cmd != nil, s.phase)
+		if cmd != nil || s.flow.stage != stageOffer {
+			t.Errorf("%q: cmd=%v stage=%v, want it ignored by the offer", outside.String(), cmd != nil, s.flow.stage)
 		}
 	}
 }

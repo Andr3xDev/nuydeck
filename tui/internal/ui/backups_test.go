@@ -51,9 +51,9 @@ func TestBackupsDryRunDeleteShowsWouldDelete(t *testing.T) {
 
 	b.Update(keyPress('d'))
 	_, cmd := b.Update(keyPress('y'))
-	b.Update(cmd())
-	if !strings.Contains(ansi.Strip(b.View(100, 20)), "would delete /b/1") {
-		t.Errorf("dry-run delete must show the would-delete detail:\n%s", ansi.Strip(b.View(100, 20)))
+	lines, end := runWork(cmd().(runRequest))
+	if len(lines) != 1 || lines[0] != "would delete /b/1" || end.err != nil {
+		t.Errorf("dry-run delete lines = %q end = %v, want the would-delete detail", lines, end.err)
 	}
 }
 
@@ -103,18 +103,21 @@ func TestBackupsDeleteConfirmDeletesAndReloads(t *testing.T) {
 
 	b.Update(keyPress('d'))
 	_, cmd := b.Update(keyPress('y'))
-	_, reload := b.Update(cmd())
+	if _, end := runWork(cmd().(runRequest)); end.err != nil {
+		t.Fatalf("delete failed: %v", end.err)
+	}
 	if len(f.deleted) != 1 || f.deleted[0] != "/b/1" {
 		t.Fatalf("deleted = %v", f.deleted)
 	}
 	before := f.listed
+	_, reload := b.Update(runClosed{})
 	reload()
 	if f.listed != before+1 {
-		t.Error("list must reload after delete")
+		t.Error("list must reload when the run pane closes")
 	}
 }
 
-func TestBackupsRestoreOpensSyncWithRestorePlan(t *testing.T) {
+func TestBackupsRestoreIsAFlowOwnedByTheScreen(t *testing.T) {
 	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}}
 	r := NewRoot("", false, f.deps())
 	b, at, _ := sectionOf[*Backups](r)
@@ -122,10 +125,45 @@ func TestBackupsRestoreOpensSyncWithRestorePlan(t *testing.T) {
 	b.Update(b.load()())
 
 	_, cmd := b.Update(keyPress(tea.KeyEnter))
-	r.Update(cmd())
-	s, syncAt, _ := sectionOf[*Sync](r)
-	if r.selected != syncAt || s.phase != phasePreview || s.plan.Direction != plan.Restore {
-		t.Errorf("selected=%d phase=%v direction=%v", r.selected, s.phase, s.plan.Direction)
+	if !b.flow.active() || b.flow.stage != stagePlanning {
+		t.Fatalf("flow active=%v stage=%v, want planning", b.flow.active(), b.flow.stage)
+	}
+	b.Update(cmd())
+	st, ok := b.flow.st.(*syncStaged)
+	if r.selected != at || b.flow.stage != stagePreview || !ok || st.syncPlan.Direction != plan.Restore {
+		t.Errorf("selected=%d stage=%v preview=%v, want the restore preview on the Backups screen", r.selected, b.flow.stage, ok)
+	}
+	if !claims(b.Keys(), "esc") {
+		t.Error("the restore flow must claim esc")
+	}
+	b.Update(keyEsc)
+	if b.flow.active() || claims(b.Keys(), "esc") {
+		t.Error("esc at the preview must leave the flow")
+	}
+}
+
+func TestBackupsListReloadsAfterAnApplyAndAfterTheRunCloses(t *testing.T) {
+	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}}
+	b := loadedBackups(f)
+
+	for _, msg := range []tea.Msg{applyDoneMsg{}, runClosed{}} {
+		before := f.listed
+		_, reload := b.Update(msg)
+		reload()
+		if f.listed != before+1 {
+			t.Errorf("%T must reload the list", msg)
+		}
+	}
+}
+
+func TestBackupsDropsAListThatArrivesAfterANewerLoad(t *testing.T) {
+	b := loadedBackups(&fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}})
+	stale := b.load()()
+	b.load()
+
+	b.Update(backupsMsg{gen: stale.(backupsMsg).gen})
+	if len(b.backups) != 1 {
+		t.Error("a list from a superseded load must be ignored")
 	}
 }
 

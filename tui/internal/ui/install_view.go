@@ -15,12 +15,10 @@ const (
 	finalNotices = "Group changes such as docker need a new login. The logind power-key change and the theme apply after the reboot or the first Hyprland login."
 	gpuFallback  = "GPU detection failed or found no known GPU: every driver is proposed. Uncheck the ones you do not need."
 
-	markWidth     = 3 // "[x]"
 	summaryChrome = 4
-	runChrome     = 4
 )
 
-var pageNames = []string{"profile", "hardware", "selection", "secrets", "summary", "run"}
+var pageNames = []string{"profile", "hardware", "selection", "secrets", "summary"}
 
 func (s *Install) View(width, height int) string {
 	title := fmt.Sprintf("Install %d/%d %s", int(s.page)+1, len(pageNames), pageNames[s.page])
@@ -43,10 +41,8 @@ func (s *Install) body(width, height int) []string {
 		return s.selectionView(cw, height)
 	case pageSecrets:
 		return s.secretsView(cw)
-	case pageSummary:
-		return s.summaryView(cw, height)
 	}
-	return s.runView(cw, height)
+	return s.summaryView(cw, height)
 }
 
 func (s *Install) profileView(width int) []string {
@@ -176,47 +172,17 @@ func stepLabel(step plan.Step) string {
 	return label
 }
 
-func (s *Install) statusMark(st stepStatus) string {
-	switch st {
-	case statusRunning:
-		return "[>]"
-	case statusDone:
-		return "[x]"
-	case statusSkipped:
-		return "[-]"
-	case statusFailed:
-		return s.th.err.Render("[!]")
-	}
-	return "[ ]"
-}
-
-func (s *Install) runView(cw, height int) []string {
-	listHeight := min(len(s.plan.Steps), max(height/3, 3))
-	steps := make([]string, len(s.plan.Steps))
-	for i, step := range s.plan.Steps {
-		steps[i] = s.statusMark(s.statuses[i]) + " " + truncate(sanitizeLine(stepLabel(step.Step)), max(cw-markWidth-1, 0))
-	}
-	lines := windowAround(steps, s.current, listHeight)
-
-	s.logView.SetWidth(max(cw, 1))
-	s.logView.SetHeight(max(height-listHeight-runChrome, 1))
-	if s.follow {
-		s.logView.GotoBottom()
-	}
-	lines = append(lines, "")
-	lines = append(lines, strings.Split(s.logView.View(), "\n")...)
-	return append(append(lines, ""), s.runStatus(cw)...)
-}
-
-func (s *Install) runStatus(cw int) []string {
+// installFooter is the run pane's text under the output at the reboot prompt and once the install ended;
+// while it runs the pane's own hint applies.
+func installFooter(th theme, cw int, r *run) []string {
 	switch {
-	case s.awaitAck:
-		return append(styled(s.th.warning, wrap("Install complete. Press Enter to reboot, ctrl+c to quit without rebooting.", cw)), wrap(finalNotices, cw)...)
-	case s.running:
-		return s.hint("Installing... ctrl+c cancels and quits.", cw)
-	case s.runErr != nil:
-		return append(styled(s.th.err, wrap("Install stopped: "+s.runErr.Error(), cw)), s.hint("esc back to the summary, ctrl+c quits.", cw)...)
+	case r.awaitAck:
+		return append(styled(th.warning, wrap("Install complete. Press Enter to reboot, ctrl+c to quit without rebooting.", cw)), wrap(finalNotices, cw)...)
+	case r.done && r.err != nil:
+		return append(styled(th.err, wrap("Install stopped: "+r.err.Error(), cw)), styled(th.muted, wrap(runCloseText, cw))...)
+	case r.done:
+		lines := append([]string{"Done. Nothing was rebooted."}, wrap(finalNotices, cw)...)
+		return append(lines, styled(th.muted, wrap(runCloseText, cw))...)
 	}
-	lines := append([]string{"Done. Nothing was rebooted."}, wrap(finalNotices, cw)...)
-	return append(lines, s.hint("esc back to the summary, ctrl+c quits.", cw)...)
+	return nil
 }
