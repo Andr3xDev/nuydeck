@@ -116,7 +116,7 @@ func (s *Service) attachTimes(ctx context.Context, it *PlanItem, dir plan.Direct
 	if pcHas {
 		pcPath := it.DstPath()
 		if dir == plan.Pull {
-			pcPath = it.srcPath()
+			pcPath = it.SrcPath()
 		}
 		it.PCTime, _ = s.Inspector.NewestMTime(ctx, pcPath, manifest.Filter{})
 	}
@@ -127,7 +127,7 @@ func (s *Service) linkWarning(it PlanItem, managed []manifest.Entry) plan.LinkWa
 	if it.Change.Kind != plan.KindLink || it.Change.Type == plan.Delete {
 		return plan.NoLinkWarning
 	}
-	target, err := s.Inspector.LinkTarget(it.srcPath())
+	target, err := s.Inspector.LinkTarget(it.SrcPath())
 	if err != nil {
 		return plan.WarnLeavesManagedSet
 	}

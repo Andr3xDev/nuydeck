@@ -40,7 +40,7 @@ func (i PlanItem) rel() string {
 	return path.Join(i.Change.Entry.Path, i.Change.Path)
 }
 
-func (i PlanItem) srcPath() string { return i.endpoint(i.Src) }
+func (i PlanItem) SrcPath() string { return i.endpoint(i.Src) }
 func (i PlanItem) DstPath() string { return i.endpoint(i.Dst) }
 
 func (i PlanItem) endpoint(entryPath string) string {
