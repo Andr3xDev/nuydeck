@@ -50,7 +50,6 @@ type Dashboard struct {
 }
 
 type dashboardInfo struct {
-	warning  string
 	lastSync *state.LastSync
 }
 
@@ -60,7 +59,7 @@ func newDashboard(svc *services) *Dashboard {
 		ctx:     svc.ctx,
 		drift:   svc.Drift,
 		entries: svc.Entries,
-		state:   dashboardInfo{warning: svc.StateWarning, lastSync: svc.LastSync},
+		state:   dashboardInfo{lastSync: svc.LastSync},
 		keys:    svc.keys,
 		th:      svc.th,
 		spinner: sp,
@@ -172,7 +171,7 @@ func requestSync(dir plan.Direction) tea.Cmd {
 
 func (d *Dashboard) View(width, height int) string {
 	cw := contentWidth(width)
-	lines := append(d.statusLines(cw), "")
+	lines := append(d.statusLines(), "")
 	if len(d.entries) == 0 {
 		lines = append(lines, d.muted("No managed entries."))
 	}
@@ -222,12 +221,8 @@ func (d *Dashboard) errorDetail(cw int) string {
 	return d.th.err.Render(truncate(sanitizeLine(strings.Join(strings.Fields(r.Err.Error()), " ")), cw))
 }
 
-func (d *Dashboard) statusLines(cw int) []string {
-	lines := []string{d.muted("Last sync:   ") + d.lastSyncText(), d.muted("Last backup: ") + d.lastBackupText()}
-	if d.state.warning != "" {
-		lines = append(lines, styled(d.th.warning, wrap("State: "+d.state.warning, cw))...)
-	}
-	return lines
+func (d *Dashboard) statusLines() []string {
+	return []string{d.muted("Last sync:   ") + d.lastSyncText(), d.muted("Last backup: ") + d.lastBackupText()}
 }
 
 func (d *Dashboard) lastSyncText() string {

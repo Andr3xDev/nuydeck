@@ -89,6 +89,14 @@ func (f *flow) finished() bool { return f.stage == stageIdle }
 // active is true while a flow exists and is past its entry; a nil flow is not active.
 func (f *flow) active() bool { return f != nil && !f.finished() }
 
+// Notices are the previewed plan's notices, shown in the shell's band until the flow ends.
+func (f *flow) Notices() []string {
+	if n, ok := f.st.(noticer); ok && f.active() && f.err == nil {
+		return n.Notices()
+	}
+	return nil
+}
+
 func (f *flow) canApply() bool { return f.err == nil && f.st != nil && f.st.CanApply() }
 
 func (f *flow) Update(msg tea.Msg) tea.Cmd {

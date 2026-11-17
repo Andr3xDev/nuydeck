@@ -133,9 +133,6 @@ func (s *Install) showSummary() {
 		}
 		lines = append(lines, sanitizeLine(fmt.Sprintf("%2d. %s", i+1, detail)))
 	}
-	for _, n := range s.plan.Notices {
-		lines = append(lines, "", s.th.warning.Render(sanitizeLine("notice: "+n)))
-	}
 	for _, err := range s.plan.Blocking {
 		lines = append(lines, "", s.th.err.Render(sanitizeLine("blocking: "+err.Error())))
 	}

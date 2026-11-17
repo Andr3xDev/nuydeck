@@ -24,6 +24,9 @@ type initer interface{ Init() tea.Cmd }
 // textCapturer is implemented by screens that may be reading typed text, so shell keys such as ? and q must reach them.
 type textCapturer interface{ CapturesText() bool }
 
+// noticer is implemented by screens with warnings for the shell's notice band, such as plan notices.
+type noticer interface{ Notices() []string }
+
 // leaver is implemented by screens that clean up when the selection moves off them.
 type leaver interface{ Leave() }
 

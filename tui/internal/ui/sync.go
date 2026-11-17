@@ -71,6 +71,13 @@ func (s *Sync) Update(msg tea.Msg) (screen, tea.Cmd) {
 	return s, nil
 }
 
+func (s *Sync) Notices() []string {
+	if s.flow == nil {
+		return nil
+	}
+	return s.flow.Notices()
+}
+
 func (s *Sync) View(width, height int) string {
 	if s.flow.active() {
 		return s.flow.box(s.Title(), width, height)
@@ -157,6 +164,15 @@ func (st *syncStaged) Update(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// Notices lists the plan's state warning, unless the shell already shows it, and its notices.
+func (st *syncStaged) Notices() []string {
+	var out []string
+	if w := st.syncPlan.StateWarning; w != "" && w != st.svc.StateWarning {
+		out = append(out, "State: "+w)
+	}
+	return append(out, st.syncPlan.Notices...)
+}
+
 func (st *syncStaged) CanApply() bool { return st.selectedCount() > 0 }
 
 func (st *syncStaged) Offer() (string, bool) {
@@ -204,12 +220,6 @@ func (st *syncStaged) selectedCount() int {
 func (st *syncStaged) View(th theme, w, h int) []string {
 	header := fmt.Sprintf("%d of %d selected", st.selectedCount(), len(st.syncPlan.Items))
 	lines := []string{th.title.Render(truncate(header, w))}
-	if st.syncPlan.StateWarning != "" {
-		lines = append(lines, styled(th.warning, wrap("State: "+st.syncPlan.StateWarning, w))...)
-	}
-	for _, notice := range st.syncPlan.Notices {
-		lines = append(lines, styled(th.warning, wrap(notice, w))...)
-	}
 	if len(st.syncPlan.Items) == 0 {
 		return append(lines, styled(th.muted, wrap("Nothing to sync.", w))...)
 	}

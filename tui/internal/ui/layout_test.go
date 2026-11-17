@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const tooSmall = "Terminal too small"
@@ -91,6 +93,55 @@ func TestRootNoticeBandShowsTheStateWarningOnEverySection(t *testing.T) {
 	lines := renderedLines(r)
 	if len(lines) != 24 || !strings.Contains(lines[len(lines)-1], "quit") {
 		t.Errorf("band must shrink only the panel: %d lines, last %q", len(lines), lines[len(lines)-1])
+	}
+}
+
+func TestRootNoticeBandCarriesPlanNoticesAndShowsTheStateWarningOnce(t *testing.T) {
+	const (
+		warning = "state file is corrupt and was ignored"
+		notice  = "skipped: source missing: home/.gone"
+	)
+	p := selectedPlan()
+	p.Notices = []string{notice}
+	r := sizedRoot((&fakeSyncDeps{plan: p}).deps(), 100, 24)
+	r.svc.StateWarning = warning
+
+	r.selectSection(0)
+	if got := strings.Count(ansi.Strip(r.View().Content), warning); got != 1 {
+		t.Errorf("Dashboard shows the state warning %d times, want 1", got)
+	}
+
+	s, i, _ := sectionOf[*Sync](r)
+	r.selectSection(i)
+	runCmds(s, s.startPlan(plan.Push))
+	view := ansi.Strip(r.View().Content)
+	if got := strings.Count(view, warning); got != 1 {
+		t.Errorf("Sync shows the state warning %d times, want 1", got)
+	}
+	if got := strings.Count(view, notice); got != 1 {
+		t.Errorf("Sync shows the plan notice %d times, want 1 (in the band)", got)
+	}
+	lines := renderedLines(r)
+	if len(lines) != 24 || !strings.Contains(lines[len(lines)-1], "quit") {
+		t.Errorf("band must shrink only the panel: %d lines, last %q", len(lines), lines[len(lines)-1])
+	}
+}
+
+func TestRootNoticeBandTruncatesWithAMoreLine(t *testing.T) {
+	p := selectedPlan()
+	p.Notices = []string{"first notice", "second notice", "third notice"}
+	r := sizedRoot((&fakeSyncDeps{plan: p}).deps(), 100, 24)
+	s, i, _ := sectionOf[*Sync](r)
+	r.selectSection(i)
+	runCmds(s, s.startPlan(plan.Push))
+
+	view := ansi.Strip(r.View().Content)
+	if !strings.Contains(view, "first notice") || !strings.Contains(view, "+2 more") || strings.Contains(view, "second notice") {
+		t.Errorf("band must show the first notice and a +2 more line:\n%s", view)
+	}
+	lines := renderedLines(r)
+	if len(lines) != 24 || !strings.Contains(lines[len(lines)-1], "quit") {
+		t.Errorf("band must keep the keybar last: %d lines, last %q", len(lines), lines[len(lines)-1])
 	}
 }
 

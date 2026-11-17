@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -339,13 +340,22 @@ func (r *Root) render() string {
 	return lipgloss.JoinVertical(lipgloss.Left, slices.Concat([]string{body}, band, []string{r.renderKeybar()})...)
 }
 
-// renderNoticeBand wraps the state warning under the panel, cut to noticeMaxLines so the panel keeps its rows.
+// renderNoticeBand wraps the state warning and the active screen's notices under the panel, cut to noticeMaxLines so the panel keeps its rows.
 func (r *Root) renderNoticeBand() []string {
-	if r.svc.StateWarning == "" {
-		return nil
+	texts := []string{r.svc.StateWarning}
+	if n, ok := r.active().(noticer); ok {
+		texts = append(texts, n.Notices()...)
 	}
-	lines := wrap(r.svc.StateWarning, r.width)
-	return styled(r.svc.th.warning, lines[:min(len(lines), noticeMaxLines)])
+	var lines []string
+	for _, text := range texts {
+		if text != "" {
+			lines = append(lines, wrap(text, r.width)...)
+		}
+	}
+	if len(lines) > noticeMaxLines {
+		lines = append(lines[:noticeMaxLines-1], fmt.Sprintf("+%d more", len(lines)-noticeMaxLines+1))
+	}
+	return styled(r.svc.th.warning, lines)
 }
 
 // focusedKeys are the bindings valid in the current focus; the keybar and help derive from them.

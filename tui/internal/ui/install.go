@@ -132,6 +132,14 @@ func (s *Install) Cancel() {
 	}
 }
 
+// Notices are the plan's notices while the summary shows a plan.
+func (s *Install) Notices() []string {
+	if s.page != pageSummary || s.planning || s.planErr != nil {
+		return nil
+	}
+	return s.plan.Notices
+}
+
 func (s *Install) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case gpuDetectedMsg:

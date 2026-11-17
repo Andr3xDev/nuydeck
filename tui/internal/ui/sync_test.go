@@ -101,14 +101,17 @@ func keyPress(code rune) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: code, Text: string(code)}
 }
 
-func TestSyncPreviewShowsPlanNotices(t *testing.T) {
+func TestSyncPreviewExposesPlanNoticesToTheBand(t *testing.T) {
 	const notice = "skipped: source missing: home/.gone"
 	plan := selectedPlan()
 	plan.Notices = []string{notice}
 	s := newPreview(&fakeSyncDeps{plan: plan}, false)
 
-	if !strings.Contains(ansi.Strip(s.View(120, 20)), notice) {
-		t.Fatalf("preview does not show %q", notice)
+	if got := s.Notices(); len(got) != 1 || got[0] != notice {
+		t.Fatalf("Notices() = %q, want [%q]", got, notice)
+	}
+	if strings.Contains(ansi.Strip(s.View(120, 20)), notice) {
+		t.Fatalf("the preview must leave %q to the band", notice)
 	}
 }
 
