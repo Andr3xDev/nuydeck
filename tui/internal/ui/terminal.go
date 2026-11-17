@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -28,20 +29,36 @@ func (r execRequestMsg) finish(err error) tea.Msg {
 }
 
 // TerminalBridge implements plan.Terminal on top of tea.ExecProcess; cmd/nuydeck attaches the program before Run.
-type TerminalBridge struct{ sender messageSender }
+type TerminalBridge struct {
+	sender     messageSender
+	closed     chan struct{}
+	detachOnce sync.Once
+}
 
-func NewTerminalBridge() *TerminalBridge { return &TerminalBridge{} }
+func NewTerminalBridge() *TerminalBridge { return &TerminalBridge{closed: make(chan struct{})} }
 
 // Attach must run before the program starts.
 func (b *TerminalBridge) Attach(sender messageSender) { b.sender = sender }
 
-// Run suspends the TUI while cmd owns the terminal. While the child runs no key reaches Root, so ctx can only
-// be cancelled from outside; Run then returns without waiting for the child.
+// Detach releases every waiting Run and makes later ones fail; cmd/nuydeck calls it once the program has exited.
+func (b *TerminalBridge) Detach() { b.detachOnce.Do(func() { close(b.closed) }) }
+
+func (b *TerminalBridge) detached() bool {
+	select {
+	case <-b.closed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Run suspends the TUI while cmd owns the terminal. Once the request is sent it waits for the child even if ctx is
+// cancelled: returning earlier would let the caller write to a terminal the child still owns.
 func (b *TerminalBridge) Run(ctx context.Context, cmd *exec.Cmd) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if b.sender == nil {
+	if b.sender == nil || b.detached() {
 		return errBridgeDetached
 	}
 	done := make(chan error, 1)
@@ -49,7 +66,7 @@ func (b *TerminalBridge) Run(ctx context.Context, cmd *exec.Cmd) error {
 	select {
 	case err := <-done:
 		return err
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-b.closed:
+		return errBridgeDetached
 	}
 }

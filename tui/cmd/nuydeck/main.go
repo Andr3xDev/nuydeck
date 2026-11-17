@@ -96,6 +96,7 @@ func run(dryRun bool, repoFlag string) error {
 	program := tea.NewProgram(root)
 	bridge.Attach(program)
 	_, err = program.Run()
+	bridge.Detach()
 	root.WaitInstall(installShutdownTimeout)
 	return err
 }

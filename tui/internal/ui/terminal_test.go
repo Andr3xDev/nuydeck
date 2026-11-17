@@ -50,22 +50,71 @@ func TestExecCallbackReportsFailureAndReturnsControl(t *testing.T) {
 	}
 }
 
-func TestBridgeCancelUnblocksWhenTheRequestIsDropped(t *testing.T) {
+// stillRunningWindow is how long a Run that must keep waiting is observed before the test lets it finish.
+const stillRunningWindow = 100 * time.Millisecond
+
+func TestBridgeCancelWhileChildRunsWaitsForDone(t *testing.T) {
+	childErr := errors.New("exit status 1")
+	sent := make(chan execRequestMsg, 1)
 	bridge := NewTerminalBridge()
-	bridge.Attach(senderFunc(func(tea.Msg) {}))
+	bridge.Attach(senderFunc(func(msg tea.Msg) { sent <- msg.(execRequestMsg) }))
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
 	go func() { result <- bridge.Run(ctx, exec.Command("sudo", "-v")) }()
+	req := <-sent
 
 	cancel()
 
 	select {
 	case err := <-result:
-		if !errors.Is(err, context.Canceled) {
-			t.Errorf("Run = %v, want context.Canceled", err)
+		t.Fatalf("Run returned %v while the child still owns the terminal", err)
+	case <-time.After(stillRunningWindow):
+	}
+	req.finish(childErr)
+	select {
+	case err := <-result:
+		if !errors.Is(err, childErr) {
+			t.Errorf("Run = %v, want the child outcome", err)
 		}
 	case <-time.After(waitTimeout):
-		t.Fatal("Run stayed blocked after the context was cancelled")
+		t.Fatal("Run stayed blocked after done fired")
+	}
+}
+
+func TestBridgeDetachUnblocksAWaitingRun(t *testing.T) {
+	bridge := NewTerminalBridge()
+	bridge.Attach(senderFunc(func(tea.Msg) {}))
+	result := make(chan error, 1)
+	go func() { result <- bridge.Run(context.Background(), exec.Command("sudo", "-v")) }()
+	time.Sleep(stillRunningWindow)
+
+	bridge.Detach()
+
+	select {
+	case err := <-result:
+		if !errors.Is(err, errBridgeDetached) {
+			t.Errorf("Run = %v, want errBridgeDetached", err)
+		}
+	case <-time.After(waitTimeout):
+		t.Fatal("Run stayed blocked after Detach")
+	}
+}
+
+func TestBridgeRunAfterDetachFailsWithoutBlocking(t *testing.T) {
+	bridge := NewTerminalBridge()
+	bridge.Attach(senderFunc(func(tea.Msg) {}))
+	bridge.Detach()
+	result := make(chan error, 1)
+
+	go func() { result <- bridge.Run(context.Background(), exec.Command("sudo", "-v")) }()
+
+	select {
+	case err := <-result:
+		if !errors.Is(err, errBridgeDetached) {
+			t.Errorf("Run = %v, want errBridgeDetached", err)
+		}
+	case <-time.After(waitTimeout):
+		t.Fatal("Run blocked on a detached bridge")
 	}
 }
 
