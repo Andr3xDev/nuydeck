@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -72,6 +74,20 @@ func wireSync(deps *ui.Deps, svc *cfgsync.Service, backups *backup.Service, drif
 	deps.ListBackups = backups.ListBackups
 	deps.PlanRestore = backups.PlanRestore
 	deps.DeleteBackup = backups.DeleteBackup
+}
+
+// wireEdit binds the conflict editor to the real environment, the temp dir and the shared terminal.
+func wireEdit(deps *ui.Deps, terminal plan.Terminal) {
+	ports := cfgsync.EditPorts{
+		Getenv:     os.Getenv,
+		HasCommand: func(name string) bool { _, err := exec.LookPath(name); return err == nil },
+		Terminal:   terminal,
+		Temp:       osfs.TempFS{},
+		ReadSide:   osfs.ReadSide,
+	}
+	deps.Edit = func(ctx context.Context, req cfgsync.EditRequest) (cfgsync.EditResult, error) {
+		return cfgsync.ComposeEdit(ctx, ports, req)
+	}
 }
 
 // wireCatalog loads the package, hardware and secret-name manifests and builds the install and packages use cases.
