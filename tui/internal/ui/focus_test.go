@@ -139,15 +139,15 @@ func TestEscIsDeliveredWhenTheScreenClaimsIt(t *testing.T) {
 	}
 }
 
-// The keybar lists "r refresh" for every screen that does not claim r, so r must act for them.
-func TestUnclaimedRRefreshesTheFocusedScreen(t *testing.T) {
+// Only screens that list r refresh; for the others the keybar shows no r, so the key does nothing.
+func TestUnclaimedRDoesNothing(t *testing.T) {
 	probe := &probeScreen{keys: probeKeys()}
 	r, _ := probeRoot(probe, focusPanel)
 
 	press(t, r, keyPress('r'))
 
-	if probe.entered != 1 {
-		t.Errorf("Enter calls after r = %d, want 1 (the screen reloads)", probe.entered)
+	if probe.entered != 0 || len(probe.received) != 0 {
+		t.Errorf("Enter calls = %d, received = %v, want r ignored", probe.entered, probe.received)
 	}
 }
 

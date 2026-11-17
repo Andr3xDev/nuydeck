@@ -301,7 +301,7 @@ func TestRunWaitReturnsAtOnceWhenTheWorkNeverStarted(t *testing.T) {
 		t.Error("the work ran although its command was never executed")
 		return runEnd{}
 	}})
-	root.Update(keyCtrlC)
+	root.quit()
 
 	begin := time.Now()
 	root.WaitInstall(shutdownTimeout)

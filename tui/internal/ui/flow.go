@@ -109,9 +109,13 @@ func (f *flow) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// receive drops a plan that is stale or arrives while a run owns the screen.
+// receive drops a plan that is stale; one arriving while a run owns the screen also ends the flow.
 func (f *flow) receive(msg plannedMsg) {
-	if msg.f != f || msg.gen != f.gen || f.stage != stagePlanning || f.svc.runIsActive() {
+	if msg.f != f || msg.gen != f.gen || f.stage != stagePlanning {
+		return
+	}
+	if f.svc.runIsActive() {
+		f.reset()
 		return
 	}
 	f.st, f.err = msg.st, msg.err
@@ -216,9 +220,9 @@ func (f *flow) Keys() []key.Binding {
 		}
 		return append(keys, k.Back)
 	case stageOffer:
-		return []key.Binding{k.Yes, k.No, k.Back}
+		return []key.Binding{k.Yes, described(k.Confirm, "yes"), k.No, k.Back}
 	case stageConfirm, stageExtra:
-		return []key.Binding{k.Yes, described(k.Back, "decline")}
+		return []key.Binding{k.Yes, described(k.Back, "back")}
 	}
 	return nil
 }

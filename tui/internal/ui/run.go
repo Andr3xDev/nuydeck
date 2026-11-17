@@ -143,7 +143,7 @@ func (r *run) add(e plan.Event) {
 	r.mark(e)
 	switch {
 	case e.Kind == plan.EventAwaitAck:
-		r.awaitAck = true
+		r.awaitAck, r.notice = true, false
 	case e.Kind == plan.EventLine:
 		r.push(outLine{e.Line})
 	case e.Kind == plan.EventFailed && e.Err != nil:
@@ -152,7 +152,7 @@ func (r *run) add(e plan.Event) {
 }
 
 func (r *run) finish(end runEnd) {
-	r.done, r.awaitAck, r.err = true, false, end.err
+	r.done, r.awaitAck, r.notice, r.err = true, false, false, end.err
 	if end.err != nil {
 		r.push(outLine{"error: " + end.err.Error()})
 		return
@@ -225,7 +225,7 @@ func (r *run) footerLines(th theme, cw int) []string {
 			return lines
 		}
 	}
-	return []string{th.muted.Render(r.hint())}
+	return styled(th.muted, wrap(r.hint(), cw))
 }
 
 // view re-wraps every line each frame; shortcut: fine at 2000 lines, cache wrapped lines if it shows in profiling.
@@ -241,7 +241,9 @@ func (r *run) view(th theme, w, h int) string {
 	inner := innerHeight(h)
 	head, foot := r.stepList(th, cw, inner), r.footerLines(th, cw)
 	room := max(inner-len(head)-len(foot), 1)
+	total := len(lines)
 	lines = r.scroll.window(lines, room)
+	r.follow = r.follow || r.scroll.offset+room >= total
 	for len(lines) < room {
 		lines = append(lines, "")
 	}

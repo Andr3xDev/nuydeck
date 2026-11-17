@@ -74,13 +74,9 @@ func (k keyMap) sidebarKeys() []key.Binding {
 	return []key.Binding{k.Up, k.Down, k.Open, k.Focus}
 }
 
-// panelKeys puts the screen's keys first. r stays "refresh" unless the screen claims it;
-// esc goes back to the sidebar unless the screen claims it (a dialog or a later wizard page).
+// panelKeys puts the screen's keys first; esc goes back to the sidebar unless the screen claims it (a dialog or a later wizard page).
 func (k keyMap) panelKeys(screenKeys []key.Binding) []key.Binding {
 	keys := slices.Clone(screenKeys)
-	if !claims(screenKeys, "r") {
-		keys = append(keys, k.Refresh)
-	}
 	if !claims(screenKeys, "esc") {
 		keys = append(keys, k.Back)
 	}

@@ -128,8 +128,8 @@ func TestFlowPlanIsIgnoredWhileARunIsActive(t *testing.T) {
 
 	root.Update(result)
 
-	if f.stage != stagePlanning {
-		t.Fatalf("stage = %v, want planning: a plan arriving during a run must not change the flow", f.stage)
+	if f.stage != stageIdle || f.st != nil {
+		t.Fatalf("stage = %v, want idle with no plan: a plan arriving during a run resets the flow", f.stage)
 	}
 }
 

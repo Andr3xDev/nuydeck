@@ -224,6 +224,7 @@ func (r *Root) quit() (tea.Model, tea.Cmd) {
 func (r *Root) routeRun(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	keys, run := r.svc.keys, r.run
 	ctrlC := msg.String() == "ctrl+c"
+	run.notice = false
 	switch {
 	case keys.step(msg) != 0:
 		run.scrollBy(keys.step(msg))
@@ -266,14 +267,12 @@ func (r *Root) routeSidebar(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return r, nil
 }
 
-// routePanel delivers only the keys the screen's current stage lists; esc goes back to the sidebar unless the stage claims it.
+// routePanel delivers only the keys the screen's current stage lists (a screen that refreshes lists r); esc goes back to the sidebar unless the stage claims it.
 func (r *Root) routePanel(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	keys := r.svc.keys
 	switch {
 	case key.Matches(msg, r.active().Keys()...):
 		return r.forward(msg)
-	case key.Matches(msg, keys.Refresh):
-		return r, r.active().Enter()
 	case key.Matches(msg, keys.Back):
 		r.focus = focusSidebar
 	}
@@ -377,6 +376,8 @@ func (r *Root) helpGroups() [][]key.Binding {
 // pinnedKeys are the right-hand keys: a live run answers neither ? nor q, a finished one only q.
 func (r *Root) pinnedKeys() []key.Binding {
 	switch {
+	case r.run == nil && r.focus == focusPanel && r.panelCapturesText():
+		return []key.Binding{described(r.svc.keys.CancelRun, "quit")}
 	case r.run == nil:
 		return r.svc.keys.pinnedKeys()
 	case r.run.done:

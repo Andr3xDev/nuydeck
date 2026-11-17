@@ -71,11 +71,11 @@ func TestPanelKeysFollowTheClaimRules(t *testing.T) {
 	closeFlow := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
 
 	plain := k.panelKeys([]key.Binding{other})
-	if !claims(plain, "r") || !claims(plain, "esc") {
-		t.Errorf("a screen with no claim must get refresh on r and back on esc")
+	if claims(plain, "r") || !claims(plain, "esc") {
+		t.Errorf("a screen with no claim must get back on esc and no refresh on r")
 	}
-	if claimed := k.panelKeys([]key.Binding{restore}); slices.ContainsFunc(claimed, func(b key.Binding) bool { return b.Help().Desc == "refresh" }) {
-		t.Error("a screen claiming r must not also get the global refresh")
+	if claimed := k.panelKeys([]key.Binding{restore}); !claims(claimed, "r") {
+		t.Error("a screen claiming r keeps it")
 	}
 	if claimed := k.panelKeys([]key.Binding{closeFlow}); slices.ContainsFunc(claimed, func(b key.Binding) bool { return b.Help().Desc == "back" }) {
 		t.Error("a screen claiming esc must not also get the global back")
