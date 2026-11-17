@@ -41,6 +41,15 @@ type flowSource struct {
 	Run         func(plan.Plan) runRequest
 }
 
+// loader is a staged that reads data for its first view as soon as it is previewed.
+type loader interface{ Load() tea.Cmd }
+
+// msgHandler is a staged that receives the results of its own commands.
+type msgHandler interface{ Handle(tea.Msg) tea.Cmd }
+
+// nester is a staged with a sub-stage open (a diff or a popup): it gets every key, esc included.
+type nester interface{ Nested() bool }
+
 type plannedMsg struct {
 	f   *flow
 	gen int
@@ -102,33 +111,51 @@ func (f *flow) canApply() bool { return f.err == nil && f.st != nil && f.st.CanA
 func (f *flow) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case plannedMsg:
-		f.receive(msg)
+		return f.receive(msg)
 	case tea.KeyPressMsg:
 		return f.handleKey(msg)
+	default:
+		if h, ok := f.st.(msgHandler); ok {
+			return h.Handle(msg)
+		}
 	}
 	return nil
 }
 
 // receive drops a plan that is stale; one arriving while a run owns the screen also ends the flow.
-func (f *flow) receive(msg plannedMsg) {
+// The returned command is the preview's first read, if it has one.
+func (f *flow) receive(msg plannedMsg) tea.Cmd {
 	if msg.f != f || msg.gen != f.gen || f.stage != stagePlanning {
-		return
+		return nil
 	}
 	if f.svc.runIsActive() {
 		f.reset()
-		return
+		return nil
 	}
 	f.st, f.err = msg.st, msg.err
 	f.body.reset()
 	if f.src.SkipPreview && f.canApply() {
 		f.openConfirm(false)
-		return
+		return nil
 	}
 	f.stage = stagePreview
+	if l, ok := f.st.(loader); ok && f.err == nil {
+		return l.Load()
+	}
+	return nil
+}
+
+// nested is true while the preview has a sub-stage open.
+func (f *flow) nested() bool {
+	n, ok := f.st.(nester)
+	return ok && f.stage == stagePreview && n.Nested()
 }
 
 func (f *flow) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	k := f.svc.keys
+	if f.nested() {
+		return f.st.Update(msg)
+	}
 	if key.Matches(msg, k.Back) {
 		f.back()
 		return nil
@@ -207,6 +234,9 @@ func (f *flow) answer(yes bool) tea.Cmd {
 
 func (f *flow) Keys() []key.Binding {
 	k := f.svc.keys
+	if f.nested() {
+		return f.st.Keys()
+	}
 	switch f.stage {
 	case stagePlanning:
 		return []key.Binding{k.Back}
