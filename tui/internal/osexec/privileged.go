@@ -7,9 +7,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/sysx"
 )
@@ -18,8 +18,7 @@ const (
 	stagedSuffix = ".nuydeck-new"
 	tempPattern  = "nuydeck-write-*"
 
-	privateDirMode     = fs.FileMode(0o700)
-	groupWorldWritable = fs.FileMode(0o022)
+	privateDirMode = fs.FileMode(0o700)
 )
 
 // stagingDir returns the user-private directory that holds the temp file handed to root.
@@ -35,16 +34,8 @@ func (r Runner) stagingDir() (string, error) {
 			return "", err
 		}
 	}
-	info, err := os.Stat(dir)
-	if err != nil {
-		return "", err
-	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || int(st.Uid) != os.Geteuid() {
-		return "", fmt.Errorf("staging dir %s is not owned by the current user", dir)
-	}
-	if info.Mode().Perm()&groupWorldWritable != 0 {
-		return "", fmt.Errorf("staging dir %s is writable by group or others", dir)
+	if err := osfs.CheckPrivateDir(dir); err != nil {
+		return "", fmt.Errorf("staging dir %w", err)
 	}
 	return dir, nil
 }
