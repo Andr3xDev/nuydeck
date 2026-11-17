@@ -61,7 +61,7 @@ type Sync struct {
 	applySync   func(ctx context.Context, p cfgsync.SyncPlan, sel cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult
 	entries     []manifest.ResolvedEntry
 	dryRun      bool
-	keys        KeyMap
+	keys        keyMap
 	th          theme
 
 	gen       int
@@ -97,7 +97,7 @@ func newSync(svc *services) *Sync {
 func (s *Sync) Title() string  { return "Sync" }
 func (s *Sync) Enter() tea.Cmd { return nil }
 
-// Keys claims esc while a dialog or the apply is open, so esc and q reach the screen instead of the shell.
+// Keys claims esc while a dialog or the apply is open, so esc reaches the screen instead of leaving the panel.
 func (s *Sync) Keys() []key.Binding {
 	switch s.phase {
 	case phaseBackupDialog, phaseConfirmDialog:
@@ -210,7 +210,7 @@ func (s *Sync) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
 		case key.Matches(msg, s.keys.Yes), key.Matches(msg, s.keys.No):
 			s.backup = key.Matches(msg, s.keys.Yes)
 			s.phase = phaseConfirmDialog
-		case s.dismiss(msg):
+		case key.Matches(msg, s.keys.Back):
 			s.phase = phasePreview
 		}
 		return s, nil
@@ -218,7 +218,7 @@ func (s *Sync) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
 		switch {
 		case key.Matches(msg, s.keys.Yes):
 			return s, s.startApply()
-		case key.Matches(msg, s.keys.No), s.dismiss(msg):
+		case key.Matches(msg, s.keys.No, s.keys.Back):
 			s.phase = phasePreview
 		}
 		return s, nil
@@ -243,10 +243,6 @@ func (s *Sync) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
 		return s, s.confirm()
 	}
 	return s, nil
-}
-
-func (s *Sync) dismiss(msg tea.KeyPressMsg) bool {
-	return key.Matches(msg, s.keys.Back) || key.Matches(msg, s.keys.Quit)
 }
 
 func (s *Sync) toggle() {

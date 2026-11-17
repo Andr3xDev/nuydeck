@@ -88,11 +88,11 @@ func TestBackupsDeleteDeclineMakesNoCall(t *testing.T) {
 	b := loadedBackups(f)
 
 	b.Update(keyPress('d'))
-	if !modal(b) {
+	if !claims(b.Keys(), "esc") {
 		t.Fatal("d must open the confirm dialog")
 	}
 	_, cmd := b.Update(keyPress('n'))
-	if cmd != nil || modal(b) || len(f.deleted) != 0 {
+	if cmd != nil || claims(b.Keys(), "esc") || len(f.deleted) != 0 {
 		t.Errorf("decline must not delete: cmd=%v deleted=%v", cmd != nil, f.deleted)
 	}
 }
@@ -118,7 +118,7 @@ func TestBackupsRestoreOpensSyncWithRestorePlan(t *testing.T) {
 	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}}
 	r := NewRoot("", false, f.deps())
 	b, at, _ := sectionOf[*Backups](r)
-	r.selected, r.panelFocus = at, true
+	r.selected, r.focus = at, focusPanel
 	b.Update(b.load()())
 
 	_, cmd := b.Update(keyPress(tea.KeyEnter))
@@ -146,7 +146,7 @@ func TestBackupsIncompleteListedFlaggedAndDeletable(t *testing.T) {
 		t.Error("incomplete backup must be flagged")
 	}
 	b.Update(keyPress('d'))
-	if !modal(b) {
+	if !claims(b.Keys(), "esc") {
 		t.Error("incomplete backup must be deletable")
 	}
 }

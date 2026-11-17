@@ -34,7 +34,7 @@ type Backups struct {
 	listBackups  func(ctx context.Context) ([]backup.Backup, error)
 	planRestore  func(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
 	deleteBackup func(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
-	keys         KeyMap
+	keys         keyMap
 	th           theme
 	backups      []backup.Backup
 	cursor       int
@@ -59,7 +59,7 @@ func (b *Backups) Title() string { return "Backups" }
 func (b *Backups) Init() tea.Cmd  { return b.load() }
 func (b *Backups) Enter() tea.Cmd { return b.load() }
 
-// Keys claims esc while the delete dialog is open, so esc and q close it instead of reaching the shell.
+// Keys claims esc while the delete dialog is open, so esc closes it instead of leaving the panel.
 func (b *Backups) Keys() []key.Binding {
 	if b.confirm {
 		return []key.Binding{b.keys.Yes, b.keys.No, b.keys.Back}
@@ -112,7 +112,7 @@ func (b *Backups) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
 		case key.Matches(msg, b.keys.Yes):
 			b.confirm = false
 			return b, b.delete()
-		case key.Matches(msg, b.keys.No), key.Matches(msg, b.keys.Back), key.Matches(msg, b.keys.Quit):
+		case key.Matches(msg, b.keys.No, b.keys.Back):
 			b.confirm = false
 		}
 		return b, nil

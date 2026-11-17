@@ -37,7 +37,7 @@ type Dashboard struct {
 	drift      func(ctx context.Context, entries []manifest.ResolvedEntry) <-chan drift.DriftResult
 	entries    []manifest.ResolvedEntry
 	state      dashboardInfo
-	keys       KeyMap
+	keys       keyMap
 	th         theme
 	spinner    spinner.Model
 	results    map[manifest.Entry]drift.DriftResult

@@ -121,16 +121,16 @@ func TestSyncEnterDialogsDeclineBackup(t *testing.T) {
 	s := newPreview(&fakeSyncDeps{plan: plan, needsBackup: true}, false)
 
 	s.Update(keyPress(tea.KeyEnter))
-	if s.phase != phaseBackupDialog || !modal(s) {
+	if s.phase != phaseBackupDialog || !claims(s.Keys(), "esc") {
 		t.Fatalf("phase = %v, want backup dialog", s.phase)
 	}
 	s.Update(keyPress('n'))
 	if s.phase != phaseConfirmDialog || s.backup {
 		t.Fatalf("phase = %v backup = %v, want confirm dialog without backup", s.phase, s.backup)
 	}
-	s.Update(keyPress('q'))
+	s.Update(specialKey(tea.KeyEscape))
 	if s.phase != phasePreview {
-		t.Error("q must close the dialog")
+		t.Error("esc must close the dialog")
 	}
 }
 

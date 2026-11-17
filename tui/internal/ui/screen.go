@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"slices"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -15,7 +14,7 @@ type screen interface {
 	Enter() tea.Cmd
 	Update(msg tea.Msg) (screen, tea.Cmd)
 	View(w, h int) string
-	// Keys lists the bindings of the screen's current stage.
+	// Keys lists the bindings of the screen's current stage: the shell delivers only these keys, and the keybar and help show them.
 	Keys() []key.Binding
 }
 
@@ -37,10 +36,5 @@ type services struct {
 	ctx    context.Context
 	dryRun bool
 	th     theme
-	keys   KeyMap
-}
-
-// modal reports whether the screen is in a stage that claims esc (a dialog or a later wizard page), so esc and q reach it first.
-func modal(s screen) bool {
-	return slices.ContainsFunc(s.Keys(), func(b key.Binding) bool { return slices.Contains(b.Keys(), "esc") })
+	keys   keyMap
 }

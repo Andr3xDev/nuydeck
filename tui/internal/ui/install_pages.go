@@ -37,7 +37,7 @@ func (s *Install) profileKey(msg tea.KeyPressMsg) tea.Cmd {
 
 func (s *Install) hardwareKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case s.dismiss(msg):
+	case key.Matches(msg, s.keys.Back):
 		return s.step(-1)
 	case s.hwLoading:
 	case s.moveCursor(msg, len(s.deps.Drivers)+1):
@@ -85,7 +85,7 @@ func (s *Install) seedSelection() {
 
 func (s *Install) selectionKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case s.dismiss(msg):
+	case key.Matches(msg, s.keys.Back):
 		return s.step(-1)
 	case s.moveCursor(msg, len(s.rows)):
 	case key.Matches(msg, s.keys.Toggle) && s.cursor < len(s.rows):
@@ -133,14 +133,14 @@ func (s *Install) enterSecrets() {
 
 func (s *Install) secretsKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case s.dismiss(msg) && (!s.secretPrompting() || key.Matches(msg, s.keys.Back)):
+	case key.Matches(msg, s.keys.Back):
 		return s.step(-1)
 	case !s.secretPrompting():
 		if key.Matches(msg, s.keys.Confirm) {
 			return s.step(1)
 		}
 		return nil
-	case msg.String() == "ctrl+s":
+	case key.Matches(msg, s.keys.SkipSecrets):
 		s.draft.Secrets, s.draft.SkipSecrets = nil, true
 		s.secretInput.SetValue("")
 		return s.step(1)
@@ -205,7 +205,7 @@ func (s *Install) canConfirm() bool {
 
 func (s *Install) summaryKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case s.dismiss(msg):
+	case key.Matches(msg, s.keys.Back):
 		s.Cancel()
 		return s.step(-1)
 	case key.Matches(msg, s.keys.Up):
@@ -236,8 +236,6 @@ func (s *Install) runKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	case s.finished && key.Matches(msg, s.keys.Back):
 		return s.step(-1)
-	case s.finished && msg.String() == "q":
-		return tea.Quit
 	}
 	return nil
 }

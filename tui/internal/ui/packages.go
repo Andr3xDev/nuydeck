@@ -54,7 +54,7 @@ type addForm struct {
 // Packages lists explicit packages that are neither in the catalog nor ignored, and adds or ignores them.
 type Packages struct {
 	deps PackagesDeps
-	keys KeyMap
+	keys keyMap
 	th   theme
 
 	names  []string
@@ -74,7 +74,7 @@ func (p *Packages) Title() string { return "Packages" }
 func (p *Packages) Init() tea.Cmd  { return p.load() }
 func (p *Packages) Enter() tea.Cmd { return p.load() }
 
-// Keys claims esc while the add form is open, so esc and q close it instead of reaching the shell.
+// Keys claims esc while the add form is open, so esc closes it instead of leaving the panel.
 func (p *Packages) Keys() []key.Binding {
 	if p.form != nil {
 		return []key.Binding{p.keys.Up, p.keys.Down, p.keys.Toggle, p.keys.Confirm, p.keys.Back}
@@ -200,7 +200,7 @@ func (p *Packages) formKey(msg tea.KeyPressMsg) tea.Cmd {
 	f := p.form
 	typing := f.row == formRowGroup
 	switch {
-	case key.Matches(msg, p.keys.Back), !typing && msg.String() == "q":
+	case key.Matches(msg, p.keys.Back):
 		p.form = nil
 	case key.Matches(msg, p.keys.Confirm):
 		return p.submit()

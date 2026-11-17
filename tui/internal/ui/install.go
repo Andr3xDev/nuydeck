@@ -84,7 +84,7 @@ type selectionRow struct {
 type Install struct {
 	ctx  context.Context
 	deps InstallDeps
-	keys KeyMap
+	keys keyMap
 	th   theme
 
 	page   installPage
@@ -144,12 +144,30 @@ func newInstall(svc *services) *Install {
 func (s *Install) Title() string  { return "Install" }
 func (s *Install) Enter() tea.Cmd { return nil }
 
-// Keys claims esc on every page after the first, so esc and q go back instead of reaching the shell.
+// Keys lists the current page's bindings. Pages after the first claim esc to go back; the run page claims it only once finished.
 func (s *Install) Keys() []key.Binding {
-	if s.page == pageProfile {
+	switch s.page {
+	case pageProfile:
 		return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Confirm}
+	case pageHardware, pageSelection:
+		return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Toggle, s.keys.Confirm, s.keys.Back}
+	case pageSecrets:
+		keys := []key.Binding{s.keys.Confirm, s.keys.Back}
+		if s.secretPrompting() {
+			keys = append(keys, s.keys.SkipSecrets)
+		}
+		return keys
+	case pageSummary:
+		return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Confirm, s.keys.Back}
 	}
-	return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Confirm, s.keys.Back}
+	keys := []key.Binding{s.keys.Up, s.keys.Down}
+	if s.awaitAck {
+		keys = append(keys, s.keys.Confirm)
+	}
+	if s.finished {
+		keys = append(keys, s.keys.Back)
+	}
+	return keys
 }
 
 // CapturesText reports whether printable keys belong to the hidden input, so the shell must not act on them.
@@ -213,10 +231,6 @@ func (s *Install) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return s.summaryKey(msg)
 	}
 	return s.runKey(msg)
-}
-
-func (s *Install) dismiss(msg tea.KeyPressMsg) bool {
-	return key.Matches(msg, s.keys.Back) || msg.String() == "q"
 }
 
 // moveCursor applies up and down over n rows and reports whether the key was a move.

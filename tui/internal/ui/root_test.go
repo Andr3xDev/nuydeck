@@ -19,7 +19,7 @@ func press(t *testing.T, r *Root, k tea.KeyPressMsg) (*Root, tea.Cmd) {
 
 // testServices wires a screen under test the way NewRoot does.
 func testServices(deps Deps) *services {
-	return &services{Deps: deps, ctx: context.Background(), th: ForVariant(""), keys: DefaultKeyMap()}
+	return &services{Deps: deps, ctx: context.Background(), th: ForVariant(""), keys: newKeyMap()}
 }
 
 func TestRootQuitKeys(t *testing.T) {
@@ -38,8 +38,8 @@ func TestRootQuitsFromSidebarWhileInstallIsPastTheFirstPage(t *testing.T) {
 	root, in := newTestRoot(&fakeInstaller{plan: onePlan()})
 	toHardware(in)
 	_, root.selected, _ = sectionOf[*Install](root)
-	if in.page != pageHardware || root.panelFocus {
-		t.Fatalf("page=%v panelFocus=%v, want the hardware page with sidebar focus", in.page, root.panelFocus)
+	if in.page != pageHardware || root.focus != focusSidebar {
+		t.Fatalf("page=%v focus=%v, want the hardware page with sidebar focus", in.page, root.focus)
 	}
 
 	_, cmd := press(t, root, keyPress('q'))
