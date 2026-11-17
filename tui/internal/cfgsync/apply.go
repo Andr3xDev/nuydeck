@@ -81,7 +81,7 @@ func Steps(p SyncPlan, sel Selection, res Resolutions, opts ApplyOptions) []Batc
 		}
 	}
 
-	if files := BackupFiles(items, opts.Hard); opts.Backup && len(files) > 0 {
+	if files := BackupFiles(items, opts.Hard); (opts.Backup || opts.Mandatory) && len(files) > 0 {
 		batches = append(batches, Batch{Step: BackupStep(p.Direction, files)})
 	}
 	for _, g := range GroupByEntry(plain) {
