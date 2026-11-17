@@ -56,7 +56,7 @@ type installPlanMsg struct {
 }
 
 type installStream struct {
-	events <-chan plan.InstallEvent
+	events <-chan plan.Event
 	result <-chan install.InstallResult
 }
 
@@ -67,7 +67,7 @@ type installStartedMsg struct {
 
 type installEventMsg struct {
 	gen   int
-	event plan.InstallEvent
+	event plan.Event
 }
 
 type installDoneMsg struct {
@@ -313,7 +313,7 @@ func (s *Install) startRun() tea.Cmd {
 	runDone := make(chan struct{})
 	s.runDone = runDone
 	return func() tea.Msg {
-		events := make(chan plan.InstallEvent)
+		events := make(chan plan.Event)
 		result := make(chan install.InstallResult, 1)
 		go func() {
 			defer close(runDone)
@@ -333,7 +333,7 @@ func waitInstall(gen int, st installStream) tea.Cmd {
 	}
 }
 
-func (s *Install) handleEvent(ev plan.InstallEvent) {
+func (s *Install) handleEvent(ev plan.Event) {
 	if ev.Kind == plan.EventLine {
 		s.appendLog(ev.Line)
 		return

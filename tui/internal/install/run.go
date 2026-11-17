@@ -22,7 +22,7 @@ var (
 
 // Run executes the plan in order and closes events when it returns.
 // It stops at the first failure; the Record step still runs, the Reboot step never does after a failure, cancel or in dry-run.
-func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- plan.InstallEvent, ack <-chan struct{}) InstallResult {
+func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- plan.Event, ack <-chan struct{}) InstallResult {
 	defer close(events)
 	if len(p.Blocking) > 0 {
 		return InstallResult{Err: errors.Join(p.Blocking...)}
@@ -43,7 +43,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 			}
 		}
 	}))
-	emit := func(e plan.InstallEvent) {
+	emit := func(e plan.Event) {
 		select {
 		case events <- e:
 		case <-ctx.Done():
@@ -52,7 +52,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 	progress := func(index int) func(plan.StepProgress) {
 		return func(sp plan.StepProgress) {
 			if sp.Line != "" {
-				emit(plan.InstallEvent{Index: index, Kind: plan.EventLine, Line: plan.Redact(scrub, sp.Line)})
+				emit(plan.Event{Index: index, Kind: plan.EventLine, Line: plan.Redact(scrub, sp.Line)})
 			}
 		}
 	}
@@ -66,22 +66,22 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 		fail := func(err error) error {
 			logItem("failed")
 			err = scrubError(scrub, fmt.Errorf("%s: %w", label, err))
-			emit(plan.InstallEvent{Index: index, Kind: plan.EventFailed, Err: err})
+			emit(plan.Event{Index: index, Kind: plan.EventFailed, Err: err})
 			return err
 		}
 		if ps.Skip != "" {
 			logItem("skipped")
-			emit(plan.InstallEvent{Index: index, Kind: plan.EventSkipped})
+			emit(plan.Event{Index: index, Kind: plan.EventSkipped})
 			return nil
 		}
 		if needsSudo(ps.Step) && sudoExpired.Load() {
 			return fail(errSudoExpired)
 		}
-		emit(plan.InstallEvent{Index: index, Kind: plan.EventStarted})
+		emit(plan.Event{Index: index, Kind: plan.EventStarted})
 		res := i.Runner.Run(runCtx, ps.Step, progress(index))
 		if res.Status != plan.StepFailed {
 			logItem("done")
-			emit(plan.InstallEvent{Index: index, Kind: plan.EventDone})
+			emit(plan.Event{Index: index, Kind: plan.EventDone})
 			return nil
 		}
 		err := cmp.Or(res.Err, errors.New(cmp.Or(res.Detail, "step failed")))
@@ -128,10 +128,10 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 			continue
 		}
 		if i.DryRun {
-			emit(plan.InstallEvent{Index: index, Kind: plan.EventSkipped})
+			emit(plan.Event{Index: index, Kind: plan.EventSkipped})
 			break
 		}
-		emit(plan.InstallEvent{Index: index, Kind: plan.EventAwaitAck})
+		emit(plan.Event{Index: index, Kind: plan.EventAwaitAck})
 		select {
 		case <-ack:
 		case <-ctx.Done():

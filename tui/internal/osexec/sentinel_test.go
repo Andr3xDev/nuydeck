@@ -162,7 +162,7 @@ func executeSentinelInstall(t *testing.T, inst *install.Installer, capture *capt
 	}
 
 	beforeRun()
-	events := make(chan plan.InstallEvent, 256)
+	events := make(chan plan.Event, 256)
 	collected := make(chan struct{})
 	go func() {
 		defer close(collected)

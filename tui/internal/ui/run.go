@@ -25,7 +25,7 @@ type runEnd struct{ err error }
 // runRequest asks the shell to run work in the output pane. ack carries the reboot confirmation, if the work waits for one.
 type runRequest struct {
 	title string
-	work  func(ctx context.Context, emit func(plan.InstallEvent)) runEnd
+	work  func(ctx context.Context, emit func(plan.Event)) runEnd
 	ack   chan struct{}
 }
 
@@ -33,7 +33,7 @@ type runRequest struct {
 type runClosed struct{}
 
 type (
-	runEventMsg struct{ event plan.InstallEvent }
+	runEventMsg struct{ event plan.Event }
 	runDoneMsg  struct{ end runEnd }
 )
 
@@ -62,7 +62,7 @@ func newRun(req runRequest, cancel context.CancelFunc) *run {
 }
 
 // start returns the command that launches work; ctx is the Root context, so a quit unblocks pending sends.
-func (r *run) start(ctx, workCtx context.Context, work func(context.Context, func(plan.InstallEvent)) runEnd) tea.Cmd {
+func (r *run) start(ctx, workCtx context.Context, work func(context.Context, func(plan.Event)) runEnd) tea.Cmd {
 	return func() tea.Msg {
 		r.started.Store(true)
 		go func() {
@@ -73,7 +73,7 @@ func (r *run) start(ctx, workCtx context.Context, work func(context.Context, fun
 				case <-ctx.Done():
 				}
 			}
-			end := work(workCtx, func(e plan.InstallEvent) { send(runEventMsg{e}) })
+			end := work(workCtx, func(e plan.Event) { send(runEventMsg{e}) })
 			send(runDoneMsg{end})
 		}()
 		return <-r.events
@@ -90,7 +90,7 @@ func (r *run) push(lines ...outLine) {
 	}
 }
 
-func (r *run) add(e plan.InstallEvent) {
+func (r *run) add(e plan.Event) {
 	switch {
 	case e.Kind == plan.EventAwaitAck:
 		r.awaitAck = true

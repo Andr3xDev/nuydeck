@@ -64,14 +64,14 @@ func labelOf(s plan.Step) string {
 	return c.Label
 }
 
-func runInstallCtx(t *testing.T, ctx context.Context, inst *Installer, steps []PlannedStep, ack <-chan struct{}) (InstallResult, []plan.InstallEvent) {
+func runInstallCtx(t *testing.T, ctx context.Context, inst *Installer, steps []PlannedStep, ack <-chan struct{}) (InstallResult, []plan.Event) {
 	t.Helper()
-	events := make(chan plan.InstallEvent, eventBuffer)
+	events := make(chan plan.Event, eventBuffer)
 	done := make(chan InstallResult, 1)
 	go func() { done <- inst.Run(ctx, InstallPlan{Steps: steps}, events, ack) }()
 	select {
 	case res := <-done:
-		var collected []plan.InstallEvent
+		var collected []plan.Event
 		for {
 			select {
 			case e, ok := <-events:
@@ -89,17 +89,17 @@ func runInstallCtx(t *testing.T, ctx context.Context, inst *Installer, steps []P
 	}
 }
 
-func runInstall(t *testing.T, inst *Installer, steps []PlannedStep, ack <-chan struct{}) (InstallResult, []plan.InstallEvent) {
+func runInstall(t *testing.T, inst *Installer, steps []PlannedStep, ack <-chan struct{}) (InstallResult, []plan.Event) {
 	t.Helper()
 	return runInstallCtx(t, context.Background(), inst, steps, ack)
 }
 
-var eventNames = map[plan.InstallEventKind]string{
+var eventNames = map[plan.EventKind]string{
 	plan.EventStarted: "started", plan.EventLine: "line", plan.EventDone: "done",
 	plan.EventSkipped: "skipped", plan.EventFailed: "failed", plan.EventAwaitAck: "await-ack",
 }
 
-func describe(events []plan.InstallEvent) []string {
+func describe(events []plan.Event) []string {
 	out := make([]string, len(events))
 	for i, e := range events {
 		out[i] = fmt.Sprintf("%s:%d", eventNames[e.Kind], e.Index)
@@ -110,8 +110,8 @@ func describe(events []plan.InstallEvent) []string {
 	return out
 }
 
-func hasEvent(events []plan.InstallEvent, kind plan.InstallEventKind, index int) bool {
-	return slices.ContainsFunc(events, func(e plan.InstallEvent) bool { return e.Kind == kind && e.Index == index })
+func hasEvent(events []plan.Event, kind plan.EventKind, index int) bool {
+	return slices.ContainsFunc(events, func(e plan.Event) bool { return e.Kind == kind && e.Index == index })
 }
 
 // waitUntil reports a timeout with t.Errorf because it is also called from the runner goroutine, where FailNow is not allowed.
@@ -127,7 +127,7 @@ func waitUntil(t *testing.T, cond func() bool) {
 	}
 }
 
-func awaitEvent(t *testing.T, events <-chan plan.InstallEvent, kind plan.InstallEventKind) {
+func awaitEvent(t *testing.T, events <-chan plan.Event, kind plan.EventKind) {
 	t.Helper()
 	timeout := time.After(runTimeout)
 	for {
@@ -379,7 +379,7 @@ func TestRun_DryRunNeverRebootsAwaitsAckOrStartsTheKeepalive(t *testing.T) {
 	if slices.Contains(r.commandLabels(), "reboot") {
 		t.Error("dry-run called the Runner for the reboot")
 	}
-	if slices.ContainsFunc(events, func(e plan.InstallEvent) bool { return e.Kind == plan.EventAwaitAck }) {
+	if slices.ContainsFunc(events, func(e plan.Event) bool { return e.Kind == plan.EventAwaitAck }) {
 		t.Errorf("dry-run emitted await-ack: %v", describe(events))
 	}
 	if n := r.quietCalls(); n > 1 {
@@ -390,7 +390,7 @@ func TestRun_DryRunNeverRebootsAwaitsAckOrStartsTheKeepalive(t *testing.T) {
 func TestRun_RebootWaitsForAcknowledgementAfterRecording(t *testing.T) {
 	r := &scriptedRunner{}
 	inst := newRunInstaller(r)
-	events := make(chan plan.InstallEvent, eventBuffer)
+	events := make(chan plan.Event, eventBuffer)
 	ack := make(chan struct{})
 	done := make(chan InstallResult, 1)
 	go func() {
@@ -429,7 +429,7 @@ func TestRun_CancelWhileAwaitingAcknowledgementDoesNotReboot(t *testing.T) {
 	inst := newRunInstaller(r)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	events := make(chan plan.InstallEvent, eventBuffer)
+	events := make(chan plan.Event, eventBuffer)
 	done := make(chan InstallResult, 1)
 	go func() {
 		done <- inst.Run(ctx, InstallPlan{Steps: []PlannedStep{command("one"), recordStep(), rebootStep()}}, events, make(chan struct{}))
@@ -528,7 +528,7 @@ func TestRun_ScrubsSecretValuesFromTheFailureEventResultAndLog(t *testing.T) {
 func TestRun_BlockingPlanErrorsForbidRunningAnyStep(t *testing.T) {
 	r := &scriptedRunner{}
 	blocked := errors.New("blocked by an existing path: /home/u/.config/hypr")
-	events := make(chan plan.InstallEvent, eventBuffer)
+	events := make(chan plan.Event, eventBuffer)
 
 	res := newRunInstaller(r).Run(context.Background(), InstallPlan{Steps: []PlannedStep{command("one"), recordStep()}, Blocking: []error{blocked}}, events, nil)
 

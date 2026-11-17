@@ -1,20 +1,22 @@
 package plan
 
-type InstallEventKind int
+type EventKind int
 
 const (
-	EventStarted InstallEventKind = iota
+	EventStarted EventKind = iota
 	EventLine
 	EventDone
 	EventSkipped
 	EventFailed
 	EventAwaitAck
+	EventWarned
 )
 
-// InstallEvent reports progress of the step at Index in InstallPlan.Steps.
-type InstallEvent struct {
-	Index int
-	Kind  InstallEventKind
-	Line  string
-	Err   error
+// Event reports progress of the step at Index of Total.
+type Event struct {
+	Index, Total int
+	Label        string
+	Kind         EventKind
+	Line         string
+	Err          error
 }

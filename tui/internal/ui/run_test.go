@@ -23,7 +23,7 @@ const (
 	promptReturn    = time.Second
 )
 
-type testWork = func(ctx context.Context, emit func(plan.InstallEvent)) runEnd
+type testWork = func(ctx context.Context, emit func(plan.Event)) runEnd
 
 // driver runs the commands Root returns the way the Bubble Tea runtime does, so work goroutines and their messages flow.
 type driver struct {
@@ -115,7 +115,7 @@ func runningRoot(t *testing.T, dryRun bool, f focus, ack chan struct{}, work tes
 	d := newDriver(t, root)
 
 	started := make(chan struct{})
-	_, cmd := root.Update(runRequest{title: "test run", ack: ack, work: func(ctx context.Context, emit func(plan.InstallEvent)) runEnd {
+	_, cmd := root.Update(runRequest{title: "test run", ack: ack, work: func(ctx context.Context, emit func(plan.Event)) runEnd {
 		close(started)
 		return work(ctx, emit)
 	}})
@@ -133,14 +133,14 @@ func runningRoot(t *testing.T, dryRun bool, f focus, ack chan struct{}, work tes
 
 // blockedUntilCancelled holds the run open and signals when the context is cancelled.
 func blockedUntilCancelled(cancelled chan struct{}) testWork {
-	return func(ctx context.Context, _ func(plan.InstallEvent)) runEnd {
+	return func(ctx context.Context, _ func(plan.Event)) runEnd {
 		<-ctx.Done()
 		cancelled <- struct{}{}
 		return runEnd{}
 	}
 }
 
-func finishesAtOnce(context.Context, func(plan.InstallEvent)) runEnd { return runEnd{} }
+func finishesAtOnce(context.Context, func(plan.Event)) runEnd { return runEnd{} }
 
 func TestRunRefusesEveryKeyButCtrlCWithANotice(t *testing.T) {
 	refused := map[string]tea.KeyPressMsg{
@@ -228,8 +228,8 @@ func awaitingReboot(t *testing.T) (d *driver, acked, cancelled chan struct{}) {
 	t.Helper()
 	acked, cancelled = make(chan struct{}, 1), make(chan struct{}, 1)
 	ack := make(chan struct{}, 1)
-	d = runningRoot(t, false, focusPanel, ack, func(ctx context.Context, emit func(plan.InstallEvent)) runEnd {
-		emit(plan.InstallEvent{Kind: plan.EventAwaitAck})
+	d = runningRoot(t, false, focusPanel, ack, func(ctx context.Context, emit func(plan.Event)) runEnd {
+		emit(plan.Event{Kind: plan.EventAwaitAck})
 		select {
 		case <-ack:
 			acked <- struct{}{}
@@ -282,7 +282,7 @@ func TestRunCtrlCAtTheRebootPromptQuitsWithoutRebooting(t *testing.T) {
 // R4: the old install handle was created inside the started command, so quitting before it ran blocked the shutdown wait.
 func TestRunWaitReturnsAtOnceWhenTheWorkNeverStarted(t *testing.T) {
 	root := NewRoot("", false, Deps{})
-	root.Update(runRequest{title: "never started", work: func(context.Context, func(plan.InstallEvent)) runEnd {
+	root.Update(runRequest{title: "never started", work: func(context.Context, func(plan.Event)) runEnd {
 		t.Error("the work ran although its command was never executed")
 		return runEnd{}
 	}})
@@ -297,9 +297,9 @@ func TestRunWaitReturnsAtOnceWhenTheWorkNeverStarted(t *testing.T) {
 }
 
 func TestRunKeepsOnlyTheLastOutputLines(t *testing.T) {
-	d := runningRoot(t, false, focusPanel, nil, func(_ context.Context, emit func(plan.InstallEvent)) runEnd {
+	d := runningRoot(t, false, focusPanel, nil, func(_ context.Context, emit func(plan.Event)) runEnd {
 		for i := range overflowLines {
-			emit(plan.InstallEvent{Kind: plan.EventLine, Line: fmt.Sprintf("row-%04d", i)})
+			emit(plan.Event{Kind: plan.EventLine, Line: fmt.Sprintf("row-%04d", i)})
 		}
 		return runEnd{}
 	})
@@ -315,8 +315,8 @@ func TestRunKeepsOnlyTheLastOutputLines(t *testing.T) {
 }
 
 func TestRunShowsItsOutputInOnePane(t *testing.T) {
-	d := runningRoot(t, false, focusPanel, nil, func(ctx context.Context, emit func(plan.InstallEvent)) runEnd {
-		emit(plan.InstallEvent{Kind: plan.EventLine, Line: "marker-line"})
+	d := runningRoot(t, false, focusPanel, nil, func(ctx context.Context, emit func(plan.Event)) runEnd {
+		emit(plan.Event{Kind: plan.EventLine, Line: "marker-line"})
 		<-ctx.Done()
 		return runEnd{}
 	})
