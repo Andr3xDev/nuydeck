@@ -37,4 +37,8 @@ type services struct {
 	dryRun bool
 	th     theme
 	keys   keyMap
+	// running reports whether Root's output pane is open; nil means never (screens under test).
+	running func() bool
 }
+
+func (s *services) runIsActive() bool { return s.running != nil && s.running() }

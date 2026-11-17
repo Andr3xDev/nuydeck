@@ -80,6 +80,7 @@ func NewRoot(variant string, dryRun bool, deps Deps) *Root {
 	ctx, cancel := context.WithCancel(context.Background())
 	svc := &services{Deps: deps, ctx: ctx, dryRun: dryRun, th: th, keys: newKeyMap()}
 	r := &Root{dryRun: dryRun, svc: svc, help: h, cancel: cancel}
+	svc.running = func() bool { return r.run != nil }
 	for _, spec := range sectionSpecs {
 		if spec.enabled(deps) {
 			r.sections = append(r.sections, section{title: spec.title, screen: spec.build(svc)})
