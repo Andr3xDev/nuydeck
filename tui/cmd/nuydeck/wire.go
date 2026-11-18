@@ -11,13 +11,17 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/dryrun"
+	"github.com/Andr3xDev/nuydeck/tui/internal/envvars"
 	"github.com/Andr3xDev/nuydeck/tui/internal/gitx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/osexec"
 	"github.com/Andr3xDev/nuydeck/tui/internal/osfs"
 	"github.com/Andr3xDev/nuydeck/tui/internal/packages"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/references"
 	"github.com/Andr3xDev/nuydeck/tui/internal/rsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/services"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 	"github.com/Andr3xDev/nuydeck/tui/internal/sysx"
 	"github.com/Andr3xDev/nuydeck/tui/internal/ui"
@@ -91,6 +95,69 @@ func wireEdit(deps *ui.Deps, terminal plan.Terminal) {
 	}
 	deps.Edit = func(ctx context.Context, req cfgsync.EditRequest) (cfgsync.EditResult, error) {
 		return cfgsync.ComposeEdit(ctx, ports, req)
+	}
+}
+
+func planItems(steps []plan.Step) []plan.Item {
+	items := make([]plan.Item, len(steps))
+	for i, s := range steps {
+		items[i] = plan.Item{Step: s}
+	}
+	return items
+}
+
+// wireServices loads the services catalog; a bad file only sets Services.Err, so the other sections keep working.
+func wireServices(deps *ui.Deps, repo, username string, runner plan.Runner) {
+	catalog, err := services.Load(filepath.Join(repo, servicesRelPath))
+	if err != nil {
+		deps.Services.Err = err
+		return
+	}
+	probe := sysx.Probe{User: username}
+	deps.Services = ui.ServicesDeps{
+		Catalog: catalog,
+		State:   sysx.SystemctlProbe{}.Read,
+		Plan: func(ctx context.Context, req services.Request, state services.UnitState) (plan.Plan, error) {
+			return services.PlanAction(catalog, req, state, probe.CanSudoWithoutPrompt(ctx))
+		},
+		Run: func(ctx context.Context, p plan.Plan, emit func(plan.Event)) error {
+			return plan.Apply(ctx, runner, planItems(p.Steps), plan.Hooks{}, emit).Err
+		},
+	}
+}
+
+// wireEnv hands the env file to the editor through the runner, which in dry-run is the recorder: its line is the preview.
+func wireEnv(deps *ui.Deps, runner plan.Runner) {
+	hasCommand := sysx.Probe{}.HasCommand
+	deps.Env.Edit = func(ctx context.Context, path string) (string, error) {
+		p, err := envvars.PlanEdit(os.Getenv, hasCommand, time.Now, path)
+		if err != nil {
+			return "", err
+		}
+		var preview string
+		hooks := plan.Hooks{After: func(_ context.Context, _ int, s plan.Step, r plan.StepResult) {
+			if _, isCommand := s.(plan.CommandStep); isCommand && r.Status == plan.StepWouldApply {
+				preview = r.Detail
+			}
+		}}
+		return preview, plan.Apply(ctx, runner, planItems(p.Steps), hooks, func(plan.Event) {}).Err
+	}
+}
+
+// wireReferences loads the references manifest; a bad file only sets References.Err.
+func wireReferences(deps *ui.Deps, repo, home string) {
+	catalog, err := references.Load(filepath.Join(repo, referencesRelPath))
+	if err != nil {
+		deps.References.Err = err
+		return
+	}
+	hasCommand := sysx.Probe{}.HasCommand
+	deps.References = ui.ReferencesDeps{
+		Catalog: catalog,
+		Status: func(ref references.Reference) references.Status {
+			return references.Detect(ref, hasCommand, osfs.PathKind, home)
+		},
+		Open: osexec.OpenURL,
 	}
 }
 

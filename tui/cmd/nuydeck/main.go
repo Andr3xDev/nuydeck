@@ -30,6 +30,9 @@ const (
 	packagesRelPath = "manifest/packages.toml"
 	hardwareRelPath = "manifest/hardware.toml"
 	secretsRelPath  = "manifest/secrets.toml"
+
+	servicesRelPath   = "manifest/services.toml"
+	referencesRelPath = "manifest/references.toml"
 )
 
 // installShutdownTimeout bounds the wait for a cancelled install to persist its log and reap its child.
@@ -91,6 +94,9 @@ func run(dryRun bool, repoFlag string) error {
 		deps.ManifestError = err
 	} else {
 		wireCatalog(&deps, svc, repo, home, current.Username, dryRun, runner, inspector)
+		wireServices(&deps, repo, current.Username, runner)
+		wireEnv(&deps, runner)
+		wireReferences(&deps, repo, home)
 	}
 
 	root := ui.NewRoot(osfs.ReadVariant(configDir), dryRun, deps)
