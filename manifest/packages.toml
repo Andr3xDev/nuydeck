@@ -3,7 +3,7 @@ version = 1
 # base-devel and git (paru prerequisites) are installed by the paru bootstrap, not listed here.
 # GPU driver packages live in hardware.toml.
 
-# ---- system (install-minimal.sh:29) ----
+# ---- system ----
 
 [[package]]
 name = "base"
@@ -530,7 +530,7 @@ source = "pacman"
 profiles = ["minimal", "full"]
 group = "apps"
 
-# ---- kernel and drivers (install-personal.sh:141) ----
+# ---- kernel and drivers ----
 
 [[package]]
 name = "linux-zen"
@@ -544,7 +544,7 @@ source = "pacman"
 profiles = ["full"]
 group = "kernel"
 
-# ---- development (install-personal.sh:145-179) ----
+# ---- development ----
 
 [[package]]
 name = "docker"
@@ -667,7 +667,7 @@ source = "aur"
 profiles = ["full"]
 group = "ai"
 
-# ---- virtualization (install-personal.sh:167) ----
+# ---- virtualization ----
 
 [[package]]
 name = "qemu-full"
@@ -705,7 +705,7 @@ source = "pacman"
 profiles = ["full"]
 group = "virtualization"
 
-# ---- personal apps (install-personal.sh:157, 183-184, 190; install-spotify.sh:50-51) ----
+# ---- personal apps ----
 
 [[package]]
 name = "steam"

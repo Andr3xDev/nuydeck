@@ -29,8 +29,7 @@ var adapterEdges = map[string][]string{
 	"osexec": {"osfs", "rsync", "execx", "sysx"},
 }
 
-// Exact in-module imports allowed per domain package (design D1 table). Domain packages without a row
-// (change 3 additions) are bound only by the layer rules.
+// Exact in-module imports allowed per domain package (design D1 table).
 var domainEdges = map[string][]string{
 	"fsutil":     {},
 	"editor":     {},
