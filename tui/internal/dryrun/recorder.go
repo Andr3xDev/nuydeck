@@ -15,6 +15,17 @@ func (Recorder) Run(_ context.Context, s plan.Step, _ func(plan.StepProgress)) p
 	return plan.StepResult{Status: plan.StepWouldApply, Detail: render(s)}
 }
 
+func renderCommand(s plan.CommandStep) string {
+	argv := s.Argv
+	if s.Sudo {
+		argv = append([]string{"sudo"}, argv...)
+	}
+	if s.Dir != "" {
+		return fmt.Sprintf("would run (in %s) %s", s.Dir, strings.Join(argv, " "))
+	}
+	return "would run " + strings.Join(argv, " ")
+}
+
 func render(s plan.Step) string {
 	switch s := s.(type) {
 	case plan.CopyStep:
@@ -35,14 +46,15 @@ func render(s plan.Step) string {
 		}
 		return "would save state; ignored_packages: " + strings.Join(s.State.IgnoredPackages, ", ")
 	case plan.CommandStep:
-		argv := s.Argv
-		if s.Sudo {
-			argv = append([]string{"sudo"}, argv...)
+		return renderCommand(s)
+	case plan.ServiceActionStep:
+		cmd, err := s.Command()
+		if err != nil {
+			return "would refuse: " + err.Error()
 		}
-		if s.Dir != "" {
-			return fmt.Sprintf("would run (in %s) %s", s.Dir, strings.Join(argv, " "))
-		}
-		return "would run " + strings.Join(argv, " ")
+		return renderCommand(cmd)
+	case plan.ConfirmStep:
+		return "would ask: " + s.Prompt
 	case plan.WriteFileStep:
 		detail := fmt.Sprintf("would write %s (%d bytes)", s.Path, len(s.Content))
 		if s.Privileged {
