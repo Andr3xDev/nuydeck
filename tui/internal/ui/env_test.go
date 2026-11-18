@@ -74,6 +74,30 @@ func TestEnvChosenSourceDrivesThePathAndTheList(t *testing.T) {
 	}
 }
 
+func TestEnvShowsLoadingUntilTheReadArrivesAndDropsStaleResults(t *testing.T) {
+	f := newFakeEnv(envRepoText, envLiveText)
+	s, _ := openEnv(t, f, Deps{})
+
+	_, readRepo := s.Update(keyEnter)
+	if !strings.Contains(viewOf(s), envLoadingText) {
+		t.Errorf("no loading state before the read arrives:\n%s", viewOf(s))
+	}
+	if len(f.reads) != 0 {
+		t.Errorf("reads = %v, want none before the cmd runs", f.reads)
+	}
+	staleMsg := readRepo()
+
+	send(s, keyPress('s'), keyDown, keyEnter)
+	s.Update(staleMsg)
+
+	if view := viewOf(s); strings.Contains(view, "repo-value") || !strings.Contains(view, "live-value") {
+		t.Errorf("a stale read overwrote the live copy:\n%s", view)
+	}
+	if strings.Contains(viewOf(s), envLoadingText) {
+		t.Errorf("loading state still shown after the read:\n%s", viewOf(s))
+	}
+}
+
 func TestEnvDismissedPopupLeavesAnEmptyListAndNoEdit(t *testing.T) {
 	f := newFakeEnv(envRepoText, envLiveText)
 	s, _ := openEnv(t, f, Deps{})

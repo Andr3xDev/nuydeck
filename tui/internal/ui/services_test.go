@@ -126,8 +126,11 @@ func TestServicesActionKeysPlanTheirAction(t *testing.T) {
 			if got.Unit != unitBluetooth || got.Scope != plan.ScopeSystem || got.Action != want {
 				t.Errorf("request = %+v, want %s %s on %s", got, want, plan.ScopeSystem, unitBluetooth)
 			}
-			if !claims(s.Keys(), string(k)) {
-				t.Errorf("%q is not listed in the Services keys", k)
+			if claims(s.Keys(), string(k)) {
+				t.Errorf("%q is still listed while the flow is open", k)
+			}
+			if !claims(s.Keys(), "esc") {
+				t.Error("the flow's esc is not listed")
 			}
 		})
 	}

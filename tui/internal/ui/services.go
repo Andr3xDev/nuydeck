@@ -82,14 +82,12 @@ func (s *Services) actions() []serviceAction {
 }
 
 // Keys claims esc while the flow is open, so esc steps back instead of leaving the panel.
-// The unit keys stay listed during the flow: the tests require it; the flow ignores them.
 func (s *Services) Keys() []key.Binding {
-	k := s.svc.keys
-	var keys []key.Binding
 	if s.flow.active() {
-		keys = s.flow.Keys()
+		return s.flow.Keys()
 	}
-	keys = append(keys, k.Up, k.Down, k.Refresh)
+	k := s.svc.keys
+	keys := []key.Binding{k.Up, k.Down, k.Refresh}
 	if s.wired() {
 		for _, a := range s.actions() {
 			keys = append(keys, a.binding)
