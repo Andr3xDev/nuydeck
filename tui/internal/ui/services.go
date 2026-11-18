@@ -28,6 +28,7 @@ type scopeRead struct {
 
 type servicesReadMsg struct {
 	scope plan.Scope
+	seq   int // read generation; a reply older than the latest request is dropped
 	read  scopeRead
 }
 
@@ -48,12 +49,15 @@ type Services struct {
 	cursor int
 	notice string
 	err    error
+
+	readSeq       map[plan.Scope]int
+	ownRunPending bool // a run started here is open, so its close needs a reload
 }
 
 func newServices(svc *shell) *Services {
 	rows := slices.Clone(svc.Services.Catalog)
 	slices.SortStableFunc(rows, func(a, b services.Entry) int { return scopeRank(a.Scope) - scopeRank(b.Scope) })
-	return &Services{svc: svc, rows: rows, reads: map[plan.Scope]scopeRead{}}
+	return &Services{svc: svc, rows: rows, reads: map[plan.Scope]scopeRead{}, readSeq: map[plan.Scope]int{}}
 }
 
 func scopeRank(scope plan.Scope) int {
@@ -110,9 +114,11 @@ func (s *Services) load() tea.Cmd {
 			continue
 		}
 		state, ctx := s.svc.Services.State, s.svc.ctx
+		s.readSeq[scope]++
+		seq := s.readSeq[scope]
 		cmds = append(cmds, func() tea.Msg {
 			states, err := state(ctx, scope, units)
-			return servicesReadMsg{scope: scope, read: scopeRead{states: states, err: err}}
+			return servicesReadMsg{scope: scope, seq: seq, read: scopeRead{states: states, err: err}}
 		})
 	}
 	return tea.Batch(cmds...)
@@ -137,11 +143,16 @@ func (s *Services) stateOf(e services.Entry) (services.UnitState, bool) {
 func (s *Services) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case servicesReadMsg:
-		s.reads[msg.scope] = msg.read
+		if msg.seq == s.readSeq[msg.scope] {
+			s.reads[msg.scope] = msg.read
+		}
 	case logsClosedMsg:
 		s.err = msg.err
 	case runClosed:
-		return s, s.load()
+		if s.ownRunPending {
+			s.ownRunPending = false
+			return s, s.load()
+		}
 	case plannedMsg:
 		if s.flow.active() {
 			return s, s.flow.Update(msg)
@@ -209,6 +220,7 @@ func (s *Services) act(entry services.Entry, action plan.Action) tea.Cmd {
 			return newPlanStaged(p), nil
 		},
 		Run: func(p plan.Plan) runRequest {
+			s.ownRunPending = true
 			steps := make([]string, len(p.Steps))
 			for i, step := range p.Steps {
 				steps[i], _ = plan.Describe(step)

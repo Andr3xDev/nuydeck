@@ -56,6 +56,21 @@ func TestParseShow_RealOutputInMixedOrder(t *testing.T) {
 	}
 }
 
+func TestParseShow_UnknownStatesKeepTheirRawValue(t *testing.T) {
+	out := lines(
+		`Id=cups.service`,
+		`LoadState=loaded`,
+		`ActiveState=activating`,
+		`UnitFileState=static`,
+	)
+
+	s := services.ParseShow(out)["cups.service"]
+
+	if string(s.Enabled) != "static" || string(s.Active) != "activating" {
+		t.Errorf("state = %+v, want the raw static / activating values, not other", s)
+	}
+}
+
 func TestParseShow_EmptyOutputYieldsNoUnits(t *testing.T) {
 	if got := services.ParseShow(""); len(got) != 0 {
 		t.Errorf("ParseShow(\"\") = %+v, want empty", got)

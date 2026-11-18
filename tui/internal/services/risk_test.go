@@ -8,6 +8,34 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/services"
 )
 
+func TestRisk_CriticalWordingNamesTheConsequenceAndWhenItBites(t *testing.T) {
+	critical := services.Entry{Unit: "NetworkManager.service", Scope: plan.ScopeSystem, Critical: true}
+	tests := []struct {
+		action  plan.Action
+		want    []string
+		notWant []string
+	}{
+		{plan.ActionMask, []string{"network", "session", "blocks it from starting"}, nil},
+		{plan.ActionDisable, []string{"network", "session", "next boot"}, nil},
+		{plan.ActionStop, []string{"network", "session", "now"}, []string{"next boot"}},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.action), func(t *testing.T) {
+			got := strings.ToLower(services.Risk(critical, tt.action))
+			for _, w := range tt.want {
+				if !strings.Contains(got, w) {
+					t.Errorf("Risk() = %q, want it to contain %q", got, w)
+				}
+			}
+			for _, w := range tt.notWant {
+				if strings.Contains(got, w) {
+					t.Errorf("Risk() = %q, must not contain %q", got, w)
+				}
+			}
+		})
+	}
+}
+
 func TestRisk(t *testing.T) {
 	critical := services.Entry{Unit: "NetworkManager.service", Scope: plan.ScopeSystem, Critical: true}
 	plain := services.Entry{Unit: "bluetooth.service", Scope: plan.ScopeSystem}

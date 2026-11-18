@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/services"
 )
@@ -93,9 +95,13 @@ func TestServicesRefreshKeyRereadsEveryScope(t *testing.T) {
 	}
 }
 
-func TestServicesStateIsRefreshedWhenTheRunPaneCloses(t *testing.T) {
+func TestServicesStateIsRefreshedWhenTheRunPaneClosesAfterItsOwnRun(t *testing.T) {
 	f := newFakeServices()
 	s := openServices(t, f, nil, false)
+	onRow(s, rowBluetooth)
+	if runs := send(s, keyPress('R'), keyEnter, keyPress('y')); len(runs) != 1 {
+		t.Fatalf("run requests = %d, want 1", len(runs))
+	}
 	before := len(f.reads)
 
 	_, cmd := s.Update(runClosed{})
@@ -104,6 +110,59 @@ func TestServicesStateIsRefreshedWhenTheRunPaneCloses(t *testing.T) {
 	if len(f.reads) == before {
 		t.Error("closing the run pane did not re-read the unit states")
 	}
+	before = len(f.reads)
+	_, cmd = s.Update(runClosed{})
+	feed(s, cmd)
+	if len(f.reads) != before {
+		t.Error("a second runClosed re-read again, want one reload per run")
+	}
+}
+
+func TestServicesIgnoresRunPanesItDidNotStart(t *testing.T) {
+	f := newFakeServices()
+	s := openServices(t, f, nil, false)
+	before := len(f.reads)
+
+	_, cmd := s.Update(runClosed{})
+	feed(s, cmd)
+
+	if len(f.reads) != before {
+		t.Errorf("runClosed from another screen caused %d state reads, want none", len(f.reads)-before)
+	}
+}
+
+func TestServicesDropsAStaleReadThatArrivesAfterANewerOne(t *testing.T) {
+	f := newFakeServices()
+	s := openServices(t, f, nil, false)
+	_, stale := s.Update(keyPress('r'))
+	staleMsgs := collectMsgs(stale)
+	f.states[unitBluetooth] = services.UnitState{Found: true, Enabled: services.EnabledEnabled, Active: services.ActiveActive}
+	_, fresh := s.Update(keyPress('r'))
+	feed(s, fresh)
+
+	for _, m := range staleMsgs {
+		s.Update(m)
+	}
+
+	if got, _ := s.stateOf(f.entry(unitBluetooth)); got.Enabled != services.EnabledEnabled {
+		t.Errorf("bluetooth enabled = %q, want the newer read to win over the stale one", got.Enabled)
+	}
+}
+
+func collectMsgs(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return []tea.Msg{msg}
+	}
+	var msgs []tea.Msg
+	for _, sub := range batch {
+		msgs = append(msgs, collectMsgs(sub)...)
+	}
+	return msgs
 }
 
 func TestServicesActionKeysPlanTheirAction(t *testing.T) {

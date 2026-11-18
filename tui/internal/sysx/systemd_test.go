@@ -50,6 +50,19 @@ func TestSystemctlProbe_SystemScopeRunsOneShowWithoutSudo(t *testing.T) {
 	}
 }
 
+func TestSystemctlProbe_AliasIdIsReadUnderTheRequestedName(t *testing.T) {
+	f := &fakeRun{stdout: "Id=real.service\nLoadState=loaded\nUnitFileState=enabled\nActiveState=active\n"}
+
+	got, err := sysx.SystemctlProbe{Run: f.run}.Read(context.Background(), plan.ScopeSystem, []string{"alias.service"})
+
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if s := got["alias.service"]; !s.Found || s.Active != services.ActiveActive {
+		t.Errorf("states = %+v, want alias.service found and active", got)
+	}
+}
+
 func TestSystemctlProbe_UserScopeWithBusUsesUserFlag(t *testing.T) {
 	userBus(t)
 	f := &fakeRun{stdout: showOutput}

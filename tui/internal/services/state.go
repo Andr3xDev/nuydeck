@@ -11,6 +11,7 @@ import (
 // ErrNoUserBus means the user systemd bus is unreachable, so user state is unknown.
 var ErrNoUserBus = errors.New("user systemd bus unavailable: no XDG_RUNTIME_DIR/bus")
 
+// EnabledState and ActiveState hold systemd's raw value; the constants name the ones the TUI acts on.
 type EnabledState string
 
 const (
@@ -41,9 +42,24 @@ type StateProbe interface {
 	Read(ctx context.Context, scope plan.Scope, units []string) (map[string]UnitState, error)
 }
 
+// ShownUnit is one block of `systemctl show` output.
+type ShownUnit struct {
+	ID    string
+	State UnitState
+}
+
 // ParseShow parses `systemctl show` output: blank-line separated blocks keyed on Id, unknown keys ignored.
 func ParseShow(text string) map[string]UnitState {
 	states := map[string]UnitState{}
+	for _, unit := range ParseShowBlocks(text) {
+		states[unit.ID] = unit.State
+	}
+	return states
+}
+
+// ParseShowBlocks parses `systemctl show` output in block order, which follows the order the units were requested in.
+func ParseShowBlocks(text string) []ShownUnit {
+	var units []ShownUnit
 	for _, block := range strings.Split(text, "\n\n") {
 		props := map[string]string{}
 		for _, line := range strings.Split(block, "\n") {
@@ -57,25 +73,15 @@ func ParseShow(text string) map[string]UnitState {
 		}
 		load := props["LoadState"]
 		state := UnitState{Found: load != "not-found", Masked: load == "masked"}
-		switch props["UnitFileState"] {
-		case "enabled":
-			state.Enabled = EnabledEnabled
-		case "disabled":
-			state.Enabled = EnabledDisabled
-		default:
+		state.Enabled = EnabledState(props["UnitFileState"])
+		if state.Enabled == "" {
 			state.Enabled = EnabledOther
 		}
-		switch props["ActiveState"] {
-		case "active":
-			state.Active = ActiveActive
-		case "inactive":
-			state.Active = ActiveInactive
-		case "failed":
-			state.Active = ActiveFailed
-		default:
+		state.Active = ActiveState(props["ActiveState"])
+		if state.Active == "" {
 			state.Active = ActiveOther
 		}
-		states[id] = state
+		units = append(units, ShownUnit{ID: id, State: state})
 	}
-	return states
+	return units
 }

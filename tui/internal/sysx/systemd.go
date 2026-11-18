@@ -39,7 +39,16 @@ func (p SystemctlProbe) Read(ctx context.Context, scope plan.Scope, units []stri
 		firstLine, _, _ := strings.Cut(strings.TrimSpace(res.Stderr), "\n")
 		return nil, fmt.Errorf("systemctl exited with %d: %s", res.ExitCode, firstLine)
 	}
-	return services.ParseShow(out.String()), nil
+	shown := services.ParseShowBlocks(out.String())
+	if len(shown) != len(units) {
+		return services.ParseShow(out.String()), nil
+	}
+	// An alias prints its target's Id, so key by the requested name.
+	states := make(map[string]services.UnitState, len(units))
+	for i, unit := range units {
+		states[unit] = shown[i].State
+	}
+	return states, nil
 }
 
 func userBusExists() bool {
