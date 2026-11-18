@@ -2,6 +2,7 @@ package ui
 
 import (
 	"cmp"
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -69,7 +70,17 @@ func (f *flow) dialogView(w, h int) string {
 	inner := contentWidth(boxW)
 	header := f.header(inner)
 	body := styled(f.svc.th.warning, wrap(f.dialogText(), inner))
-	lines := append(header, f.body.window(body, max(h-borderCells-len(header), 0))...)
+	room := max(h-borderCells-len(header), 0)
+	var tail []string
+	if len(body) > room && room > 1 {
+		room--
+		tail = []string{""}
+	}
+	shown := f.body.window(body, room)
+	if tail != nil {
+		tail[0] = f.svc.th.muted.Render(fmt.Sprintf("%d-%d/%d  j/k scroll", f.body.offset+1, f.body.offset+len(shown), len(body)))
+	}
+	lines := append(append(header, shown...), tail...)
 	lines = lines[:min(len(lines), max(h-borderCells, 0))]
 	box := renderBox(f.svc.th, confirmTitle, lines, boxW, len(lines)+borderCells, true)
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)

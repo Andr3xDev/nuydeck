@@ -178,6 +178,10 @@ func (f *flow) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			f.openConfirm(false)
 		}
 	case stageConfirm, stageExtra:
+		if f.src.SkipPreview && k.step(msg) != 0 {
+			f.body.by(k.step(msg))
+			return nil
+		}
 		return f.answer(key.Matches(msg, k.Yes))
 	}
 	return nil

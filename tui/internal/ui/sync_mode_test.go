@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -266,6 +267,44 @@ func TestSyncHardConfirmAnyKeyButYReturnsWithNothingRun(t *testing.T) {
 				t.Errorf("%s: applyCalls=%d flowActive=%v run=%v, want a clean return with no step run", name, f.applyCalls.Load(), s.flow.active(), d.root.run != nil)
 			}
 		})
+	}
+}
+
+func TestSyncHardConfirmScrollsToTheLastDeletionWithoutDeclining(t *testing.T) {
+	const deletions = 60
+	f := newModeDeps()
+	f.hardItems = nil
+	for i := range deletions {
+		f.hardItems = append(f.hardItems, resolverItem(fmt.Sprintf("extra%02d", i), plan.Delete))
+	}
+	d, s := modeRoot(t, f)
+	d.press(keyPress('P'))
+	d.press(keyDown)
+	d.press(keyEnter)
+	d.must(t, "the Hard confirm", inStage(s, stageConfirm))
+	last := fmt.Sprintf("extra%02d", deletions-1)
+	f.mu.Lock()
+	s.flow.built.Confirm = ""
+	for i := range deletions {
+		s.flow.built.Confirm += fmt.Sprintf("delete home:extra%02d\n", i)
+	}
+	f.mu.Unlock()
+	if strings.Contains(d.view(), last) || !strings.Contains(d.view(), "scroll") {
+		t.Fatalf("the long list must be clipped with a scroll hint:\n%s", d.view())
+	}
+
+	for range 2 * deletions {
+		d.press(keyDown)
+	}
+
+	if !s.flow.active() || s.flow.stage != stageConfirm {
+		t.Fatal("scroll keys must not decline the confirm")
+	}
+	if !strings.Contains(d.view(), last) {
+		t.Errorf("scrolling down never reached %q:\n%s", last, d.view())
+	}
+	if f.applyCalls.Load() != 0 {
+		t.Error("scrolling must not apply anything")
 	}
 }
 
