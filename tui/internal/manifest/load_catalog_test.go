@@ -35,7 +35,7 @@ func TestLoadPackages_ValidCatalogWithOptionalFieldsAbsent(t *testing.T) {
 		`source = "pacman"`,
 		`profiles = ["minimal", "full"]`,
 		`group = "desktop"`,
-		`service = "ly.service"`,
+		`service = "ly@tty1.service"`,
 		``,
 		`[[package]]`,
 		`name = "htop"`,
@@ -46,7 +46,7 @@ func TestLoadPackages_ValidCatalogWithOptionalFieldsAbsent(t *testing.T) {
 		t.Fatalf("LoadPackages() error = %v", err)
 	}
 	want := []manifest.Package{
-		{Name: "hyprland", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}, Group: "desktop", Service: "ly.service"},
+		{Name: "hyprland", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}, Group: "desktop", Service: "ly@tty1.service"},
 		{Name: "htop", Source: manifest.SourceAUR},
 	}
 	if len(got) != len(want) {

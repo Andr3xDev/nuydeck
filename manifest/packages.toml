@@ -342,7 +342,7 @@ name = "ly"
 source = "pacman"
 profiles = ["minimal", "full"]
 group = "desktop"
-service = "ly.service"
+service = "ly@tty1.service"
 
 # ---- theme and fonts ----
 

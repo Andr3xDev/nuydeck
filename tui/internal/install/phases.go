@@ -15,7 +15,8 @@ const (
 	pacmanConfFile         = "/etc/pacman.conf"
 	logindDropInFile       = "/etc/systemd/logind.conf.d/60-nuydeck-power-key.conf"
 	displayManagerUnitLink = "/etc/systemd/system/display-manager.service"
-	lyUnit                 = "ly.service"
+	lyUnit                 = "ly@tty1.service"
+	lyTemplateUnit         = "ly@.service"
 
 	// logindDropIn: a short power-button press is ignored, a long press powers off.
 	logindDropIn = "[Login]\nHandlePowerKey=ignore\nHandlePowerKeyLongPress=poweroff\n"
@@ -252,7 +253,7 @@ func (i *Installer) planServices(b *planBuilder, d Draft) {
 	slices.Sort(units)
 	units = slices.Compact(units)
 	// Reading a missing link fails; that means no display manager is enabled.
-	if current, _ := i.Service.Inspector.LinkTarget(displayManagerUnitLink); current != "" && path.Base(current) != lyUnit && slices.Contains(units, lyUnit) {
+	if current, _ := i.Service.Inspector.LinkTarget(displayManagerUnitLink); current != "" && path.Base(current) != lyTemplateUnit && slices.Contains(units, lyUnit) {
 		units = slices.DeleteFunc(units, func(u string) bool { return u == lyUnit })
 		b.plan.Notices = append(b.plan.Notices, fmt.Sprintf("%s is the enabled display manager: %s was not enabled", path.Base(current), lyUnit))
 	}

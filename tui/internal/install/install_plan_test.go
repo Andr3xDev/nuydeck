@@ -89,7 +89,7 @@ func newPlanFixture(t *testing.T) *planFixture {
 		Catalog: []manifest.Package{
 			{Name: "hyprland", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}},
 			{Name: "networkmanager", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}, Service: "NetworkManager.service"},
-			{Name: "ly", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}, Service: "ly.service"},
+			{Name: "ly", Source: manifest.SourcePacman, Profiles: []string{"minimal", "full"}, Service: "ly@tty1.service"},
 			{Name: "docker", Source: manifest.SourcePacman, Profiles: []string{"full"}, Service: "docker.service"},
 			{Name: "steam", Source: manifest.SourcePacman, Profiles: []string{"full"}},
 			{Name: "zen-browser-bin", Source: manifest.SourceAUR, Profiles: []string{"full"}},
@@ -707,13 +707,13 @@ func TestPlan_ServicesAreEnabledOnlyForSelectedPackagesAndDrivers(t *testing.T) 
 		{
 			name:  "full with nvidia",
 			draft: Draft{Profile: manifest.ProfileFull, Drivers: []string{"nvidia"}},
-			wantUnits: sorted("NetworkManager.service", "docker.service", "ly.service",
+			wantUnits: sorted("NetworkManager.service", "docker.service", "ly@tty1.service",
 				"nvidia-suspend.service", "nvidia-hibernate.service", "nvidia-resume.service"),
 		},
 		{
 			name:      "minimal without drivers",
 			draft:     Draft{Profile: manifest.ProfileMinimal},
-			wantUnits: sorted("NetworkManager.service", "ly.service"),
+			wantUnits: sorted("NetworkManager.service", "ly@tty1.service"),
 		},
 		{
 			name:       "another display manager is enabled",
@@ -725,8 +725,8 @@ func TestPlan_ServicesAreEnabledOnlyForSelectedPackagesAndDrivers(t *testing.T) 
 		{
 			name:       "ly is already the display manager",
 			draft:      Draft{Profile: manifest.ProfileMinimal},
-			linkTarget: "/usr/lib/systemd/system/ly.service",
-			wantUnits:  sorted("NetworkManager.service", "ly.service"),
+			linkTarget: "/usr/lib/systemd/system/ly@.service",
+			wantUnits:  sorted("NetworkManager.service", "ly@tty1.service"),
 		},
 	}
 	for _, tc := range cases {
@@ -764,7 +764,7 @@ func TestPlan_ServicesAreEnabledOnceEach(t *testing.T) {
 		units = append(units, c.Argv[2:]...)
 	}
 
-	want := sorted("NetworkManager.service", "docker.service", "ly.service")
+	want := sorted("NetworkManager.service", "docker.service", "ly@tty1.service")
 	if !slices.Equal(units, want) {
 		t.Errorf("enabled units = %v, want %v", units, want)
 	}
