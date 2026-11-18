@@ -44,9 +44,6 @@ var domainEdges = map[string][]string{
 	"install":  {"plan", "cfgsync", "packages", "manifest", "state"},
 }
 
-// Package-only leftovers of the old layout; they must import nothing and go once the owner deletes them.
-var legacyPackages = []string{"app", "domain", "adapters"}
-
 func TestInternalPackages_AreAllClassified(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {
@@ -58,7 +55,7 @@ func TestInternalPackages_AreAllClassified(t *testing.T) {
 		}
 		name := entry.Name()
 		_, isDomain := domainEdges[name]
-		if !isDomain && name != uiPackage && !slices.Contains(adapterPackages, name) && !slices.Contains(legacyPackages, name) {
+		if !isDomain && name != uiPackage && !slices.Contains(adapterPackages, name) {
 			t.Errorf("internal/%s is in no layer list: classify it in adapterPackages, domainEdges or uiPackage", name)
 		}
 	}
@@ -78,7 +75,6 @@ func TestViolation(t *testing.T) {
 		{"fsutil imports a module package", "fsutil", internalPrefix + "manifest", true},
 		{"editor imports a module package", "editor", internalPrefix + "state", true},
 		{"domain outside its row", "manifest", internalPrefix + "plan", true},
-		{"legacy package imports a module package", "app", internalPrefix + "plan", true},
 		{"allowed adapter edge", "rsync", internalPrefix + "execx", false},
 		{"allowed domain edge", "cfgsync", internalPrefix + "plan", false},
 		{"ui to domain", "ui", internalPrefix + "install", false},
@@ -151,7 +147,7 @@ func violation(pkg, importPath string) string {
 	if allowed, ok := domainEdges[pkg]; ok && !slices.Contains(allowed, target) {
 		return "not in the allowed imports of " + pkg
 	}
-	if pkg == "execx" || slices.Contains(legacyPackages, pkg) {
+	if pkg == "execx" {
 		return pkg + " imports nothing inside the module"
 	}
 	return ""

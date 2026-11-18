@@ -9,7 +9,6 @@ const (
 	EventSkipped
 	EventFailed
 	EventAwaitAck
-	EventWarned
 )
 
 // Event reports progress of the step at Index of Total.

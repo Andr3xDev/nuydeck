@@ -38,7 +38,7 @@ func (s *Service) PlanSync(ctx context.Context, dir plan.Direction, entries []ma
 		for _, it := range items {
 			it.Ignored = slices.Contains(state.Ignores, ignoreKey(it.Key()))
 			syncPlan.Items = append(syncPlan.Items, it)
-			syncPlan.Selection[it.Key()] = defaultSelected(it, state.Ignores)
+			syncPlan.Selection[it.Key()] = defaultSelected(it)
 		}
 	}
 	return syncPlan, nil
@@ -48,7 +48,7 @@ func ignoreKey(k ItemKey) string { return string(k.Root) + ":" + k.Path }
 
 // defaultSelected leaves deletions unselected: only a hard reinstall removes files.
 // PlanSync has already flagged ignored items, so the ignores list is not read again.
-func defaultSelected(it PlanItem, _ []string) bool {
+func defaultSelected(it PlanItem) bool {
 	return !it.Blocked && !it.Ignored && it.Change.Type != plan.Delete
 }
 

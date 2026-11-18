@@ -27,7 +27,7 @@ func TestDefaultSelected(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := defaultSelected(tt.item, nil); got != tt.want {
+			if got := defaultSelected(tt.item); got != tt.want {
 				t.Fatalf("defaultSelected = %v, want %v", got, tt.want)
 			}
 		})
