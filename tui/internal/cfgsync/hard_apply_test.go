@@ -70,6 +70,24 @@ func TestApply_HardPullBackupCoversTheRepoFilesItOverwritesOrDeletes(t *testing.
 	}
 }
 
+func TestApply_HardDeleteOfDirKeptNonEmptyIsNotReportedApplied(t *testing.T) {
+	syncPlan := planOf(t, plan.Push, []manifest.ResolvedEntry{hypr}, map[string][]plan.Change{
+		"hypr": {change("old", plan.Delete, plan.KindDir)},
+	})
+	r := &fakeRunner{result: func(s plan.Step) plan.StepResult {
+		if _, ok := s.(plan.DeleteStep); ok {
+			return plan.StepResult{Status: plan.StepOK, Detail: "kept (not empty)"}
+		}
+		return plan.StepResult{Status: plan.StepOK}
+	}}
+
+	res := runApply(t, syncPlan, selectAll(syncPlan), hardOpts, r)
+
+	if len(res.Items) != 1 || res.Items[0].Result == ItemApplied {
+		t.Fatalf("items = %+v, want the kept directory not reported as applied", res.Items)
+	}
+}
+
 func TestApply_HardPullDeletesConfinedToTheRepoEntryRoot(t *testing.T) {
 	syncPlan := twoEntryPlan(t, plan.Pull)
 	r := &fakeRunner{}

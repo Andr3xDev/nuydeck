@@ -6,9 +6,30 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Andr3xDev/nuydeck/tui/internal/fsutil"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
+
+// The write step refuses a path equal to its root, so a file entry needs the parent directory as root.
+func TestSteps_EditedFileEntryWriteRootIsStrictlyAboveTheFile(t *testing.T) {
+	e := resolved(manifest.RootHome, ".zshrc")
+	in := &fakeInspector{
+		diff:  diffReturning(change(".zshrc", plan.Update, plan.KindFile)),
+		kinds: map[string]plan.NodeKind{e.RepoPath: plan.KindFile},
+	}
+	p, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), plan.Push, []manifest.ResolvedEntry{e})
+	if err != nil {
+		t.Fatal(err)
+	}
+	it := p.Items[0]
+
+	writes := stepsOfType[plan.WriteFileStep](flatten(Steps(p, selectAll(p), editOf(it), ApplyOptions{})))
+
+	if len(writes) != 1 || writes[0].Path != e.DestPath || !fsutil.StrictlyWithin(writes[0].Root, writes[0].Path) {
+		t.Fatalf("writes = %+v, want one write to %s with a root strictly above it", writes, e.DestPath)
+	}
+}
 
 // A file entry is itemized by rsync under its base name; the entry endpoints are the file paths themselves.
 func TestFileEntry_PlanAndApplyUseTheFilePathsDirectly(t *testing.T) {

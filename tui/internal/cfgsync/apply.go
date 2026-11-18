@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -19,7 +20,9 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 	var res ApplyResult
 	batches := Steps(syncPlan, sel, syncPlan.Resolutions, opts)
 	if syncPlan.Direction != plan.Restore {
-		batches = append(batches, Batch{Step: plan.SaveStateStep{State: s.syncedState(ctx, syncPlan.Direction)}})
+		if st, warning := s.syncedState(ctx, syncPlan.Direction); warning == "" {
+			batches = append(batches, Batch{Step: plan.SaveStateStep{State: st}})
+		}
 	}
 	steps := make([]plan.Item, len(batches))
 	for i, b := range batches {
@@ -39,6 +42,9 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 	for i, o := range res.Outcomes {
 		for _, it := range owners(i) {
 			_, isCopy := o.Step.(plan.CopyStep)
+			if o.Result.Detail == plan.KeptNotEmpty {
+				continue
+			}
 			if o.Result.Status != plan.StepFailed || isCopy && slices.Contains(o.Result.Applied, it.Change.Path) {
 				applied[it.Key()] = true
 			}
@@ -93,7 +99,7 @@ func Steps(p SyncPlan, sel Selection, res Resolutions, opts ApplyOptions) []Batc
 	}
 	for _, it := range edited {
 		e := res[it.Key()]
-		batches = append(batches, Batch{Step: plan.WriteFileStep{Path: it.DstPath(), Content: e.Content, Mode: e.Mode, Root: it.Dst}, Items: []PlanItem{it}})
+		batches = append(batches, Batch{Step: plan.WriteFileStep{Path: it.DstPath(), Content: e.Content, Mode: e.Mode, Root: writeRoot(it)}, Items: []PlanItem{it}})
 	}
 	if opts.Hard {
 		for _, it := range orderedDeletes(plain) {
@@ -103,18 +109,29 @@ func Steps(p SyncPlan, sel Selection, res Resolutions, opts ApplyOptions) []Batc
 	return batches
 }
 
+// writeRoot is the root an edited item may be written under: a file entry's own path is the
+// destination, so its parent bounds the write.
+func writeRoot(it PlanItem) string {
+	if it.FileEntry {
+		return filepath.Dir(it.Dst)
+	}
+	return it.Dst
+}
+
 type runnerFunc func(ctx context.Context, s plan.Step, progress func(plan.StepProgress)) plan.StepResult
 
 func (f runnerFunc) Run(ctx context.Context, s plan.Step, progress func(plan.StepProgress)) plan.StepResult {
 	return f(ctx, s, progress)
 }
 
-func (s *Service) syncedState(ctx context.Context, dir plan.Direction) state.State {
+// syncedState returns the state to save and the load warning; with a warning the file is unreadable
+// and saving would overwrite it.
+func (s *Service) syncedState(ctx context.Context, dir plan.Direction) (state.State, string) {
 	// Re-read so ignores and state saved since planning are not overwritten.
-	current, _ := s.LoadState(ctx)
+	current, warning := s.LoadState(ctx)
 	current.RepoPath = s.RepoDir
 	current.LastSync = &state.LastSync{Time: s.Now(), Direction: directionName(dir)}
-	return current
+	return current, warning
 }
 
 func (s *Service) logEntry(dir plan.Direction, dryRun bool, items []PlanItem, res ApplyResult) state.LogEntry {

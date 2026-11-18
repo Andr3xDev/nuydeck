@@ -250,6 +250,11 @@ func (h hardStaged) CanApply() bool {
 
 func (hardStaged) Offer() (string, bool) { return "", false }
 
+// A hard run has no per-file choices: the selection is fixed by the plan.
+func (hardStaged) Keys() []key.Binding { return nil }
+
+func (hardStaged) Update(tea.KeyPressMsg) tea.Cmd { return nil }
+
 func (h hardStaged) Build(bool) plan.Plan {
 	h.syncStaged.Build(false)
 	h.confirmed.backup, h.confirmed.hard = true, true
@@ -435,7 +440,7 @@ func (st *syncStaged) row(it cfgsync.PlanItem, w int) listRow {
 func resultLines(res cfgsync.ApplyResult) []string {
 	var lines []string
 	for _, o := range res.Outcomes {
-		if o.Result.Status == plan.StepWouldApply {
+		if o.Result.Status == plan.StepWouldApply || o.Result.Detail == plan.KeptNotEmpty {
 			lines = append(lines, o.Result.Detail)
 		}
 	}

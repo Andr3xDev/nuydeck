@@ -297,6 +297,18 @@ func TestApply_SuccessSavesLastSyncAndLogsEveryItem(t *testing.T) {
 	}
 }
 
+// A state.toml that failed to load is replaced by defaults in memory only; saving them would wipe the user's ignores.
+func TestApply_StateLoadWarningLeavesStateFileUnsaved(t *testing.T) {
+	syncPlan := twoEntryPlan(t, plan.Pull)
+	r := &fakeRunner{}
+	in := &fakeInspector{state: state.State{RepoPath: testRepo}, stateWarn: "state.toml is corrupt, using defaults"}
+	newService(t, in, r).Apply(context.Background(), syncPlan, selectAll(syncPlan), ApplyOptions{}, nil)
+
+	if saves := stepsOfType[plan.SaveStateStep](r.steps); len(saves) != 0 {
+		t.Errorf("SaveStateStep ran despite a state load warning: %+v", saves)
+	}
+}
+
 func TestApply_ForwardsRunnerProgress(t *testing.T) {
 	syncPlan := twoEntryPlan(t, plan.Push)
 	var ticks int

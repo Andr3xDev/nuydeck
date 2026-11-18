@@ -320,6 +320,40 @@ func TestSyncHardReachesTheConfirmWhenItOnlyDeletes(t *testing.T) {
 	d.must(t, "the Hard confirm for a delete-only plan", inStage(s, stageConfirm))
 }
 
+// Spec: ignored items are never overwritten by a hard run, and hard has no resolver to opt them in.
+func TestSyncHardNothingApplicableCannotBeToggledIntoAnApply(t *testing.T) {
+	f := newModeDeps()
+	ignored := resolverItem("ignored", plan.Update)
+	ignored.Ignored = true
+	hardPlan := cfgsync.HardPlan{
+		SyncPlan:  cfgsync.SyncPlan{Direction: plan.Push, Items: []cfgsync.PlanItem{ignored}, Selection: cfgsync.Selection{}},
+		Selection: cfgsync.Selection{},
+		Confirm:   hardConfirmFor(plan.Push),
+	}
+	deps := f.deps()
+	deps.PlanHard = func(context.Context, plan.Direction, []manifest.ResolvedEntry) (cfgsync.HardPlan, error) {
+		return hardPlan, nil
+	}
+	root := NewRoot("", false, deps)
+	root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	s, at, _ := sectionOf[*Sync](root)
+	root.selected, root.focus = at, focusPanel
+	d := newDriver(t, root)
+	d.press(keyPress('P'))
+	d.press(keyDown)
+	d.press(keyEnter)
+	d.must(t, "the preview", inStage(s, stagePreview))
+
+	d.press(keyPress(tea.KeySpace))
+	d.press(keyEnter)
+	d.press(keyPress('y'))
+	d.settle()
+
+	if s.flow.stage == stageConfirm || f.applyCalls.Load() != 0 {
+		t.Errorf("an ignored item reached the hard apply: stage=%v applies=%d", s.flow.stage, f.applyCalls.Load())
+	}
+}
+
 func firstLine(text string) string {
 	line, _, _ := strings.Cut(text, "\n")
 	return line

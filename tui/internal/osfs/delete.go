@@ -12,8 +12,6 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
-const keptNotEmpty = "kept (not empty)"
-
 // parentInsideRoot reports whether the parent of target, with symlinks
 // resolved, stays inside root: a symlinked parent would redirect the operation.
 func parentInsideRoot(root, target string) (bool, error) {
@@ -46,7 +44,7 @@ func deletePath(s plan.DeleteStep) plan.StepResult {
 	case errors.Is(err, fs.ErrNotExist):
 		return plan.StepResult{Status: plan.StepOK, Detail: "already absent"}
 	case errors.Is(err, syscall.ENOTEMPTY):
-		return plan.StepResult{Status: plan.StepOK, Detail: keptNotEmpty}
+		return plan.StepResult{Status: plan.StepOK, Detail: plan.KeptNotEmpty}
 	default:
 		return failed(err)
 	}
