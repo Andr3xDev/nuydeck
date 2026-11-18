@@ -21,7 +21,7 @@ func LoadManifest(path, home string) (Manifest, error) {
 	}
 	name := filepath.Base(path)
 	var m Manifest
-	if err := decodeStrict(name, data, &m); err != nil {
+	if err := DecodeStrict(name, data, &m); err != nil {
 		return Manifest{}, err
 	}
 
@@ -29,21 +29,21 @@ func LoadManifest(path, home string) (Manifest, error) {
 		m.Roots[root] = expandHome(dest, home)
 	}
 	if err := m.Validate(home); err != nil {
-		return Manifest{}, entryFailure(name, data, "entry", err)
+		return Manifest{}, EntryFailure(name, data, "entry", err)
 	}
 	return m, nil
 }
 
-// failAt prefixes msg with the file name and, when known, the 1-based line.
-func failAt(name string, line int, msg string) error {
+// FailAt prefixes msg with the file name and, when known, the 1-based line.
+func FailAt(name string, line int, msg string) error {
 	if line == 0 {
 		return fmt.Errorf("%s: %s", name, msg)
 	}
 	return fmt.Errorf("%s:%d: %s", name, line, msg)
 }
 
-// decodeStrict decodes data into out and rejects unknown keys, reporting file and line.
-func decodeStrict(name string, data []byte, out any) error {
+// DecodeStrict decodes data into out and rejects unknown keys, reporting file and line.
+func DecodeStrict(name string, data []byte, out any) error {
 	dec := toml.NewDecoder(bytes.NewReader(data)).DisallowUnknownFields()
 	err := dec.Decode(out)
 	if err == nil {
@@ -55,19 +55,19 @@ func decodeStrict(name string, data []byte, out any) error {
 	case errors.As(err, &strict) && len(strict.Errors) > 0:
 		first := strict.Errors[0]
 		line, _ := first.Position()
-		return failAt(name, line, fmt.Sprintf("unknown key %q", strings.Join(first.Key(), ".")))
+		return FailAt(name, line, fmt.Sprintf("unknown key %q", strings.Join(first.Key(), ".")))
 	case errors.As(err, &decodeErr):
 		line, _ := decodeErr.Position()
-		return failAt(name, line, decodeErr.Error())
+		return FailAt(name, line, decodeErr.Error())
 	}
-	return failAt(name, 0, err.Error())
+	return FailAt(name, 0, err.Error())
 }
 
-// entryFailure locates a validation error at the header line of the offending [[table]] entry.
-func entryFailure(name string, data []byte, table string, err error) error {
+// EntryFailure locates a validation error at the header line of the offending [[table]] entry.
+func EntryFailure(name string, data []byte, table string, err error) error {
 	var entryErr *EntryError
 	if !errors.As(err, &entryErr) {
-		return failAt(name, 0, err.Error())
+		return FailAt(name, 0, err.Error())
 	}
 	lines := headerLines(data, table)
 	msg := err.Error()
@@ -78,7 +78,7 @@ func entryFailure(name string, data []byte, table string, err error) error {
 	if entryErr.Index < len(lines) {
 		line = lines[entryErr.Index]
 	}
-	return failAt(name, line, msg)
+	return FailAt(name, line, msg)
 }
 
 func expandHome(dest, home string) string {

@@ -59,7 +59,7 @@ func LoadPackages(path string) ([]Package, error) {
 
 func parsePackages(name string, data []byte) ([]Package, error) {
 	var doc packageDoc
-	if err := decodeStrict(name, data, &doc); err != nil {
+	if err := DecodeStrict(name, data, &doc); err != nil {
 		return nil, err
 	}
 	pkgs := make([]Package, len(doc.Package))
@@ -67,7 +67,7 @@ func parsePackages(name string, data []byte) ([]Package, error) {
 		pkgs[i] = Package{Name: p.Name, Source: Source(p.Source), Profiles: p.Profiles, Group: p.Group, Service: p.Service}
 	}
 	if err := ValidatePackages(pkgs); err != nil {
-		return nil, entryFailure(name, data, packageTable, err)
+		return nil, EntryFailure(name, data, packageTable, err)
 	}
 	return pkgs, nil
 }
@@ -80,7 +80,7 @@ func LoadHardware(path string) ([]Driver, error) {
 	}
 	name := filepath.Base(path)
 	var doc hardwareDoc
-	if err := decodeStrict(name, data, &doc); err != nil {
+	if err := DecodeStrict(name, data, &doc); err != nil {
 		return nil, err
 	}
 	drivers := make([]Driver, len(doc.Driver))
@@ -88,7 +88,7 @@ func LoadHardware(path string) ([]Driver, error) {
 		drivers[i] = Driver{ID: d.ID, VendorID: d.VendorID, Packages: d.Packages, Services: d.Services}
 	}
 	if err := ValidateDrivers(drivers); err != nil {
-		return nil, entryFailure(name, data, driverTable, err)
+		return nil, EntryFailure(name, data, driverTable, err)
 	}
 	return drivers, nil
 }
@@ -103,7 +103,7 @@ func LoadSecrets(path string) ([]string, error) {
 		return nil, err
 	}
 	var doc secretsDoc
-	if err := decodeStrict(filepath.Base(path), data, &doc); err != nil {
+	if err := DecodeStrict(filepath.Base(path), data, &doc); err != nil {
 		return nil, err
 	}
 	var names []string
@@ -111,7 +111,7 @@ func LoadSecrets(path string) ([]string, error) {
 		names = append(names, s.Name)
 	}
 	if err := ValidateSecretNames(names); err != nil {
-		return nil, entryFailure(filepath.Base(path), data, secretTable, err)
+		return nil, EntryFailure(filepath.Base(path), data, secretTable, err)
 	}
 	return names, nil
 }
