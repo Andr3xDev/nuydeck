@@ -44,12 +44,13 @@ func TestOpenURL_NonZeroExitWithinGraceIsReturned(t *testing.T) {
 }
 
 func TestOpenURL_StillRunningAfterGraceIsSuccess(t *testing.T) {
-	fakeXdgOpen(t, "sleep 5")
+	t.Cleanup(osexec.SetOpenLinkGrace(50 * time.Millisecond))
+	fakeXdgOpen(t, "exec sleep 1")
 	start := time.Now()
 	if err := osexec.OpenURL(context.Background(), openLinkTestURL); err != nil {
 		t.Fatalf("OpenURL() error = %v, want nil for a handler still running", err)
 	}
-	if elapsed := time.Since(start); elapsed > 4*time.Second {
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Errorf("OpenURL blocked %v, want it to return after the grace window", elapsed)
 	}
 }
