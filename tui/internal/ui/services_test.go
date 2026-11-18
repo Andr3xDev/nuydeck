@@ -45,6 +45,23 @@ func TestServicesEnterListsEveryUnitWithItsLiveState(t *testing.T) {
 	}
 }
 
+func TestServicesMaskedUnitShowsMaskedOnce(t *testing.T) {
+	f := newFakeServices()
+	f.states[unitMasked] = services.UnitState{Found: true, Enabled: "masked", Active: services.ActiveInactive, Masked: true}
+	s := openServices(t, f, nil, false)
+
+	for _, line := range strings.Split(viewOf(s), "\n") {
+		if !strings.Contains(line, unitMasked) {
+			continue
+		}
+		if got := strings.Count(strings.Replace(line, unitMasked, "", 1), "masked"); got != 1 {
+			t.Errorf("masked appears %d times in row %q, want 1", got, line)
+		}
+		return
+	}
+	t.Fatal("no row for the masked unit")
+}
+
 func TestServicesReadsEachScopeOnceWithOnlyItsCatalogUnits(t *testing.T) {
 	f := newFakeServices()
 	openServices(t, f, nil, false)

@@ -17,6 +17,7 @@ const (
 	noTerminalText   = "no terminal available to open the logs"
 	notFoundBadge    = "not found"
 	unknownBadge     = "unknown"
+	maskedBadge      = "masked"
 	unavailableState = "-"
 )
 
@@ -302,8 +303,8 @@ func (s *Services) row(e services.Entry) listRow {
 		flags = append(flags, notFoundBadge)
 	default:
 		row.text = fmt.Sprintf("%s  %s  %s %s", e.Unit, scope, state.Enabled, state.Active)
-		if state.Masked {
-			flags = append(flags, "masked")
+		if state.Masked && string(state.Enabled) != maskedBadge {
+			flags = append(flags, maskedBadge)
 		}
 		if state.Active == services.ActiveFailed {
 			flags = append(flags, "failed")
