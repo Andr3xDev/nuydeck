@@ -32,6 +32,20 @@ func TestReferencesListNameDescriptionAndStatus(t *testing.T) {
 	}
 }
 
+func TestReferencesEnterDetectsStatusesOffTheEventLoop(t *testing.T) {
+	s, _, _ := sectionOf[*References](NewRoot("", false, Deps{References: newFakeReferences().deps()}))
+
+	cmd := s.Enter()
+
+	if cmd == nil || strings.Contains(viewOf(s), "present") {
+		t.Fatalf("Enter probed synchronously (cmd nil = %v), want the detection in a cmd:\n%s", cmd == nil, viewOf(s))
+	}
+	feed(s, cmd)
+	if !strings.Contains(viewOf(s), "present") {
+		t.Errorf("statuses missing after the detection msg arrived:\n%s", viewOf(s))
+	}
+}
+
 func TestReferencesOpenKeyOpensTheSelectedLinkAndStaysActive(t *testing.T) {
 	for _, dryRun := range []bool{false, true} {
 		f := newFakeReferences()

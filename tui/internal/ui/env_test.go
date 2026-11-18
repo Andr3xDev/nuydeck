@@ -43,6 +43,23 @@ func TestEnvEntryAsksForASourceAndReadsNothing(t *testing.T) {
 	}
 }
 
+func TestEnvReenteringOpensOnTheFirstOptionWithoutRememberingTheChoice(t *testing.T) {
+	f := newFakeEnv(envRepoText, envLiveText)
+	s, loc := openEnv(t, f, Deps{})
+	chooseLive(s)
+	readsAfterLive := len(f.reads)
+
+	feed(s, s.Enter())
+
+	if len(f.reads) != readsAfterLive {
+		t.Errorf("reads on re-entry = %v, want none beyond the live read", f.reads)
+	}
+	send(s, keyEnter)
+	if last := f.reads[len(f.reads)-1]; last != loc.RepoPath {
+		t.Errorf("Enter on the reopened popup read %q, want the repo copy %q", last, loc.RepoPath)
+	}
+}
+
 func TestEnvChosenSourceDrivesThePathAndTheList(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -232,6 +249,17 @@ func TestEnvWithoutAHyprEntryReadsNothingAndSaysSo(t *testing.T) {
 	}
 	if !strings.Contains(viewOf(s), "hypr") {
 		t.Errorf("no message about the missing hypr entry:\n%s", viewOf(s))
+	}
+}
+
+func TestEnvWithoutAHyprEntryOffersNoSourceKey(t *testing.T) {
+	f := newFakeEnv(envRepoText, envLiveText)
+	root := NewRoot("", false, Deps{ReadSide: f.ReadSide, Env: EnvDeps{Edit: f.Edit}})
+	s, _, _ := sectionOf[*Env](root)
+	feed(s, s.Enter())
+
+	if claims(s.Keys(), "s") {
+		t.Error("s is listed although there is no source to choose")
 	}
 }
 

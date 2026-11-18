@@ -11,6 +11,8 @@ import (
 
 type linkOpenedMsg struct{ err error }
 
+type referenceStatusesMsg []references.Status
+
 // References lists the external links with whether each is installed and opens the selected one.
 type References struct {
 	svc      *shell
@@ -26,10 +28,14 @@ func newReferences(svc *shell) *References {
 func (r *References) Title() string { return "References" }
 
 func (r *References) Enter() tea.Cmd {
-	for i, ref := range r.svc.References.Catalog {
-		r.statuses[i] = r.svc.References.Status(ref)
+	catalog, status := r.svc.References.Catalog, r.svc.References.Status
+	return func() tea.Msg {
+		statuses := make([]references.Status, len(catalog))
+		for i, ref := range catalog {
+			statuses[i] = status(ref)
+		}
+		return referenceStatusesMsg(statuses)
 	}
-	return nil
 }
 
 func (r *References) Keys() []key.Binding {
@@ -39,6 +45,8 @@ func (r *References) Keys() []key.Binding {
 
 func (r *References) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
+	case referenceStatusesMsg:
+		r.statuses = msg
 	case linkOpenedMsg:
 		r.err = msg.err
 	case tea.KeyPressMsg:

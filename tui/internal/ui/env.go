@@ -61,7 +61,7 @@ func newEnv(svc *shell) *Env {
 
 func (e *Env) Title() string { return "Env" }
 
-// Enter asks for the source again every time: the choice is not kept.
+// Enter asks for the source again every time: the popup always opens on the first option, the previous choice is not remembered, and nothing is read until Enter.
 func (e *Env) Enter() tea.Cmd {
 	e.chosen, e.vars, e.cursor, e.msg, e.preview, e.err, e.loading = false, nil, 0, chooseSourceText, "", nil, false
 	e.seq++
@@ -73,7 +73,7 @@ func (e *Env) openPopup() {
 	if e.locErr != nil {
 		return
 	}
-	e.pick = &choicePick{title: envPopupTitle, options: envSourceOptions, cursor: int(e.source)}
+	e.pick = &choicePick{title: envPopupTitle, options: envSourceOptions}
 }
 
 // Keys claims esc while the popup is open, so esc closes it instead of leaving the panel.
@@ -82,6 +82,8 @@ func (e *Env) Keys() []key.Binding {
 	switch {
 	case e.pick != nil:
 		return []key.Binding{k.Up, k.Down, k.Confirm, k.Back}
+	case e.locErr != nil:
+		return nil
 	case !e.chosen:
 		return []key.Binding{described(k.Start, "source")}
 	}
