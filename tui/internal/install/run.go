@@ -56,6 +56,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 			}
 		}
 	}
+	softFailed := map[string]bool{}
 	runStep := func(runCtx context.Context, index int, ps PlannedStep) error {
 		label, kind := plan.Describe(ps.Step)
 		logItem := func(result string) {
@@ -66,6 +67,12 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 		fail := func(err error) error {
 			logItem("failed")
 			err = scrubError(scrub, fmt.Errorf("%s: %w", label, err))
+			if ps.Optional {
+				softFailed[ps.ID] = true
+				emit(plan.Event{Index: index, Kind: plan.EventLine, Line: "warning: " + err.Error()})
+				emit(plan.Event{Index: index, Kind: plan.EventSkipped})
+				return nil
+			}
 			emit(plan.Event{Index: index, Kind: plan.EventFailed, Err: err})
 			return err
 		}
@@ -93,6 +100,9 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 
 	// confirm asks the owner a yes/no question; the run stops only if ctx ends first.
 	declined := map[string]bool{}
+	declineNotice := func(index int) {
+		emit(plan.Event{Index: index, Kind: plan.EventLine, Line: "Spotify first run not confirmed; spicetify theme not applied"})
+	}
 	confirm := func(index int, ps PlannedStep, c plan.ConfirmStep) error {
 		emit(plan.Event{Index: index, Kind: plan.EventAwaitAck, Line: c.Prompt, YesNo: true})
 		var yes bool
@@ -109,6 +119,9 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 		}
 		items = append(items, state.LogItem{Path: label, Kind: kind, Result: result})
 		emit(plan.Event{Index: index, Kind: plan.EventDone})
+		if !yes {
+			declineNotice(index)
+		}
 		return nil
 	}
 
@@ -121,11 +134,17 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 		if runErr = ctx.Err(); runErr != nil {
 			break
 		}
-		if c, ok := ps.Step.(plan.ConfirmStep); ok && !i.DryRun {
-			if runErr = confirm(index, ps, c); runErr != nil {
-				break
+		if c, ok := ps.Step.(plan.ConfirmStep); ok {
+			if ps.After != "" && softFailed[ps.After] {
+				ps.Skip = "launch failed"
+				declined[c.ID] = true
+				declineNotice(index)
+			} else if ps.Skip == "" && !i.DryRun {
+				if runErr = confirm(index, ps, c); runErr != nil {
+					break
+				}
+				continue
 			}
-			continue
 		}
 		if declined[ps.After] {
 			ps.Skip = "not confirmed"

@@ -40,6 +40,9 @@ func (i *Installer) Plan(ctx context.Context, d Draft) (InstallPlan, error) {
 		return InstallPlan{}, err
 	}
 	i.planLogind(b)
+	if err := i.planDockerGroup(ctx, b, d); err != nil {
+		return InstallPlan{}, err
+	}
 	if err := i.planSync(ctx, b); err != nil {
 		return InstallPlan{}, err
 	}
@@ -47,6 +50,9 @@ func (i *Installer) Plan(ctx context.Context, d Draft) (InstallPlan, error) {
 		return InstallPlan{}, err
 	}
 	if err := i.planShell(ctx, b); err != nil {
+		return InstallPlan{}, err
+	}
+	if err := i.planExtras(b, d); err != nil {
 		return InstallPlan{}, err
 	}
 	i.planServices(b, d)
@@ -62,6 +68,10 @@ func (d Draft) includes(p manifest.Package) bool {
 		return slices.Contains(d.Packages, p.Name)
 	}
 	return slices.Contains(p.Profiles, d.Profile)
+}
+
+func (i *Installer) selected(d Draft, name string) bool {
+	return slices.ContainsFunc(i.Catalog, func(p manifest.Package) bool { return p.Name == name && d.includes(p) })
 }
 
 func (i *Installer) selectedDrivers(d Draft) []manifest.Driver {

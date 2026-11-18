@@ -20,7 +20,7 @@ func TestPhaseOrderMatchesSpec(t *testing.T) {
 	want := []install.Phase{
 		install.PhasePrivilege, install.PhasePacmanConf, install.PhasePacman, install.PhaseParuBootstrap,
 		install.PhaseAur, install.PhaseSystem, install.PhaseConfigs, install.PhaseFonts, install.PhaseEnv,
-		install.PhaseShell, install.PhaseServices, install.PhaseTheme, install.PhaseRecord, install.PhaseReboot,
+		install.PhaseShell, install.PhaseExtras, install.PhaseServices, install.PhaseTheme, install.PhaseRecord, install.PhaseReboot,
 	}
 	for i, p := range want {
 		if int(p) != i {

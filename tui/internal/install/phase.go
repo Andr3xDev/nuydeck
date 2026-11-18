@@ -16,6 +16,7 @@ const (
 	PhaseFonts
 	PhaseEnv
 	PhaseShell
+	PhaseExtras
 	PhaseServices
 	PhaseTheme
 	PhaseRecord
@@ -23,10 +24,15 @@ const (
 )
 
 // PlannedStep is a step tagged with its phase; a non-empty Skip is the reason it will not run.
-// A non-empty After is the ID of the ConfirmStep that gates it.
+// A non-empty After is the ID of the step it depends on: a ConfirmStep gates it (a "no" skips it), or an
+// Optional step whose failure counts as a "no" answer on a ConfirmStep. A ConfirmStep is identified by its
+// own ID; other steps set ID only when something depends on them.
+// A failing Optional step is reported as a warning and does not stop the run.
 type PlannedStep struct {
-	Phase Phase
-	Step  plan.Step
-	Skip  string
-	After string
+	Phase    Phase
+	Step     plan.Step
+	ID       string
+	Skip     string
+	After    string
+	Optional bool
 }

@@ -570,6 +570,55 @@ func TestRun_DryRunSendsTheConfirmToTheRunnerAndMeetsTheGate(t *testing.T) {
 	}
 }
 
+func TestRun_SkippedConfirmDoesNotPromptAndLeavesTheGatedStepsRunnable(t *testing.T) {
+	r := &scriptedRunner{}
+	skipped := confirmGate()
+	skipped.Skip = "already launched once"
+
+	res, events := runInstall(t, newRunInstaller(r), []PlannedStep{skipped, gated("apply"), recordStep()}, make(chan bool))
+
+	if slices.ContainsFunc(events, func(e plan.Event) bool { return e.Kind == plan.EventAwaitAck }) || !hasEvent(events, plan.EventSkipped, 0) {
+		t.Errorf("events = %v, want the confirm skipped without a prompt", describe(events))
+	}
+	if !slices.Contains(r.commandLabels(), "apply") {
+		t.Error("gated step did not run after a skipped confirm")
+	}
+	if res.Err != nil {
+		t.Errorf("Err = %v", res.Err)
+	}
+}
+
+func TestRun_FailedOptionalStepDeclinesItsConfirmAndTheRunContinues(t *testing.T) {
+	r := &scriptedRunner{handle: func(_ context.Context, s plan.Step, _ func(plan.StepProgress)) plan.StepResult {
+		if labelOf(s) == "launch" {
+			return failedStep("spotify crashed")
+		}
+		return plan.StepResult{Status: plan.StepOK}
+	}}
+	launch := planned(PhaseTheme, plan.CommandStep{Label: "launch", Argv: []string{"launch"}})
+	launch.Optional = true
+	launch.ID = "launch"
+	confirm := confirmGate()
+	confirm.After = launch.ID
+
+	res, events := runInstall(t, newRunInstaller(r), []PlannedStep{launch, confirm, gated("apply"), command("later"), recordStep()}, make(chan bool))
+
+	if slices.ContainsFunc(events, func(e plan.Event) bool { return e.Kind == plan.EventAwaitAck || e.Kind == plan.EventFailed }) {
+		t.Errorf("events = %v, want no prompt and no failure", describe(events))
+	}
+	if !slices.ContainsFunc(events, func(e plan.Event) bool {
+		return e.Kind == plan.EventLine && strings.Contains(e.Line, "spicetify theme not applied")
+	}) {
+		t.Errorf("events = %v, want the not-applied notice", describe(events))
+	}
+	if labels := r.commandLabels(); slices.Contains(labels, "apply") || !slices.Contains(labels, "later") {
+		t.Errorf("ran %v, want the gated step skipped and the run to continue", labels)
+	}
+	if res.Err != nil {
+		t.Errorf("Err = %v", res.Err)
+	}
+}
+
 func TestRun_TwoInteractiveStepsStartOneKeepalive(t *testing.T) {
 	var inFlight, peak atomic.Int32
 	r := &scriptedRunner{}
