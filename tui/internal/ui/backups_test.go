@@ -142,6 +142,26 @@ func TestBackupsRestoreIsAFlowOwnedByTheScreen(t *testing.T) {
 	}
 }
 
+func TestBackupsRestorePreviewLoadsRowSides(t *testing.T) {
+	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}}
+	deps := f.deps()
+	deps.ReadSide = func(string) (cfgsync.Side, error) { return textSide("x"), nil }
+	b := newBackups(testServices(deps))
+	b.Update(b.load()())
+
+	_, planCmd := b.Update(keyPress(tea.KeyEnter))
+	_, loadCmd := b.Update(planCmd())
+	if loadCmd == nil {
+		t.Fatal("the restore preview issued no side read")
+	}
+	b.Update(loadCmd())
+
+	st := b.flow.st.(*syncStaged)
+	if s := st.sides[itemKey("a")]; s == nil || !s.loaded {
+		t.Errorf("row side state = %+v, want loaded", s)
+	}
+}
+
 func TestBackupsListReloadsAfterAnApplyAndAfterTheRunCloses(t *testing.T) {
 	f := &fakeBackups{list: []backup.Backup{sampleBackup("/b/1")}}
 	b := loadedBackups(f)

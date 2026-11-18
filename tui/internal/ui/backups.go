@@ -101,7 +101,7 @@ func (b *Backups) Update(msg tea.Msg) (screen, tea.Cmd) {
 			b.flow.reset()
 		}
 		return b, b.load()
-	case plannedMsg:
+	case plannedMsg, sidesMsg, editedMsg:
 		if b.flow.active() {
 			return b, b.flow.Update(msg)
 		}
