@@ -100,8 +100,10 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 
 	// confirm asks the owner a yes/no question; the run stops only if ctx ends first.
 	declined := map[string]bool{}
-	declineNotice := func(index int) {
-		emit(plan.Event{Index: index, Kind: plan.EventLine, Line: "Spotify first run not confirmed; spicetify theme not applied"})
+	declineNotice := func(index int, notice string) {
+		if notice != "" {
+			emit(plan.Event{Index: index, Kind: plan.EventLine, Line: notice})
+		}
 	}
 	confirm := func(index int, ps PlannedStep, c plan.ConfirmStep) error {
 		emit(plan.Event{Index: index, Kind: plan.EventAwaitAck, Line: c.Prompt, YesNo: true})
@@ -120,7 +122,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 		items = append(items, state.LogItem{Path: label, Kind: kind, Result: result})
 		emit(plan.Event{Index: index, Kind: plan.EventDone})
 		if !yes {
-			declineNotice(index)
+			declineNotice(index, c.DeclineNotice)
 		}
 		return nil
 	}
@@ -138,7 +140,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 			if ps.After != "" && softFailed[ps.After] {
 				ps.Skip = "launch failed"
 				declined[c.ID] = true
-				declineNotice(index)
+				declineNotice(index, strings.TrimSpace("launch failed. "+c.DeclineNotice))
 			} else if ps.Skip == "" && !i.DryRun {
 				if runErr = confirm(index, ps, c); runErr != nil {
 					break
@@ -146,7 +148,7 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 				continue
 			}
 		}
-		if declined[ps.After] {
+		if ps.After != "" && declined[ps.After] {
 			ps.Skip = "not confirmed"
 		}
 		if runErr = runStep(ctx, index, ps); runErr != nil {

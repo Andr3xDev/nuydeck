@@ -124,8 +124,11 @@ func (i *Installer) planSpicetify(b *planBuilder, d Draft) error {
 	launchSkip := skipIf(hasInstall && hasPrefs, skipFirstRunDone)
 
 	scheme := "Matte"
-	if d.ThemeVariant == "zenit" {
+	switch d.ThemeVariant {
+	case "zenit":
 		scheme = "Porcelain"
+	case "nadir":
+		scheme = "Gray-Dark3"
 	}
 	b.add(PhaseExtras, plan.CommandStep{Label: "spicetify spotify_path", Argv: []string{"spicetify", "config", "spotify_path", spotifyDir}}, "")
 	b.add(PhaseExtras, plan.CommandStep{Label: "spicetify prefs_path", Argv: []string{"spicetify", "config", "prefs_path", prefs}}, "")
@@ -134,10 +137,11 @@ func (i *Installer) planSpicetify(b *planBuilder, d Draft) error {
 	b.add(PhaseExtras, plan.CommandStep{Label: "copy spicetify theme " + spicetifyTheme, Argv: []string{"cp", "-r", path.Join(cache, spicetifyTheme), themesDir}}, copySkip)
 	b.plan.Steps = append(b.plan.Steps,
 		PlannedStep{Phase: PhaseExtras, Step: plan.CommandStep{Label: "launch spotify-launcher", Argv: []string{"spotify-launcher"}, Interactive: true}, ID: spotifyLaunchID, Skip: launchSkip, Optional: true},
-		PlannedStep{Phase: PhaseExtras, Step: plan.ConfirmStep{ID: spotifyOpenedID, Prompt: "Did Spotify open? Close it, then answer."}, Skip: launchSkip, After: spotifyLaunchID},
+		PlannedStep{Phase: PhaseExtras, Step: plan.ConfirmStep{ID: spotifyOpenedID, Prompt: "Did Spotify open? Close it, then answer.",
+			DeclineNotice: "Spicetify theme not applied; re-run the install later once Spotify has opened once."}, Skip: launchSkip, After: spotifyLaunchID},
 	)
 	gate := func(step plan.CommandStep) {
-		b.plan.Steps = append(b.plan.Steps, PlannedStep{Phase: PhaseExtras, Step: step, After: spotifyOpenedID})
+		b.plan.Steps = append(b.plan.Steps, PlannedStep{Phase: PhaseExtras, Step: step, After: spotifyOpenedID, Optional: true})
 	}
 	gate(plan.CommandStep{Label: "spicetify apply theme", Argv: []string{"spicetify", "config", "current_theme", spicetifyTheme, "color_scheme", scheme,
 		"inject_css", "1", "replace_colors", "1", "overwrite_assets", "1", "inject_theme_js", "1"}})

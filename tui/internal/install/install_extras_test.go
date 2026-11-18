@@ -246,8 +246,33 @@ func TestPlan_SpotifyFirstRunLaunchesThenConfirmsThenGatesTheApplySteps(t *testi
 	}
 }
 
+func TestPlan_GatedSpicetifyStepsAreOptionalSoAFailureOnlyWarns(t *testing.T) {
+	installPlan := newExtrasFixture(t).plan(t)
+
+	applyTheme := []string{"spicetify", "config", "current_theme", "Matte", "color_scheme", "Matte",
+		"inject_css", "1", "replace_colors", "1", "overwrite_assets", "1", "inject_theme_js", "1"}
+	for _, argv := range [][]string{applyTheme, {"spicetify", "backup", "apply"}} {
+		if ps, _ := mustFindStep(t, installPlan, argv...); !ps.Optional {
+			t.Errorf("%v: Optional = false, want a failure to warn and the run to continue", argv)
+		}
+	}
+}
+
+func TestPlan_SpotifyConfirmDeclineNoticeTellsTheOwnerToRerunLater(t *testing.T) {
+	confirms := stepsOfType[plan.ConfirmStep](rawSteps(newExtrasFixture(t).plan(t).Steps))
+	if len(confirms) != 1 {
+		t.Fatalf("confirm steps = %+v, want 1", confirms)
+	}
+
+	got := strings.ToLower(confirms[0].DeclineNotice)
+
+	if !strings.Contains(got, "spicetify") || !strings.Contains(got, "re-run") {
+		t.Errorf("DeclineNotice = %q, want it to mention spicetify and re-running the install later", confirms[0].DeclineNotice)
+	}
+}
+
 func TestPlan_SpicetifyColorSchemeFollowsTheThemeVariant(t *testing.T) {
-	cases := map[string]string{"": "Matte", "nadir": "Matte", "zenit": "Porcelain"}
+	cases := map[string]string{"": "Matte", "nadir": "Gray-Dark3", "zenit": "Porcelain"}
 	for variant, scheme := range cases {
 		t.Run("variant "+variant, func(t *testing.T) {
 			f := newExtrasFixture(t)

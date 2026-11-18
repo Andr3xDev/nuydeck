@@ -8,7 +8,7 @@ func Describe(s Step) (label, kind string) {
 	case CommandStep:
 		return s.Label, "command"
 	case ServiceActionStep:
-		return fmt.Sprintf("%s %s (%s)", s.Action, s.Unit, s.Scope), "service"
+		return s.Label(), "service"
 	case ConfirmStep:
 		return s.Prompt, "confirm"
 	case WriteFileStep:

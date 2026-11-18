@@ -607,15 +607,42 @@ func TestRun_FailedOptionalStepDeclinesItsConfirmAndTheRunContinues(t *testing.T
 		t.Errorf("events = %v, want no prompt and no failure", describe(events))
 	}
 	if !slices.ContainsFunc(events, func(e plan.Event) bool {
-		return e.Kind == plan.EventLine && strings.Contains(e.Line, "spicetify theme not applied")
+		return e.Kind == plan.EventLine && strings.Contains(e.Line, "launch failed")
 	}) {
-		t.Errorf("events = %v, want the not-applied notice", describe(events))
+		t.Errorf("events = %v, want a notice saying the launch failed", describe(events))
+	}
+	if slices.ContainsFunc(events, func(e plan.Event) bool {
+		return e.Kind == plan.EventLine && strings.Contains(e.Line, "not confirmed")
+	}) {
+		t.Errorf("events = %v, a failed launch must not read as an unconfirmed prompt", describe(events))
 	}
 	if labels := r.commandLabels(); slices.Contains(labels, "apply") || !slices.Contains(labels, "later") {
 		t.Errorf("ran %v, want the gated step skipped and the run to continue", labels)
 	}
 	if res.Err != nil {
 		t.Errorf("Err = %v", res.Err)
+	}
+}
+
+func TestRun_DeclinedConfirmEmitsThePlannersNotice(t *testing.T) {
+	const notice = "planner-owned decline notice"
+	confirm := planned(PhaseTheme, plan.ConfirmStep{ID: gateID, Prompt: gatePrompt, DeclineNotice: notice})
+
+	_, events := runInstall(t, newRunInstaller(&scriptedRunner{}), []PlannedStep{confirm, gated("apply"), recordStep()}, answered(false))
+
+	if !slices.ContainsFunc(events, func(e plan.Event) bool { return e.Kind == plan.EventLine && e.Line == notice }) {
+		t.Errorf("events = %v, want the ConfirmStep's DeclineNotice as a line", describe(events))
+	}
+}
+
+func TestRun_DeclinedConfirmWithoutIDLeavesUngatedStepsRunning(t *testing.T) {
+	r := &scriptedRunner{}
+	confirm := planned(PhaseTheme, plan.ConfirmStep{Prompt: gatePrompt})
+
+	runInstall(t, newRunInstaller(r), []PlannedStep{confirm, command("after"), recordStep()}, answered(false))
+
+	if !slices.Contains(r.commandLabels(), "after") {
+		t.Errorf("ran %v, want the step with an empty After to run after a declined confirm without ID", r.commandLabels())
 	}
 }
 

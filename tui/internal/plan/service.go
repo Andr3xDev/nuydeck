@@ -39,6 +39,11 @@ type ServiceActionStep struct {
 	Action Action
 }
 
+// Label names the step for the log and the UI.
+func (s ServiceActionStep) Label() string {
+	return fmt.Sprintf("%s %s (%s)", s.Action, s.Unit, s.Scope)
+}
+
 // Command builds the systemctl CommandStep, refusing an unknown scope, action or unit name.
 func (s ServiceActionStep) Command() (CommandStep, error) {
 	if !slices.Contains(serviceActions, s.Action) {
@@ -47,7 +52,7 @@ func (s ServiceActionStep) Command() (CommandStep, error) {
 	if !unitName.MatchString(s.Unit) {
 		return CommandStep{}, fmt.Errorf("invalid unit name %q", s.Unit)
 	}
-	cmd := CommandStep{Label: fmt.Sprintf("%s %s (%s)", s.Action, s.Unit, s.Scope)}
+	cmd := CommandStep{Label: s.Label()}
 	switch s.Scope {
 	case ScopeSystem:
 		cmd.Argv = []string{"systemctl", string(s.Action), s.Unit}
@@ -64,6 +69,8 @@ func (s ServiceActionStep) Command() (CommandStep, error) {
 type ConfirmStep struct {
 	ID     string
 	Prompt string
+	// DeclineNotice is shown when the answer is "no" or the step this one depends on soft-failed.
+	DeclineNotice string
 }
 
 func (ServiceActionStep) isStep() {}
