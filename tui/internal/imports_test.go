@@ -42,6 +42,7 @@ var domainEdges = map[string][]string{
 	"drift":    {"cfgsync", "backup", "plan", "manifest", "state"},
 	"packages": {"plan", "manifest", "state"},
 	"install":  {"plan", "cfgsync", "packages", "manifest", "state"},
+	"services": {"plan", "manifest"},
 }
 
 func TestInternalPackages_AreAllClassified(t *testing.T) {
