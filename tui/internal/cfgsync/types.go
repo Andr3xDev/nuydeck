@@ -94,5 +94,7 @@ type ApplyResult struct {
 	Nothing  bool
 	Outcomes []StepOutcome
 	Items    []ItemResult
-	Err      error
+	// Notices lists things the owner should know that are not failures, e.g. a skipped state save.
+	Notices []string
+	Err     error
 }

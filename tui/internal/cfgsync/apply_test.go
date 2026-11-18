@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
@@ -302,10 +303,13 @@ func TestApply_StateLoadWarningLeavesStateFileUnsaved(t *testing.T) {
 	syncPlan := twoEntryPlan(t, plan.Pull)
 	r := &fakeRunner{}
 	in := &fakeInspector{state: state.State{RepoPath: testRepo}, stateWarn: "state.toml is corrupt, using defaults"}
-	newService(t, in, r).Apply(context.Background(), syncPlan, selectAll(syncPlan), ApplyOptions{}, nil)
+	res := newService(t, in, r).Apply(context.Background(), syncPlan, selectAll(syncPlan), ApplyOptions{}, nil)
 
 	if saves := stepsOfType[plan.SaveStateStep](r.steps); len(saves) != 0 {
 		t.Errorf("SaveStateStep ran despite a state load warning: %+v", saves)
+	}
+	if len(res.Notices) != 1 || !strings.Contains(res.Notices[0], "last sync not recorded") {
+		t.Errorf("Notices = %q, want one about the unrecorded last sync", res.Notices)
 	}
 }
 

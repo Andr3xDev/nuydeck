@@ -22,6 +22,8 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 	if syncPlan.Direction != plan.Restore {
 		if st, warning := s.syncedState(ctx, syncPlan.Direction); warning == "" {
 			batches = append(batches, Batch{Step: plan.SaveStateStep{State: st}})
+		} else {
+			res.Notices = append(res.Notices, "last sync not recorded: state.toml could not be read")
 		}
 	}
 	steps := make([]plan.Item, len(batches))

@@ -440,12 +440,16 @@ func (st *syncStaged) row(it cfgsync.PlanItem, w int) listRow {
 func resultLines(res cfgsync.ApplyResult) []string {
 	var lines []string
 	for _, o := range res.Outcomes {
-		if o.Result.Status == plan.StepWouldApply || o.Result.Detail == plan.KeptNotEmpty {
+		switch del, isDelete := o.Step.(plan.DeleteStep); {
+		case o.Result.Detail == plan.KeptNotEmpty && isDelete:
+			lines = append(lines, sanitizeLine(fmt.Sprintf("%s: %s", del.Path, o.Result.Detail)))
+		case o.Result.Status == plan.StepWouldApply || o.Result.Detail == plan.KeptNotEmpty:
 			lines = append(lines, o.Result.Detail)
 		}
 	}
 	for _, it := range res.Items {
 		lines = append(lines, fmt.Sprintf("%s: %s:%s", it.Result, it.Key.Root, it.Key.Path))
 	}
+	lines = append(lines, res.Notices...)
 	return lines
 }

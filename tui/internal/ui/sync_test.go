@@ -290,3 +290,18 @@ func TestSyncApplyReportsItsResultAsRunLines(t *testing.T) {
 		t.Errorf("run lines = %q, want the nothing-done line", lines)
 	}
 }
+
+func TestResultLines_KeptDirNamesItsSanitizedPathAndNoticesAreAppended(t *testing.T) {
+	res := cfgsync.ApplyResult{
+		Outcomes: []cfgsync.StepOutcome{{
+			Step:   plan.DeleteStep{Path: "/home/u/.config/hy\x1bpr"},
+			Result: plan.StepResult{Status: plan.StepOK, Detail: plan.KeptNotEmpty},
+		}},
+		Notices: []string{"last sync not recorded: state.toml could not be read"},
+	}
+	got := resultLines(res)
+	want := []string{"/home/u/.config/hypr: " + plan.KeptNotEmpty, res.Notices[0]}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("resultLines = %q, want %q", got, want)
+	}
+}
