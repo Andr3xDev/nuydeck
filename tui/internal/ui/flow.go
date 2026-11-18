@@ -256,6 +256,9 @@ func (f *flow) Keys() []key.Binding {
 	case stageOffer:
 		return []key.Binding{k.Yes, described(k.Confirm, "yes"), k.No, k.Back}
 	case stageConfirm, stageExtra:
+		if f.src.SkipPreview {
+			return []key.Binding{k.Yes, k.Up, k.Down, described(k.Back, "back")}
+		}
 		return []key.Binding{k.Yes, described(k.Back, "back")}
 	}
 	return nil
