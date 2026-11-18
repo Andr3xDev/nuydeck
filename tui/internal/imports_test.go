@@ -32,17 +32,19 @@ var adapterEdges = map[string][]string{
 // Exact in-module imports allowed per domain package (design D1 table). Domain packages without a row
 // (change 3 additions) are bound only by the layer rules.
 var domainEdges = map[string][]string{
-	"fsutil":   {},
-	"editor":   {},
-	"manifest": {"fsutil"},
-	"state":    {"fsutil"},
-	"plan":     {"manifest", "state"},
-	"cfgsync":  {"plan", "manifest", "state", "fsutil", "editor"},
-	"backup":   {"cfgsync", "plan", "manifest", "fsutil"},
-	"drift":    {"cfgsync", "backup", "plan", "manifest", "state"},
-	"packages": {"plan", "manifest", "state"},
-	"install":  {"plan", "cfgsync", "packages", "manifest", "state"},
-	"services": {"plan", "manifest"},
+	"fsutil":     {},
+	"editor":     {},
+	"manifest":   {"fsutil"},
+	"state":      {"fsutil"},
+	"plan":       {"manifest", "state"},
+	"cfgsync":    {"plan", "manifest", "state", "fsutil", "editor"},
+	"backup":     {"cfgsync", "plan", "manifest", "fsutil"},
+	"drift":      {"cfgsync", "backup", "plan", "manifest", "state"},
+	"packages":   {"plan", "manifest", "state"},
+	"install":    {"plan", "cfgsync", "packages", "manifest", "state"},
+	"services":   {"plan", "manifest"},
+	"envvars":    {"plan", "manifest", "state", "editor"},
+	"references": {"plan", "manifest"},
 }
 
 func TestInternalPackages_AreAllClassified(t *testing.T) {
