@@ -19,7 +19,6 @@ const (
 
 	normalModeText = "Normal"
 	hardModeText   = "Hard"
-	modePopupWidth = 30
 )
 
 // applyDoneMsg is broadcast when a sync or restore apply ends, so screens can refresh what it changed.
@@ -29,7 +28,8 @@ type applyDoneMsg struct{ result cfgsync.ApplyResult }
 type Sync struct {
 	svc  *shell
 	flow *flow
-	pick *modePick // the open Normal/Hard popup, nil when closed
+	pick *choicePick // the open Normal/Hard popup, nil when closed
+	dir  plan.Direction
 }
 
 func newSync(svc *shell) *Sync { return &Sync{svc: svc} }
@@ -58,27 +58,23 @@ func (s *Sync) openMode(dir plan.Direction) tea.Cmd {
 	if s.svc.PlanSync == nil || s.svc.PlanHard == nil {
 		return s.startPlan(dir)
 	}
-	s.pick = &modePick{dir: dir}
+	s.pick = &choicePick{title: directionLabel(dir), options: []string{normalModeText, hardModeText}}
+	s.dir = dir
 	return nil
 }
 
 // updatePick moves the choice, takes it on enter and closes the popup on esc.
 func (s *Sync) updatePick(msg tea.KeyPressMsg) tea.Cmd {
-	k := s.svc.keys
-	pick := s.pick
+	picked, closed := s.pick.update(s.svc.keys, msg)
+	hard := s.pick.cursor == 1
+	if closed || picked {
+		s.pick = nil
+	}
 	switch {
-	case key.Matches(msg, k.Up):
-		pick.hard = false
-	case key.Matches(msg, k.Down):
-		pick.hard = true
-	case key.Matches(msg, k.Back):
-		s.pick = nil
-	case key.Matches(msg, k.Confirm):
-		s.pick = nil
-		if pick.hard {
-			return s.startHard(pick.dir)
-		}
-		return s.startPlan(pick.dir)
+	case picked && hard:
+		return s.startHard(s.dir)
+	case picked:
+		return s.startPlan(s.dir)
 	}
 	return nil
 }
@@ -147,24 +143,6 @@ func (s *Sync) View(width, height int) string {
 		return base
 	}
 	return overlayCentered(base, s.pick.popup(s.svc.th, width), width, height)
-}
-
-// modePick is the open Normal/Hard popup of a push or a pull.
-type modePick struct {
-	dir  plan.Direction
-	hard bool
-}
-
-func (m *modePick) popup(th theme, w int) popup {
-	boxW := min(modePopupWidth, w)
-	rows := []listRow{{text: normalModeText}, {text: hardModeText}}
-	cursor := 0
-	if m.hard {
-		cursor = 1
-	}
-	lines, _ := listLines(th, rows, cursor, contentWidth(boxW))
-	h := len(lines) + borderCells
-	return popup{box: renderBox(th, directionLabel(m.dir), lines, boxW, h, true), w: boxW, h: h}
 }
 
 // syncApply is what the owner confirmed: the plan, the selection and the answer to the backup offer.

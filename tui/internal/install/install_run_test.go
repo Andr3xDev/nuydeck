@@ -64,7 +64,7 @@ func labelOf(s plan.Step) string {
 	return c.Label
 }
 
-func runInstallCtx(t *testing.T, ctx context.Context, inst *Installer, steps []PlannedStep, ack <-chan struct{}) (InstallResult, []plan.Event) {
+func runInstallCtx(t *testing.T, ctx context.Context, inst *Installer, steps []PlannedStep, ack <-chan bool) (InstallResult, []plan.Event) {
 	t.Helper()
 	events := make(chan plan.Event, eventBuffer)
 	done := make(chan InstallResult, 1)
@@ -89,7 +89,7 @@ func runInstallCtx(t *testing.T, ctx context.Context, inst *Installer, steps []P
 	}
 }
 
-func runInstall(t *testing.T, inst *Installer, steps []PlannedStep, ack <-chan struct{}) (InstallResult, []plan.Event) {
+func runInstall(t *testing.T, inst *Installer, steps []PlannedStep, ack <-chan bool) (InstallResult, []plan.Event) {
 	t.Helper()
 	return runInstallCtx(t, context.Background(), inst, steps, ack)
 }
@@ -178,8 +178,8 @@ func TestRun_FailureStopsLaterStepsRecordsTheFailureAndNeverReboots(t *testing.T
 		}
 		return plan.StepResult{Status: plan.StepOK}
 	}
-	ack := make(chan struct{}, 1)
-	ack <- struct{}{}
+	ack := make(chan bool, 1)
+	ack <- true
 
 	res, events := runInstall(t, newRunInstaller(r), []PlannedStep{
 		command("one"), command("two"), command("three"), recordStep(), rebootStep(),
@@ -349,8 +349,8 @@ func TestRun_RebootIsRefusedWhenTheSudoCredentialsExpired(t *testing.T) {
 	r := expiringKeepaliveRunner(t)
 	inst := newRunInstaller(r)
 	inst.KeepaliveEvery = keepaliveTick
-	ack := make(chan struct{}, 1)
-	ack <- struct{}{}
+	ack := make(chan bool, 1)
+	ack <- true
 
 	res, _ := runInstall(t, inst, []PlannedStep{sudoHandoff(), sudoProbe(), command("slow"), recordStep(), rebootStep()}, ack)
 
@@ -391,7 +391,7 @@ func TestRun_RebootWaitsForAcknowledgementAfterRecording(t *testing.T) {
 	r := &scriptedRunner{}
 	inst := newRunInstaller(r)
 	events := make(chan plan.Event, eventBuffer)
-	ack := make(chan struct{})
+	ack := make(chan bool)
 	done := make(chan InstallResult, 1)
 	go func() {
 		done <- inst.Run(context.Background(), InstallPlan{Steps: []PlannedStep{command("one"), recordStep(), rebootStep()}}, events, ack)
@@ -413,7 +413,7 @@ func TestRun_RebootWaitsForAcknowledgementAfterRecording(t *testing.T) {
 		t.Errorf("log record at await-ack = %+v, want one install entry with result ok", logs)
 	}
 
-	ack <- struct{}{}
+	ack <- true
 	select {
 	case <-done:
 	case <-time.After(runTimeout):
@@ -432,7 +432,7 @@ func TestRun_CancelWhileAwaitingAcknowledgementDoesNotReboot(t *testing.T) {
 	events := make(chan plan.Event, eventBuffer)
 	done := make(chan InstallResult, 1)
 	go func() {
-		done <- inst.Run(ctx, InstallPlan{Steps: []PlannedStep{command("one"), recordStep(), rebootStep()}}, events, make(chan struct{}))
+		done <- inst.Run(ctx, InstallPlan{Steps: []PlannedStep{command("one"), recordStep(), rebootStep()}}, events, make(chan bool))
 	}()
 
 	awaitEvent(t, events, plan.EventAwaitAck)
@@ -444,6 +444,154 @@ func TestRun_CancelWhileAwaitingAcknowledgementDoesNotReboot(t *testing.T) {
 	}
 	if slices.Contains(r.commandLabels(), "reboot") {
 		t.Error("rebooted after cancel")
+	}
+}
+
+const (
+	gateID     = "spotify"
+	gatePrompt = "Did Spotify open?"
+)
+
+func confirmGate() PlannedStep {
+	return planned(PhaseTheme, plan.ConfirmStep{ID: gateID, Prompt: gatePrompt})
+}
+
+func gated(label string) PlannedStep {
+	ps := planned(PhaseTheme, plan.CommandStep{Label: label, Argv: []string{label}})
+	ps.After = gateID
+	return ps
+}
+
+func answered(answer bool) <-chan bool {
+	ack := make(chan bool, 1)
+	ack <- answer
+	return ack
+}
+
+func loggedItems(t *testing.T, r *scriptedRunner) []state.LogItem {
+	t.Helper()
+	logs := stepsOfType[plan.AppendLogStep](r.ran())
+	if len(logs) != 1 {
+		t.Fatalf("log records = %d, want 1", len(logs))
+	}
+	return logs[0].Entry.Items
+}
+
+func TestRun_ConfirmYesRunsTheGatedStepsAndLogsTheAnswer(t *testing.T) {
+	r := &scriptedRunner{}
+	steps := []PlannedStep{command("one"), confirmGate(), gated("apply"), recordStep()}
+
+	res, events := runInstall(t, newRunInstaller(r), steps, answered(true))
+
+	want := []string{"started:0", "done:0", "await-ack:1", "done:1", "started:2", "done:2", "started:3", "done:3"}
+	if got := describe(events); !slices.Equal(got, want) {
+		t.Errorf("events = %v, want %v", got, want)
+	}
+	if i := slices.IndexFunc(events, func(e plan.Event) bool { return e.Kind == plan.EventAwaitAck }); i < 0 || !events[i].YesNo || events[i].Line != gatePrompt {
+		t.Errorf("await-ack event = %+v, want YesNo with the prompt as Line", events)
+	}
+	if got := r.commandLabels(); !slices.Equal(got, []string{"one", "apply"}) {
+		t.Errorf("commands run = %v, want the confirm kept away from the Runner", got)
+	}
+	if got := loggedItems(t, r); !slices.Contains(got, state.LogItem{Path: gatePrompt, Kind: "confirm", Result: "yes"}) {
+		t.Errorf("log items = %v, want a confirm item with result yes", got)
+	}
+	if res.Err != nil {
+		t.Errorf("Err = %v", res.Err)
+	}
+}
+
+func TestRun_ConfirmNoSkipsTheGatedStepsAndKeepsRunning(t *testing.T) {
+	r := &scriptedRunner{}
+	steps := []PlannedStep{confirmGate(), gated("apply"), command("after"), recordStep()}
+
+	res, events := runInstall(t, newRunInstaller(r), steps, answered(false))
+
+	if !hasEvent(events, plan.EventSkipped, 1) || hasEvent(events, plan.EventStarted, 1) {
+		t.Errorf("events = %v, want the gated step skipped and never started", describe(events))
+	}
+	if got := r.commandLabels(); !slices.Equal(got, []string{"after"}) {
+		t.Errorf("commands run = %v, want only the ungated step", got)
+	}
+	items := loggedItems(t, r)
+	for _, want := range []state.LogItem{
+		{Path: gatePrompt, Kind: "confirm", Result: "no"},
+		{Path: "apply", Kind: "command", Result: "skipped"},
+	} {
+		if !slices.Contains(items, want) {
+			t.Errorf("log items = %v, want %+v", items, want)
+		}
+	}
+	if res.Err != nil {
+		t.Errorf("Err = %v, want the run to continue after a no", res.Err)
+	}
+}
+
+func TestRun_CancelAtTheConfirmPromptStopsWithoutRunningGatedSteps(t *testing.T) {
+	r := &scriptedRunner{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events := make(chan plan.Event, eventBuffer)
+	done := make(chan InstallResult, 1)
+	go func() {
+		done <- newRunInstaller(r).Run(ctx, InstallPlan{Steps: []PlannedStep{confirmGate(), gated("apply"), recordStep()}}, events, make(chan bool, 1))
+	}()
+
+	awaitEvent(t, events, plan.EventAwaitAck)
+	cancel()
+	select {
+	case res := <-done:
+		if !errors.Is(res.Err, context.Canceled) {
+			t.Errorf("Err = %v, want context.Canceled", res.Err)
+		}
+	case <-time.After(runTimeout):
+		t.Fatal("Run did not return after cancel")
+	}
+	if slices.Contains(r.commandLabels(), "apply") {
+		t.Error("gated step ran after cancel")
+	}
+}
+
+func TestRun_DryRunSendsTheConfirmToTheRunnerAndMeetsTheGate(t *testing.T) {
+	r := &scriptedRunner{}
+	inst := newRunInstaller(r)
+	inst.DryRun = true
+
+	_, events := runInstall(t, inst, []PlannedStep{confirmGate(), gated("apply"), recordStep()}, nil)
+
+	if got := stepsOfType[plan.ConfirmStep](r.ran()); len(got) != 1 {
+		t.Errorf("Runner received %d confirm steps, want 1", len(got))
+	}
+	if !slices.Contains(r.commandLabels(), "apply") {
+		t.Error("dry-run did not run the gated step through the Runner")
+	}
+	if slices.ContainsFunc(events, func(e plan.Event) bool { return e.Kind == plan.EventAwaitAck }) {
+		t.Errorf("dry-run emitted await-ack: %v", describe(events))
+	}
+}
+
+func TestRun_TwoInteractiveStepsStartOneKeepalive(t *testing.T) {
+	var inFlight, peak atomic.Int32
+	r := &scriptedRunner{}
+	r.handle = func(ctx context.Context, s plan.Step, _ func(plan.StepProgress)) plan.StepResult {
+		switch {
+		case isSudoProbe(s):
+			peak.Store(max(peak.Load(), inFlight.Add(1)))
+			<-ctx.Done()
+			inFlight.Add(-1)
+		case labelOf(s) == "slow":
+			time.Sleep(8 * keepaliveTick)
+		}
+		return plan.StepResult{Status: plan.StepOK}
+	}
+	inst := newRunInstaller(r)
+	inst.KeepaliveEvery = keepaliveTick
+	interactive := planned(PhaseTheme, plan.CommandStep{Label: "launch", Argv: []string{"launch"}, Interactive: true})
+
+	runInstall(t, inst, []PlannedStep{sudoHandoff(), interactive, command("slow")}, nil)
+
+	if got := peak.Load(); got != 1 {
+		t.Errorf("concurrent keepalive probes peaked at %d, want 1 keepalive", got)
 	}
 }
 
@@ -649,8 +797,8 @@ func TestRun_FailedRecordBlocksTheReboot(t *testing.T) {
 		}
 		return plan.StepResult{Status: plan.StepOK}
 	}
-	ack := make(chan struct{}, 1)
-	ack <- struct{}{}
+	ack := make(chan bool, 1)
+	ack <- true
 
 	res, events := runInstall(t, newRunInstaller(r), []PlannedStep{command("one"), recordStep(), rebootStep()}, ack)
 

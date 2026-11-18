@@ -173,7 +173,7 @@ func stepLabel(step plan.Step) string {
 // while it runs the pane's own hint applies.
 func installFooter(th theme, cw int, r *run) []string {
 	switch {
-	case r.awaitAck:
+	case r.awaitAck && r.question == "":
 		return append(styled(th.warning, wrap("Install complete. Press Enter to reboot, ctrl+c to quit without rebooting.", cw)), wrap(finalNotices, cw)...)
 	case r.done && r.err != nil:
 		return append(styled(th.err, wrap("Install stopped: "+r.err.Error(), cw)), styled(th.muted, wrap(runCloseText, cw))...)

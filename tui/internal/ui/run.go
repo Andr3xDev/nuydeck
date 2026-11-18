@@ -15,6 +15,7 @@ const (
 	maxOutputLines  = 2000
 	runNoticeText   = "a run is in progress, ctrl+c cancels"
 	runAckText      = "Press enter to continue, ctrl+c to quit."
+	runAnswerText   = "y yes, n or esc no, ctrl+c cancels the run."
 	runCloseText    = "Press esc to close, q to quit."
 	runTitlePrefix  = "Output - "
 	runFinishedText = "Finished."
@@ -31,7 +32,7 @@ type runEnd struct {
 type runRequest struct {
 	title  string
 	work   func(ctx context.Context, emit func(plan.Event)) runEnd
-	ack    chan struct{}
+	ack    chan bool
 	steps  []string
 	footer func(th theme, cw int, r *run) []string
 }
@@ -67,10 +68,11 @@ type run struct {
 	title    string
 	cancel   context.CancelFunc
 	events   chan tea.Msg
-	ack      chan struct{}
+	ack      chan bool
 	lines    []outLine // capped at maxOutputLines, oldest dropped first
 	done     bool
 	awaitAck bool
+	question string // the y/n question being asked, empty at a plain acknowledgement
 	notice   bool
 	follow   bool
 	scroll   scroller
@@ -143,7 +145,11 @@ func (r *run) add(e plan.Event) {
 	r.mark(e)
 	switch {
 	case e.Kind == plan.EventAwaitAck:
-		r.awaitAck, r.notice = true, false
+		r.awaitAck, r.notice, r.question = true, false, ""
+		if e.YesNo {
+			r.question = e.Line
+			return
+		}
 	case e.Kind == plan.EventLine:
 		r.push(outLine{e.Line})
 	case e.Kind == plan.EventFailed && e.Err != nil:
@@ -160,6 +166,15 @@ func (r *run) finish(end runEnd) {
 	r.push(outLine{runFinishedText})
 }
 
+// sendAnswer leaves the prompt; the channel holds one answer, so a second press cannot block.
+func (r *run) sendAnswer(yes bool) {
+	r.awaitAck = false
+	select {
+	case r.ack <- yes:
+	default:
+	}
+}
+
 func (r *run) scrollBy(delta int) {
 	if delta < 0 {
 		r.follow = false
@@ -172,6 +187,8 @@ func (r *run) hint() string {
 	switch {
 	case r.notice:
 		return runNoticeText
+	case r.awaitAck && r.question != "":
+		return r.question + " " + runAnswerText
 	case r.awaitAck:
 		return runAckText
 	case r.done:
@@ -186,6 +203,8 @@ func (r *run) keys(k keyMap) []key.Binding {
 	switch {
 	case r.done:
 		return append(scroll, described(k.Back, "close"))
+	case r.awaitAck && r.question != "":
+		return append(scroll, k.Yes, k.No, k.CancelRun)
 	case r.awaitAck:
 		return append(scroll, described(k.Confirm, "continue"), described(k.CancelRun, "quit"))
 	}

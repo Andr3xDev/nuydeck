@@ -182,7 +182,7 @@ func (f *flow) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			f.body.by(k.step(msg))
 			return nil
 		}
-		return f.answer(key.Matches(msg, k.Yes))
+		return f.answer(k.answer(msg, true) == answerYes)
 	}
 	return nil
 }

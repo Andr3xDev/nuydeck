@@ -254,7 +254,7 @@ func (s *Install) startRun() tea.Cmd {
 	for i, ps := range installPlan.Steps {
 		steps[i] = stepLabel(ps.Step)
 	}
-	ack := make(chan struct{}, 1)
+	ack := make(chan bool, 1)
 	req := runRequest{title: "Install", ack: ack, steps: steps, footer: installFooter, work: func(ctx context.Context, emit func(plan.Event)) runEnd {
 		events := make(chan plan.Event)
 		result := make(chan install.InstallResult, 1)

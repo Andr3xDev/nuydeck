@@ -16,7 +16,7 @@ import (
 )
 
 // gatedRun starts a run whose work waits for proceed, then does after.
-func gatedRun(t *testing.T, ack chan struct{}, proceed chan struct{}, after func(ctx context.Context, emit func(plan.Event)) runEnd) *driver {
+func gatedRun(t *testing.T, ack chan bool, proceed chan struct{}, after func(ctx context.Context, emit func(plan.Event)) runEnd) *driver {
 	t.Helper()
 	return runningRoot(t, false, focusPanel, ack, func(ctx context.Context, emit func(plan.Event)) runEnd {
 		<-proceed
@@ -26,7 +26,7 @@ func gatedRun(t *testing.T, ack chan struct{}, proceed chan struct{}, after func
 
 func TestRunNoticeClearsWhenTheRebootPromptAppears(t *testing.T) {
 	proceed := make(chan struct{})
-	d := gatedRun(t, make(chan struct{}, 1), proceed, func(ctx context.Context, emit func(plan.Event)) runEnd {
+	d := gatedRun(t, make(chan bool, 1), proceed, func(ctx context.Context, emit func(plan.Event)) runEnd {
 		emit(plan.Event{Kind: plan.EventAwaitAck})
 		<-ctx.Done()
 		return runEnd{}

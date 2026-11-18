@@ -21,7 +21,7 @@ const waitTimeout = 2 * time.Second
 type fakeInstaller struct {
 	plan    install.InstallPlan
 	runs    atomic.Int32
-	run     func(ctx context.Context, events chan<- plan.Event, ack <-chan struct{}) install.InstallResult
+	run     func(ctx context.Context, events chan<- plan.Event, ack <-chan bool) install.InstallResult
 	drafted []install.Draft
 }
 
@@ -30,7 +30,7 @@ func (f *fakeInstaller) Plan(_ context.Context, d install.Draft) (install.Instal
 	return f.plan, nil
 }
 
-func (f *fakeInstaller) Run(ctx context.Context, _ install.InstallPlan, events chan<- plan.Event, ack <-chan struct{}) install.InstallResult {
+func (f *fakeInstaller) Run(ctx context.Context, _ install.InstallPlan, events chan<- plan.Event, ack <-chan bool) install.InstallResult {
 	f.runs.Add(1)
 	defer close(events)
 	if f.run == nil {
@@ -150,7 +150,7 @@ func TestInstallRunsNothingBeforeExplicitConfirm(t *testing.T) {
 func awaitingAck(t *testing.T) (d *driver, acked, cancelled chan struct{}) {
 	t.Helper()
 	acked, cancelled = make(chan struct{}, 1), make(chan struct{}, 1)
-	f := &fakeInstaller{plan: onePlan(), run: func(ctx context.Context, events chan<- plan.Event, ack <-chan struct{}) install.InstallResult {
+	f := &fakeInstaller{plan: onePlan(), run: func(ctx context.Context, events chan<- plan.Event, ack <-chan bool) install.InstallResult {
 		events <- plan.Event{Index: 0, Kind: plan.EventAwaitAck}
 		select {
 		case <-ack:

@@ -43,7 +43,7 @@ type Deps struct {
 // InstallDeps is what the Install section needs besides the shell.
 type InstallDeps struct {
 	Plan       func(ctx context.Context, d install.Draft) (install.InstallPlan, error)
-	Run        func(ctx context.Context, p install.InstallPlan, events chan<- plan.Event, ack <-chan struct{}) install.InstallResult
+	Run        func(ctx context.Context, p install.InstallPlan, events chan<- plan.Event, ack <-chan bool) install.InstallResult
 	DetectGPUs func(ctx context.Context) ([]install.PCIDevice, error)
 	// PathKind checks whether a path exists without opening it.
 	PathKind func(path string) (plan.NodeKind, error)

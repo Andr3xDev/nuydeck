@@ -18,4 +18,5 @@ type Event struct {
 	Kind         EventKind
 	Line         string
 	Err          error
+	YesNo        bool // with EventAwaitAck: Line is a yes/no question, not a plain acknowledgement
 }

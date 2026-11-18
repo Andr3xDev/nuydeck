@@ -106,7 +106,7 @@ func (d *driver) runDone() bool { return d.root.run != nil && d.root.run.done }
 func (d *driver) view() string { return ansi.Strip(d.root.View().Content) }
 
 // runningRoot sends a run request from the Install section and returns once the work goroutine has started.
-func runningRoot(t *testing.T, dryRun bool, f focus, ack chan struct{}, work testWork) *driver {
+func runningRoot(t *testing.T, dryRun bool, f focus, ack chan bool, work testWork) *driver {
 	t.Helper()
 	root := NewRoot("", dryRun, Deps{})
 	root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -242,12 +242,14 @@ func TestRunQuitsFromAFinishedRun(t *testing.T) {
 func awaitingReboot(t *testing.T) (d *driver, acked, cancelled chan struct{}) {
 	t.Helper()
 	acked, cancelled = make(chan struct{}, 1), make(chan struct{}, 1)
-	ack := make(chan struct{}, 1)
+	ack := make(chan bool, 1)
 	d = runningRoot(t, false, focusPanel, ack, func(ctx context.Context, emit func(plan.Event)) runEnd {
 		emit(plan.Event{Kind: plan.EventAwaitAck})
 		select {
-		case <-ack:
-			acked <- struct{}{}
+		case yes := <-ack:
+			if yes {
+				acked <- struct{}{}
+			}
 		case <-ctx.Done():
 			cancelled <- struct{}{}
 		}
@@ -255,6 +257,103 @@ func awaitingReboot(t *testing.T) (d *driver, acked, cancelled chan struct{}) {
 	})
 	d.must(t, "the reboot prompt", func() bool { return d.root.run.awaitAck })
 	return d, acked, cancelled
+}
+
+const confirmPromptText = "Did Spotify open?"
+
+// awaitingConfirm drives a run to a y/n question; answers receives what the work read from the ack channel.
+func awaitingConfirm(t *testing.T) (d *driver, answers chan bool, cancelled chan struct{}) {
+	t.Helper()
+	answers, cancelled = make(chan bool, 1), make(chan struct{}, 1)
+	ack := make(chan bool, 1)
+	d = runningRoot(t, false, focusPanel, ack, func(ctx context.Context, emit func(plan.Event)) runEnd {
+		emit(plan.Event{Kind: plan.EventAwaitAck, Line: confirmPromptText, YesNo: true})
+		select {
+		case yes := <-ack:
+			answers <- yes
+		case <-ctx.Done():
+			cancelled <- struct{}{}
+		}
+		return runEnd{}
+	})
+	d.must(t, "the confirm prompt", func() bool { return d.root.run.awaitAck })
+	return d, answers, cancelled
+}
+
+func TestRunConfirmPromptAnswersYesNoAndEsc(t *testing.T) {
+	cases := []struct {
+		name string
+		key  tea.KeyPressMsg
+		want bool
+	}{
+		{"y proceeds", keyPress('y'), true},
+		{"n skips", keyPress('n'), false},
+		{"esc skips", keyEsc, false},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			d, answers, _ := awaitingConfirm(t)
+			if !strings.Contains(d.view(), confirmPromptText) {
+				t.Errorf("view lacks the question %q:\n%s", confirmPromptText, d.view())
+			}
+
+			d.press(tt.key)
+
+			select {
+			case got := <-answers:
+				if got != tt.want {
+					t.Errorf("answer = %v, want %v", got, tt.want)
+				}
+			case <-time.After(waitTimeout):
+				t.Fatal("the answer never reached the work")
+			}
+			if d.root.run.awaitAck {
+				t.Error("the prompt stayed after the answer")
+			}
+		})
+	}
+}
+
+func TestRunConfirmPromptKeepsTheQuestionOnOtherKeysAndEnter(t *testing.T) {
+	d, answers, cancelled := awaitingConfirm(t)
+
+	for _, k := range []tea.KeyPressMsg{keyPress('x'), keyPress('q'), keyPress(tea.KeySpace), keyEnter} {
+		d.press(k)
+	}
+	d.settle()
+
+	if d.quit || len(answers) != 0 || len(cancelled) != 0 || !d.root.run.awaitAck || !d.root.run.notice {
+		t.Fatalf("quit=%v answers=%d cancelled=%d prompt=%v notice=%v, want the prompt kept with the run notice",
+			d.quit, len(answers), len(cancelled), d.root.run.awaitAck, d.root.run.notice)
+	}
+}
+
+func TestRunCtrlCAtAConfirmPromptCancelsTheRunWithoutQuitting(t *testing.T) {
+	d, answers, cancelled := awaitingConfirm(t)
+
+	d.press(keyCtrlC)
+
+	if !receives(cancelled) {
+		t.Fatal("ctrl+c did not cancel the run")
+	}
+	if d.quit || len(answers) != 0 {
+		t.Errorf("quit=%v answers=%d, want the run cancelled and nothing answered", d.quit, len(answers))
+	}
+}
+
+func TestRunKeybarAtAConfirmPromptListsYesNoAndCancelButNotEnter(t *testing.T) {
+	d, _, _ := awaitingConfirm(t)
+
+	bindings := d.root.run.keys(newKeyMap())
+
+	for _, k := range []string{"y", "n", "ctrl+c"} {
+		if !claims(bindings, k) {
+			t.Errorf("keybar lacks %q", k)
+		}
+	}
+	if claims(bindings, "enter") {
+		t.Error("keybar offers enter at a y/n question")
+	}
 }
 
 func TestRunRebootPromptAcceptsEnterOnly(t *testing.T) {

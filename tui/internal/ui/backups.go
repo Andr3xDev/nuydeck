@@ -116,11 +116,11 @@ func (b *Backups) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
 		return b, b.flow.Update(msg)
 	}
 	if b.confirm {
-		switch {
-		case key.Matches(msg, b.keys.Yes):
+		switch b.keys.answer(msg, false) {
+		case answerYes:
 			b.confirm = false
 			return b, b.delete()
-		case key.Matches(msg, b.keys.No, b.keys.Back):
+		case answerNo:
 			b.confirm = false
 		}
 		return b, nil

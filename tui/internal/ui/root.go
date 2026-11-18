@@ -228,7 +228,7 @@ func (r *Root) routeRun(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case keys.step(msg) != 0:
 		run.scrollBy(keys.step(msg))
-	case run.done && key.Matches(msg, keys.Quit), ctrlC && run.awaitAck:
+	case run.done && key.Matches(msg, keys.Quit), ctrlC && run.awaitAck && run.question == "":
 		return r.quit()
 	case run.done && key.Matches(msg, keys.Back):
 		r.run = nil
@@ -236,12 +236,10 @@ func (r *Root) routeRun(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case run.done:
 	case ctrlC:
 		run.cancel()
-	case run.awaitAck && key.Matches(msg, keys.Confirm):
-		run.awaitAck = false
-		select {
-		case run.ack <- struct{}{}:
-		default:
-		}
+	case run.awaitAck && run.question == "" && key.Matches(msg, keys.Confirm):
+		run.sendAnswer(true)
+	case run.awaitAck && run.question != "" && keys.answer(msg, false) != answerNone:
+		run.sendAnswer(keys.answer(msg, false) == answerYes)
 	default:
 		run.notice = true
 	}

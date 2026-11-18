@@ -22,7 +22,7 @@ var (
 
 // Run executes the plan in order and closes events when it returns.
 // It stops at the first failure; the Record step still runs, the Reboot step never does after a failure, cancel or in dry-run.
-func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- plan.Event, ack <-chan struct{}) InstallResult {
+func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- plan.Event, ack <-chan bool) InstallResult {
 	defer close(events)
 	if len(p.Blocking) > 0 {
 		return InstallResult{Err: errors.Join(p.Blocking...)}
@@ -91,7 +91,29 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 		return fail(err)
 	}
 
+	// confirm asks the owner a yes/no question; the run stops only if ctx ends first.
+	declined := map[string]bool{}
+	confirm := func(index int, ps PlannedStep, c plan.ConfirmStep) error {
+		emit(plan.Event{Index: index, Kind: plan.EventAwaitAck, Line: c.Prompt, YesNo: true})
+		var yes bool
+		select {
+		case yes = <-ack:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		declined[c.ID] = !yes
+		label, kind := plan.Describe(ps.Step)
+		result := "no"
+		if yes {
+			result = "yes"
+		}
+		items = append(items, state.LogItem{Path: label, Kind: kind, Result: result})
+		emit(plan.Event{Index: index, Kind: plan.EventDone})
+		return nil
+	}
+
 	var runErr error
+	keepaliveStarted := false
 	for index, ps := range p.Steps {
 		if ps.Phase >= PhaseRecord {
 			break
@@ -99,10 +121,20 @@ func (i *Installer) Run(parent context.Context, p InstallPlan, events chan<- pla
 		if runErr = ctx.Err(); runErr != nil {
 			break
 		}
+		if c, ok := ps.Step.(plan.ConfirmStep); ok && !i.DryRun {
+			if runErr = confirm(index, ps, c); runErr != nil {
+				break
+			}
+			continue
+		}
+		if declined[ps.After] {
+			ps.Skip = "not confirmed"
+		}
 		if runErr = runStep(ctx, index, ps); runErr != nil {
 			break
 		}
-		if c, ok := ps.Step.(plan.CommandStep); ok && c.Interactive && !i.DryRun {
+		if c, ok := ps.Step.(plan.CommandStep); ok && c.Interactive && !i.DryRun && !keepaliveStarted {
+			keepaliveStarted = true
 			i.startKeepalive(ctx, &keepalive, &sudoExpired)
 		}
 	}
