@@ -61,11 +61,19 @@ path = "satty"
 
 [[entry]]
 root = "config"
+path = "startpage"
+
+[[entry]]
+root = "config"
 path = "starship"
 
 [[entry]]
 root = "config"
 path = "starship.toml"
+
+[[entry]]
+root = "config"
+path = "xsettingsd"
 
 [[entry]]
 root = "config"
@@ -136,15 +144,6 @@ path = "Geist"
 [[entry]]
 root = "fonts"
 path = "soulmaze"
-
-# themes root
-[[entry]]
-root = "themes"
-path = "Abysal-Obsidian"
-
-[[entry]]
-root = "themes"
-path = "Abysal-Marble"
 
 [[exclude]]
 root = "config"

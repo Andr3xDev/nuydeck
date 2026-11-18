@@ -3,6 +3,7 @@ package cfgsync
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -56,6 +57,18 @@ func TestPlanSync_MissingSourceSkipsEntryAndPlanContinues(t *testing.T) {
 	// The notice field shape is a design choice; match on the rendered plan.
 	if !strings.Contains(fmt.Sprintf("%+v", syncPlan), "skipped: source missing") {
 		t.Errorf("plan carries no %q notice: %+v", "skipped: source missing", syncPlan)
+	}
+}
+
+func TestPlanSync_SourcelessEntryIsNoticeNotError(t *testing.T) {
+	geist := resolved(manifest.RootFonts, "Geist")
+	in := &fakeInspector{kinds: map[string]plan.NodeKind{geist.RepoPath: plan.KindNone}}
+	syncPlan, err := newService(t, in, &fakeRunner{}).PlanSync(context.Background(), plan.Push, []manifest.ResolvedEntry{geist})
+	if err != nil {
+		t.Fatalf("source-less entry must not fail the plan: %v", err)
+	}
+	if want := "skipped: source missing: fonts/Geist"; !slices.Contains(syncPlan.Notices, want) {
+		t.Errorf("notices = %v, want %q", syncPlan.Notices, want)
 	}
 }
 

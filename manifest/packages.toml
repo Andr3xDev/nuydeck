@@ -377,6 +377,12 @@ profiles = ["minimal", "full"]
 group = "theme"
 
 [[package]]
+name = "ttf-ms-fonts"
+source = "aur"
+profiles = ["full"]
+group = "fonts"
+
+[[package]]
 name = "noto-fonts-emoji"
 source = "pacman"
 profiles = ["minimal", "full"]
@@ -628,8 +634,8 @@ group = "development"
 [[package]]
 name = "sassc"
 source = "pacman"
-profiles = ["full"]
-group = "development"
+profiles = ["minimal", "full"]
+group = "theme"
 
 [[package]]
 name = "pacman-contrib"
