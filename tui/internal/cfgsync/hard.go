@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
@@ -39,7 +40,12 @@ func HardConfirm(p SyncPlan) string {
 	var deletes, untouched []string
 	overwrites := 0
 	for _, it := range p.Items {
-		key := ignoreKey(it.Key())
+		key := strings.Map(func(r rune) rune {
+			if unicode.IsControl(r) {
+				return '?'
+			}
+			return r
+		}, ignoreKey(it.Key()))
 		switch {
 		case it.Ignored || it.Blocked:
 			untouched = append(untouched, key)

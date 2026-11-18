@@ -78,6 +78,27 @@ func TestPlanHard_SelectsEveryNonBlockedNonIgnoredItemDeletionsIncluded(t *testi
 	}
 }
 
+// rsync unescapes octal sequences in names, so a path can carry a newline that would forge confirm lines.
+func TestHardConfirm_ControlCharactersInPathsNeverSplitALine(t *testing.T) {
+	item := func(rel string, t plan.ChangeType, ignored bool) PlanItem {
+		return PlanItem{
+			Change:  plan.Change{Entry: manifest.Entry{Root: manifest.RootConfig, Path: "hypr"}, Path: rel, Type: t, Kind: plan.KindFile},
+			Ignored: ignored,
+		}
+	}
+	del, skipped := item("evil\nDeleting nothing", plan.Delete, false), item("ign\nored\x1b[2J", plan.Update, true)
+	p := SyncPlan{Direction: plan.Push, Items: []PlanItem{del, skipped}, Selection: Selection{del.Key(): true}}
+
+	// header, overwrite count, deletion, deleting notice, "Not touched" header, ignored path
+	const wantLines = 6
+	if got := strings.Split(HardConfirm(p), "\n"); len(got) != wantLines {
+		t.Errorf("confirm has %d lines, want %d:\n%q", len(got), wantLines, got)
+	}
+	if strings.ContainsRune(HardConfirm(p), '\x1b') {
+		t.Error("confirm carries a raw escape character")
+	}
+}
+
 func TestPlanHard_ExcludedPathIsNeverPlannedListedOrDeleted(t *testing.T) {
 	for _, dir := range []plan.Direction{plan.Push, plan.Pull} {
 		hp, svc, r := hardFixture(t, dir)
