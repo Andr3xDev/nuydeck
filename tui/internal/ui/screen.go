@@ -33,8 +33,8 @@ type leaver interface{ Leave() }
 // canceller is implemented by screens with background work to stop on quit.
 type canceller interface{ Cancel() }
 
-// services is what every screen gets from the shell.
-type services struct {
+// shell is what every screen gets from the shell.
+type shell struct {
 	Deps
 	ctx    context.Context
 	dryRun bool
@@ -44,4 +44,4 @@ type services struct {
 	running func() bool
 }
 
-func (s *services) runIsActive() bool { return s.running != nil && s.running() }
+func (s *shell) runIsActive() bool { return s.running != nil && s.running() }

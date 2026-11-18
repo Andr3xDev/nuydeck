@@ -72,7 +72,7 @@ type Root struct {
 	focus         focus
 	showHelp      bool
 	dryRun        bool
-	svc           *services
+	svc           *shell
 	help          help.Model
 	cancel        context.CancelFunc
 	run           *run
@@ -86,7 +86,7 @@ func NewRoot(variant string, dryRun bool, deps Deps) *Root {
 	h := help.New()
 	h.Styles = help.DefaultStyles(th.Dark)
 	ctx, cancel := context.WithCancel(context.Background())
-	svc := &services{Deps: deps, ctx: ctx, dryRun: dryRun, th: th, keys: newKeyMap()}
+	svc := &shell{Deps: deps, ctx: ctx, dryRun: dryRun, th: th, keys: newKeyMap()}
 	r := &Root{dryRun: dryRun, svc: svc, help: h, cancel: cancel}
 	svc.running = func() bool { return r.run != nil }
 	for _, spec := range sectionSpecs {

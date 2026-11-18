@@ -78,7 +78,7 @@ type Install struct {
 	summary  viewport.Model
 }
 
-func newInstall(svc *services) *Install {
+func newInstall(svc *shell) *Install {
 	input := textinput.New()
 	input.EchoMode = textinput.EchoNone
 	summary := viewport.New()

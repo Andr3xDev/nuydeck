@@ -18,7 +18,7 @@ type errorScreen struct {
 	fix string
 }
 
-func newErrorScreen(svc *services, err error, fix string) errorScreen {
+func newErrorScreen(svc *shell, err error, fix string) errorScreen {
 	return errorScreen{err: err, th: svc.th, fix: fix}
 }
 

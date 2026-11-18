@@ -18,8 +18,8 @@ func press(t *testing.T, r *Root, k tea.KeyPressMsg) (*Root, tea.Cmd) {
 }
 
 // testServices wires a screen under test the way NewRoot does.
-func testServices(deps Deps) *services {
-	return &services{Deps: deps, ctx: context.Background(), th: ForVariant(""), keys: newKeyMap()}
+func testServices(deps Deps) *shell {
+	return &shell{Deps: deps, ctx: context.Background(), th: ForVariant(""), keys: newKeyMap()}
 }
 
 func TestRootQuitKeys(t *testing.T) {

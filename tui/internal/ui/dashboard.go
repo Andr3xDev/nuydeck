@@ -53,7 +53,7 @@ type dashboardInfo struct {
 	lastSync *state.LastSync
 }
 
-func newDashboard(svc *services) *Dashboard {
+func newDashboard(svc *shell) *Dashboard {
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(svc.th.accent))
 	return &Dashboard{
 		ctx:     svc.ctx,

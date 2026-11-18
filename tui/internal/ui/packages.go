@@ -65,7 +65,7 @@ type Packages struct {
 	form   *addForm
 }
 
-func newPackages(svc *services) *Packages {
+func newPackages(svc *shell) *Packages {
 	return &Packages{deps: svc.Packages, keys: svc.keys, th: svc.th}
 }
 

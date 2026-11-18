@@ -59,7 +59,7 @@ type plannedMsg struct {
 
 // flow is the one write interaction: plan -> preview -> offer -> confirm -> extra -> run.
 type flow struct {
-	svc *services
+	svc *shell
 	src flowSource
 
 	stage flowStage
@@ -71,7 +71,7 @@ type flow struct {
 	body  scroller
 }
 
-func newFlow(svc *services, src flowSource) *flow { return &flow{svc: svc, src: src} }
+func newFlow(svc *shell, src flowSource) *flow { return &flow{svc: svc, src: src} }
 
 // start plans the flow's selection-less plan.
 func (f *flow) start() tea.Cmd {

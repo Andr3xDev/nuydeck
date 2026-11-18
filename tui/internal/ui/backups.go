@@ -20,7 +20,7 @@ type backupsMsg struct {
 
 // Backups lists existing backups and owns the restore flow and the delete confirm.
 type Backups struct {
-	svc          *services
+	svc          *shell
 	listBackups  func(ctx context.Context) ([]backup.Backup, error)
 	planRestore  func(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
 	deleteBackup func(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
@@ -34,7 +34,7 @@ type Backups struct {
 	flow         *flow
 }
 
-func newBackups(svc *services) *Backups {
+func newBackups(svc *shell) *Backups {
 	return &Backups{
 		svc:          svc,
 		listBackups:  svc.ListBackups,

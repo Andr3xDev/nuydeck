@@ -27,12 +27,12 @@ type applyDoneMsg struct{ result cfgsync.ApplyResult }
 
 // Sync starts a push or a pull and hosts its flow.
 type Sync struct {
-	svc  *services
+	svc  *shell
 	flow *flow
 	pick *modePick // the open Normal/Hard popup, nil when closed
 }
 
-func newSync(svc *services) *Sync { return &Sync{svc: svc} }
+func newSync(svc *shell) *Sync { return &Sync{svc: svc} }
 
 func (s *Sync) Title() string  { return "Sync" }
 func (s *Sync) Enter() tea.Cmd { return nil }
@@ -176,7 +176,7 @@ type syncApply struct {
 }
 
 // request runs the confirmed apply through Deps.ApplySync; the run ends with the result broadcast as applyDoneMsg.
-func (a syncApply) request(svc *services, title string) runRequest {
+func (a syncApply) request(svc *shell, title string) runRequest {
 	opts := cfgsync.ApplyOptions{Backup: a.backup, Mandatory: a.hard, Hard: a.hard, DryRun: svc.dryRun}
 	return runRequest{title: title, work: func(ctx context.Context, emit func(plan.Event)) runEnd {
 		line := func(text string) {
@@ -196,7 +196,7 @@ func (a syncApply) request(svc *services, title string) runRequest {
 }
 
 // syncSource is the flow of a push, a pull and a restore: each previews a cfgsync.SyncPlan and applies it through Deps.ApplySync.
-func syncSource(svc *services, title string, planFn func(context.Context) (cfgsync.SyncPlan, error)) flowSource {
+func syncSource(svc *shell, title string, planFn func(context.Context) (cfgsync.SyncPlan, error)) flowSource {
 	var confirmed syncApply
 	return flowSource{
 		Title: title,
@@ -212,7 +212,7 @@ func syncSource(svc *services, title string, planFn func(context.Context) (cfgsy
 }
 
 // hardSource is the hard reinstall flow: no preview, a forced backup and the plan's own confirm text.
-func hardSource(svc *services, title string, planFn func(context.Context) (cfgsync.HardPlan, error)) flowSource {
+func hardSource(svc *shell, title string, planFn func(context.Context) (cfgsync.HardPlan, error)) flowSource {
 	var confirmed syncApply
 	return flowSource{
 		Title:       title,
@@ -263,7 +263,7 @@ func (h hardStaged) Build(bool) plan.Plan {
 
 // syncStaged is the preview of a SyncPlan with a selection per item.
 type syncStaged struct {
-	svc       *services
+	svc       *shell
 	syncPlan  cfgsync.SyncPlan
 	sel       cfgsync.Selection
 	res       cfgsync.Resolutions // edits the owner accepted; only selected items reach the apply
@@ -277,7 +277,7 @@ type syncStaged struct {
 	editNotices []string
 }
 
-func newSyncStaged(svc *services, p cfgsync.SyncPlan, confirmed *syncApply) *syncStaged {
+func newSyncStaged(svc *shell, p cfgsync.SyncPlan, confirmed *syncApply) *syncStaged {
 	sel := cfgsync.Selection{}
 	maps.Copy(sel, p.Selection)
 	return &syncStaged{
