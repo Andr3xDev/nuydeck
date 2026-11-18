@@ -58,6 +58,16 @@ func (r Runner) Run(ctx context.Context, s plan.Step, progress func(plan.StepPro
 		return done(manifest.AppendPackage(s.Path, s.Entry))
 	case plan.CommandStep:
 		return r.runCommand(ctx, s, progress)
+	case plan.ServiceActionStep:
+		cmd, err := s.Command()
+		if err != nil {
+			return failure(err)
+		}
+		res := r.runCommand(ctx, cmd, progress)
+		if res.Err != nil {
+			res.Err = fmt.Errorf("%s %s: %w", s.Action, s.Unit, res.Err)
+		}
+		return res
 	}
 	return plan.StepResult{Status: plan.StepFailed, Err: fmt.Errorf("unsupported step %T", s)}
 }
