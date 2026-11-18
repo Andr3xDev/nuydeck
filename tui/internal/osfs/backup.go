@@ -28,10 +28,13 @@ func (r Runner) backup(ctx context.Context, s plan.BackupStep) plan.StepResult {
 		return failed(err)
 	}
 	for _, f := range s.Files {
-		realEntry, err := fsutil.ResolveExisting(filepath.Join(s.Roots[f.Root], f.Path))
+		entry := filepath.Join(s.Roots[f.Root], f.Path)
+		// Only the parent is resolved: the entry itself may be a dangling link, backed up as a link.
+		realParent, err := fsutil.ResolveExisting(filepath.Dir(entry))
 		if err != nil {
 			return failed(err)
 		}
+		realEntry := filepath.Join(realParent, filepath.Base(entry))
 		if fsutil.Within(realEntry, realBackupsDir) || fsutil.Within(realBackupsDir, realEntry) {
 			return failed(fmt.Errorf("refusing backup: %s lies inside %s/%s", backupsDir, f.Root, f.Path))
 		}

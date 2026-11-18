@@ -66,6 +66,29 @@ func TestBackupStep_WritesCompleteBackupWithoutPartial(t *testing.T) {
 	}
 }
 
+func TestBackupStep_DanglingLinkAtDestinationIsBackedUpAsALink(t *testing.T) {
+	requireRsync(t)
+	home := t.TempDir()
+	dest := filepath.Join(home, ".config")
+	if err := os.MkdirAll(filepath.Join(dest, "nvim"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(home, "missing"), filepath.Join(dest, "nvim", "init.lua")); err != nil {
+		t.Fatal(err)
+	}
+	ts := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+
+	res := osfs.Runner{Home: home, Now: fixedNow(ts)}.Run(context.Background(), backupStep(dest, "nvim/init.lua"), nil)
+
+	if res.Status != plan.StepOK {
+		t.Fatalf("status = %v, err = %v", res.Status, res.Err)
+	}
+	saved := filepath.Join(backup.BackupsDir(home), "20260301-100000", "config", "nvim", "init.lua")
+	if got, err := os.Readlink(saved); err != nil || got != filepath.Join(home, "missing") {
+		t.Fatalf("backed up link = %q, %v", got, err)
+	}
+}
+
 func TestBackupStep_SameTimestampGetsCollisionSuffix(t *testing.T) {
 	requireRsync(t)
 	home := t.TempDir()
