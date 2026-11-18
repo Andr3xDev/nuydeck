@@ -48,6 +48,13 @@ func TestLoad_ValidEntryWithOptionalDetection(t *testing.T) {
 	}
 }
 
+func TestLoad_AcceptsAbsoluteDetectPath(t *testing.T) {
+	got, err := references.Load(writeTemp(t, lines(entry(`name = "a"`, `description = "d"`, `url = "https://x.org"`, `detect_path = "/usr/share/x"`)...)))
+	if err != nil || len(got) != 1 || got[0].DetectPath != "/usr/share/x" {
+		t.Errorf("Load() = %+v, %v, want the absolute detect_path accepted", got, err)
+	}
+}
+
 func TestLoad_ErrorsNameFileLineAndOffender(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -60,6 +67,7 @@ func TestLoad_ErrorsNameFileLineAndOffender(t *testing.T) {
 		{"empty url", lines(entry(`name = "a"`, `description = "d"`)...), []string{"references.toml:3", `"a"`}},
 		{"missing description", lines(entry(`name = "a"`, `url = "https://x.org"`)...), []string{"references.toml:3", `"a"`}},
 		{"empty name", lines(entry(`name = ""`, `description = "d"`, `url = "https://x.org"`)...), []string{"references.toml:3"}},
+		{"relative detect_path", lines(entry(`name = "a"`, `description = "d"`, `url = "https://x.org"`, `detect_path = "dev/x"`)...), []string{"references.toml:3", `"a"`, "detect_path"}},
 		{"unknown key", lines(entry(`name = "a"`, `description = "d"`, `url = "https://x.org"`, `colour = "red"`)...), []string{"references.toml:7", "colour"}},
 		{"duplicate name", lines(append(entry(`name = "a"`, `description = "d"`, `url = "https://x.org"`),
 			``, `[[reference]]`, `name = "a"`, `description = "d"`, `url = "https://y.org"`)...), []string{"references.toml:8", `"a"`, "line 3"}},

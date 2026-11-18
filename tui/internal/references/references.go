@@ -70,6 +70,9 @@ func validate(refs []Reference) error {
 		if err := validateURL(r.URL); err != nil {
 			return fail(-1, fmt.Errorf("reference %q: %w", r.Name, err))
 		}
+		if r.DetectPath != "" && !strings.HasPrefix(r.DetectPath, "~/") && !filepath.IsAbs(r.DetectPath) {
+			return fail(-1, fmt.Errorf("reference %q: detect_path %q must start with ~/ or be absolute", r.Name, r.DetectPath))
+		}
 		if prior, dup := seen[r.Name]; dup {
 			return fail(prior, fmt.Errorf("duplicate reference %q", r.Name))
 		}
