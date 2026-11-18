@@ -18,6 +18,8 @@ type keyMap struct {
 	Add, Ignore, SkipSecrets key.Binding
 	CancelRun                key.Binding
 	Edit, Diff               key.Binding
+	Start, Stop, Restart     key.Binding
+	Mask, Unmask, Logs, Link key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -44,6 +46,13 @@ func newKeyMap() keyMap {
 		CancelRun:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "cancel")),
 		Edit:        key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 		Diff:        key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "view diff")),
+		Start:       key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "start")),
+		Stop:        key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "stop")),
+		Restart:     key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "restart")),
+		Mask:        key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "mask")),
+		Unmask:      key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "unmask")),
+		Logs:        key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "logs")),
+		Link:        key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open link")),
 	}
 }
 

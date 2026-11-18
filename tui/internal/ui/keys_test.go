@@ -16,7 +16,7 @@ import (
 func keyedStages(t *testing.T) map[string]screen {
 	t.Helper()
 	stages := map[string]screen{}
-	for _, s := range NewRoot("", false, Deps{}).sections {
+	for _, s := range NewRoot("", false, fullDeps()).sections {
 		stages["section "+s.title] = s.screen
 	}
 

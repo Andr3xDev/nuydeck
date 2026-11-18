@@ -9,6 +9,8 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/references"
+	"github.com/Andr3xDev/nuydeck/tui/internal/services"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 )
 
@@ -36,8 +38,36 @@ type Deps struct {
 	ReadSide func(path string) (cfgsync.Side, error)
 	Edit     func(ctx context.Context, req cfgsync.EditRequest) (cfgsync.EditResult, error)
 
-	Install  InstallDeps
-	Packages PackagesDeps
+	Install    InstallDeps
+	Packages   PackagesDeps
+	Services   ServicesDeps
+	Env        EnvDeps
+	References ReferencesDeps
+}
+
+// ServicesDeps is what the Services section needs besides the shell. Err replaces only that section.
+type ServicesDeps struct {
+	Catalog []services.Entry
+	Err     error
+	// State reads the live state of the units of one scope.
+	State func(ctx context.Context, scope plan.Scope, units []string) (map[string]services.UnitState, error)
+	Plan  func(ctx context.Context, req services.Request, state services.UnitState) (plan.Plan, error)
+	// Run executes a confirmed plan, reporting each step to emit.
+	Run func(ctx context.Context, p plan.Plan, emit func(plan.Event)) error
+}
+
+// EnvDeps is what the Env section needs besides the shell and Deps.ReadSide.
+type EnvDeps struct {
+	// Edit hands the file to the editor; preview is the dry-run line, empty after a real edit.
+	Edit func(ctx context.Context, path string) (preview string, err error)
+}
+
+// ReferencesDeps is what the References section needs. Err replaces only that section.
+type ReferencesDeps struct {
+	Catalog []references.Reference
+	Err     error
+	Status  func(ref references.Reference) references.Status
+	Open    func(ctx context.Context, url string) error
 }
 
 // InstallDeps is what the Install section needs besides the shell.

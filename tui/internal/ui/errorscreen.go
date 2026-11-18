@@ -8,6 +8,9 @@ import (
 const (
 	manifestFile = "manifest/paths.toml"
 	catalogFiles = "manifest/packages.toml, hardware.toml or secrets.toml"
+
+	servicesFile   = "manifest/services.toml"
+	referencesFile = "manifest/references.toml"
 )
 
 // errorScreen replaces the sections that depend on an invalid manifest: no operation is offered.
