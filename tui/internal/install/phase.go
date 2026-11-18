@@ -23,8 +23,10 @@ const (
 )
 
 // PlannedStep is a step tagged with its phase; a non-empty Skip is the reason it will not run.
+// A non-empty After is the ID of the ConfirmStep that gates it.
 type PlannedStep struct {
 	Phase Phase
 	Step  plan.Step
 	Skip  string
+	After string
 }

@@ -29,6 +29,15 @@ func TestPhaseOrderMatchesSpec(t *testing.T) {
 	}
 }
 
+func TestPlannedStepAfterNamesTheGatingConfirmStep(t *testing.T) {
+	gate := plan.ConfirmStep{ID: "spotify-opened", Prompt: "Did Spotify open?"}
+	gated := install.PlannedStep{Phase: install.PhaseShell, Step: plan.CommandStep{Label: "spicetify backup apply"}, After: gate.ID}
+
+	if gated.After != "spotify-opened" {
+		t.Fatalf("After = %q, want the ConfirmStep ID", gated.After)
+	}
+}
+
 func TestPlannedStepCarriesPhaseStepAndSkipReason(t *testing.T) {
 	step := plan.CommandStep{Label: "install pacman packages (1)", Argv: []string{"pacman", "-Syu"}, Sudo: true}
 	planned := install.PlannedStep{Phase: install.PhasePacman, Step: step, Skip: "already installed"}
