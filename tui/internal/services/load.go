@@ -1,7 +1,6 @@
 package services
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,10 +56,7 @@ func Load(path string) ([]Entry, error) {
 		entries[i] = Entry{Unit: r.Unit, Scope: plan.Scope(r.Scope), Source: Source(r.Source), Critical: r.Critical, Description: r.Description}
 	}
 	if err := validate(entries); err != nil {
-		// EntryFailure flattens the error to text; re-wrap so callers can still errors.As the *EntryError.
-		var entryErr *manifest.EntryError
-		errors.As(err, &entryErr)
-		return nil, &manifest.EntryError{Index: entryErr.Index, Prior: entryErr.Prior, Err: manifest.EntryFailure(name, data, serviceTable, err)}
+		return nil, manifest.EntryFailure(name, data, serviceTable, err)
 	}
 	return entries, nil
 }

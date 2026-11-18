@@ -78,7 +78,7 @@ func EntryFailure(name string, data []byte, table string, err error) error {
 	if entryErr.Index < len(lines) {
 		line = lines[entryErr.Index]
 	}
-	return FailAt(name, line, msg)
+	return &EntryError{Index: entryErr.Index, Prior: entryErr.Prior, Err: FailAt(name, line, msg)}
 }
 
 func expandHome(dest, home string) string {
