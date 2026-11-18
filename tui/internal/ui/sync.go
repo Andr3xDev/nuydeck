@@ -16,6 +16,10 @@ import (
 const (
 	backupOfferText = "Back up the affected files first? [Y/n]"
 	nothingDoneText = "Nothing was done."
+
+	normalModeText = "Normal"
+	hardModeText   = "Hard"
+	modePopupWidth = 30
 )
 
 // applyDoneMsg is broadcast when a sync or restore apply ends, so screens can refresh what it changed.
@@ -25,6 +29,7 @@ type applyDoneMsg struct{ result cfgsync.ApplyResult }
 type Sync struct {
 	svc  *services
 	flow *flow
+	pick *modePick // the open Normal/Hard popup, nil when closed
 }
 
 func newSync(svc *services) *Sync { return &Sync{svc: svc} }
@@ -33,10 +38,58 @@ func (s *Sync) Title() string  { return "Sync" }
 func (s *Sync) Enter() tea.Cmd { return nil }
 
 func (s *Sync) Keys() []key.Binding {
-	if s.flow.active() {
+	k := s.svc.keys
+	switch {
+	case s.flow.active():
 		return s.flow.Keys()
+	case s.pick != nil:
+		return []key.Binding{k.Up, k.Down, k.Confirm, k.Back}
 	}
-	return []key.Binding{s.svc.keys.Pull, s.svc.keys.Push}
+	return []key.Binding{k.Pull, k.Push}
+}
+
+// CapturesText is true at the hard confirm, so any key reaches it: only y goes on and every other key declines.
+func (s *Sync) CapturesText() bool {
+	return s.flow.active() && s.flow.src.SkipPreview && s.flow.stage >= stageConfirm
+}
+
+// openMode asks Normal or Hard; without a hard planner there is nothing to ask.
+func (s *Sync) openMode(dir plan.Direction) tea.Cmd {
+	if s.svc.PlanSync == nil || s.svc.PlanHard == nil {
+		return s.startPlan(dir)
+	}
+	s.pick = &modePick{dir: dir}
+	return nil
+}
+
+// updatePick moves the choice, takes it on enter and closes the popup on esc.
+func (s *Sync) updatePick(msg tea.KeyPressMsg) tea.Cmd {
+	k := s.svc.keys
+	pick := s.pick
+	switch {
+	case key.Matches(msg, k.Up):
+		pick.hard = false
+	case key.Matches(msg, k.Down):
+		pick.hard = true
+	case key.Matches(msg, k.Back):
+		s.pick = nil
+	case key.Matches(msg, k.Confirm):
+		s.pick = nil
+		if pick.hard {
+			return s.startHard(pick.dir)
+		}
+		return s.startPlan(pick.dir)
+	}
+	return nil
+}
+
+// startHard plans a hard reinstall, which goes straight to its confirm.
+func (s *Sync) startHard(dir plan.Direction) tea.Cmd {
+	entries := s.svc.Entries
+	s.flow = newFlow(s.svc, hardSource(s.svc, directionLabel(dir), func(ctx context.Context) (cfgsync.HardPlan, error) {
+		return s.svc.PlanHard(ctx, dir, entries)
+	}))
+	return s.flow.start()
 }
 
 // startPlan always recomputes: a plan is never cached (spec).
@@ -66,10 +119,12 @@ func (s *Sync) Update(msg tea.Msg) (screen, tea.Cmd) {
 		switch {
 		case s.flow.active():
 			return s, s.flow.Update(msg)
+		case s.pick != nil:
+			return s, s.updatePick(msg)
 		case key.Matches(msg, keys.Pull):
-			return s, s.startPlan(plan.Pull)
+			return s, s.openMode(plan.Pull)
 		case key.Matches(msg, keys.Push):
-			return s, s.startPlan(plan.Push)
+			return s, s.openMode(plan.Push)
 		}
 	}
 	return s, nil
@@ -87,7 +142,29 @@ func (s *Sync) View(width, height int) string {
 		return s.flow.box(s.Title(), width, height)
 	}
 	hint := styled(s.svc.th.muted, wrap("Press p to pull or P to push.", contentWidth(width)))
-	return screenBox(s.svc.th, s.Title(), hint, width, height)
+	base := screenBox(s.svc.th, s.Title(), hint, width, height)
+	if s.pick == nil {
+		return base
+	}
+	return overlayCentered(base, s.pick.popup(s.svc.th, width), width, height)
+}
+
+// modePick is the open Normal/Hard popup of a push or a pull.
+type modePick struct {
+	dir  plan.Direction
+	hard bool
+}
+
+func (m *modePick) popup(th theme, w int) popup {
+	boxW := min(modePopupWidth, w)
+	rows := []listRow{{text: normalModeText}, {text: hardModeText}}
+	cursor := 0
+	if m.hard {
+		cursor = 1
+	}
+	lines, _ := listLines(th, rows, cursor, contentWidth(boxW))
+	h := len(lines) + borderCells
+	return popup{box: renderBox(th, directionLabel(m.dir), lines, boxW, h, true), w: boxW, h: h}
 }
 
 // syncApply is what the owner confirmed: the plan, the selection and the answer to the backup offer.
@@ -95,11 +172,12 @@ type syncApply struct {
 	plan   cfgsync.SyncPlan
 	sel    cfgsync.Selection
 	backup bool
+	hard   bool
 }
 
 // request runs the confirmed apply through Deps.ApplySync; the run ends with the result broadcast as applyDoneMsg.
 func (a syncApply) request(svc *services, title string) runRequest {
-	opts := cfgsync.ApplyOptions{Backup: a.backup, DryRun: svc.dryRun}
+	opts := cfgsync.ApplyOptions{Backup: a.backup, Mandatory: a.hard, Hard: a.hard, DryRun: svc.dryRun}
 	return runRequest{title: title, work: func(ctx context.Context, emit func(plan.Event)) runEnd {
 		line := func(text string) {
 			if text != "" {
@@ -131,6 +209,51 @@ func syncSource(svc *services, title string, planFn func(context.Context) (cfgsy
 		},
 		Run: func(plan.Plan) runRequest { return confirmed.request(svc, title) },
 	}
+}
+
+// hardSource is the hard reinstall flow: no preview, a forced backup and the plan's own confirm text.
+func hardSource(svc *services, title string, planFn func(context.Context) (cfgsync.HardPlan, error)) flowSource {
+	var confirmed syncApply
+	return flowSource{
+		Title:       title,
+		SkipPreview: true,
+		Plan: func(ctx context.Context, _ []string) (staged, error) {
+			hp, err := planFn(ctx)
+			if err != nil {
+				return nil, err
+			}
+			p := hp.SyncPlan
+			p.Selection = hp.Selection
+			return hardStaged{newSyncStaged(svc, p, &confirmed), hp.Confirm}, nil
+		},
+		Run: func(plan.Plan) runRequest { return confirmed.request(svc, title) },
+	}
+}
+
+// hardStaged is a syncStaged whose confirm applies the hard plan: deletions count as work and no backup is offered.
+type hardStaged struct {
+	*syncStaged
+	confirm string
+}
+
+func (h hardStaged) CanApply() bool {
+	if h.svc.ApplySync == nil {
+		return false
+	}
+	for _, it := range h.syncPlan.Items {
+		if h.sel[it.Key()] {
+			return true
+		}
+	}
+	return false
+}
+
+func (hardStaged) Offer() (string, bool) { return "", false }
+
+func (h hardStaged) Build(bool) plan.Plan {
+	h.syncStaged.Build(false)
+	h.confirmed.backup, h.confirmed.hard = true, true
+	return plan.Plan{Confirm: h.confirm}
 }
 
 // syncStaged is the preview of a SyncPlan with a selection per item.
