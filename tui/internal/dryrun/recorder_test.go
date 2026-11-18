@@ -12,6 +12,13 @@ import (
 
 var _ plan.Runner = Recorder{}
 
+func TestRecorderShowsCommandDirectory(t *testing.T) {
+	res := Recorder{}.Run(context.Background(), plan.CommandStep{Argv: []string{"./install.sh", "-l"}, Dir: "/work/theme"}, nil)
+	if want := "would run (in /work/theme) ./install.sh -l"; res.Detail != want {
+		t.Errorf("Detail = %q, want %q", res.Detail, want)
+	}
+}
+
 func TestRecorderRendersEveryStepWithoutIO(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

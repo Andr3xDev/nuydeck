@@ -39,6 +39,9 @@ func render(s plan.Step) string {
 		if s.Sudo {
 			argv = append([]string{"sudo"}, argv...)
 		}
+		if s.Dir != "" {
+			return fmt.Sprintf("would run (in %s) %s", s.Dir, strings.Join(argv, " "))
+		}
 		return "would run " + strings.Join(argv, " ")
 	case plan.WriteFileStep:
 		detail := fmt.Sprintf("would write %s (%d bytes)", s.Path, len(s.Content))
