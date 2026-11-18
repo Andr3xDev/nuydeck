@@ -26,6 +26,7 @@ type Deps struct {
 
 	Drift        func(ctx context.Context, entries []manifest.ResolvedEntry) <-chan drift.DriftResult
 	PlanSync     func(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.SyncPlan, error)
+	PlanHard     func(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.HardPlan, error)
 	NeedsBackup  func(p cfgsync.SyncPlan, sel cfgsync.Selection) bool
 	ApplySync    func(ctx context.Context, p cfgsync.SyncPlan, sel cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult
 	ListBackups  func(ctx context.Context) ([]backup.Backup, error)

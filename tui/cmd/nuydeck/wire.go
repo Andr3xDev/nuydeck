@@ -69,6 +69,9 @@ func (i Inspector) LoadState(context.Context) (state.State, string) {
 func wireSync(deps *ui.Deps, svc *cfgsync.Service, backups *backup.Service, drifter *drift.Service) {
 	deps.Drift = drifter.Drift
 	deps.PlanSync = svc.PlanSync
+	deps.PlanHard = func(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.HardPlan, error) {
+		return cfgsync.PlanHard(ctx, svc, dir, entries)
+	}
 	deps.NeedsBackup = svc.NeedsBackup
 	deps.ApplySync = svc.Apply
 	deps.ListBackups = backups.ListBackups
