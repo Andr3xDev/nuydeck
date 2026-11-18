@@ -47,7 +47,6 @@ func (s *Service) PlanSync(ctx context.Context, dir plan.Direction, entries []ma
 func ignoreKey(k ItemKey) string { return string(k.Root) + ":" + k.Path }
 
 // defaultSelected leaves deletions unselected: only a hard reinstall removes files.
-// PlanSync has already flagged ignored items, so the ignores list is not read again.
 func defaultSelected(it PlanItem) bool {
 	return !it.Blocked && !it.Ignored && it.Change.Type != plan.Delete
 }
