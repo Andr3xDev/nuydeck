@@ -166,6 +166,57 @@ func TestReadSystemFile_AllowedDropInPathIsReadNotRefused(t *testing.T) {
 	}
 }
 
+func TestInGroup_RunsIdForUserAndParsesGroups(t *testing.T) {
+	tests := []struct {
+		name   string
+		group  string
+		stdout string
+		want   bool
+	}{
+		{"member", "docker", "alice wheel docker\n", true},
+		{"not a member", "docker", "alice wheel\n", false},
+		{"no substring match", "docker", "alice dockerhub\n", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &fakeRun{stdout: tt.stdout}
+			got, err := sysx.Probe{Run: f.run, User: "alice"}.InGroup(context.Background(), tt.group)
+			if err != nil || got != tt.want {
+				t.Fatalf("InGroup() = (%v, %v), want (%v, nil)", got, err, tt.want)
+			}
+			f.onlyCall(t, call{"id", []string{"-nG", "alice"}})
+		})
+	}
+}
+
+func TestInGroup_CommandFailureIsAnError(t *testing.T) {
+	f := &fakeRun{err: errors.New("spawn failed")}
+	if _, err := (sysx.Probe{Run: f.run, User: "alice"}).InGroup(context.Background(), "docker"); err == nil {
+		t.Fatal("InGroup() error = nil, want the spawn failure")
+	}
+}
+
+func TestCanSudoWithoutPrompt_ReflectsSudoNExit(t *testing.T) {
+	tests := []struct {
+		name string
+		run  fakeRun
+		want bool
+	}{
+		{"cached credentials", fakeRun{}, true},
+		{"needs a password", fakeRun{result: execx.Result{ExitCode: 1}}, false},
+		{"spawn error", fakeRun{err: &exec.Error{Name: "sudo", Err: exec.ErrNotFound}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := tt.run
+			if got := (sysx.Probe{Run: f.run}).CanSudoWithoutPrompt(context.Background()); got != tt.want {
+				t.Errorf("CanSudoWithoutPrompt() = %v, want %v", got, tt.want)
+			}
+			f.onlyCall(t, call{"sudo", []string{"-n", "-v"}})
+		})
+	}
+}
+
 func TestProbeCommandsAreReadOnly(t *testing.T) {
 	f := &fakeRun{stdout: lspciNvidia}
 	p := sysx.Probe{Run: f.run, User: "alice"}

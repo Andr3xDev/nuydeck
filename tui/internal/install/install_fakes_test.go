@@ -17,6 +17,11 @@ type fakeProbe struct {
 	shell        string
 	files        map[string][]byte
 	root         bool
+	groups       map[string]bool
+}
+
+func (p *fakeProbe) InGroup(_ context.Context, group string) (bool, error) {
+	return p.groups[group], nil
 }
 
 func (p *fakeProbe) DetectGPUs(context.Context) ([]PCIDevice, error) { return nil, nil }

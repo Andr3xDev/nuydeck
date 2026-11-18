@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/execx"
@@ -93,6 +94,21 @@ func (p Probe) LoginShell(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("getent passwd %s: malformed entry", p.User)
 	}
 	return fields[passwdShellField], nil
+}
+
+// InGroup reports whether the user's `id -nG` output lists group exactly.
+func (p Probe) InGroup(ctx context.Context, group string) (bool, error) {
+	out, err := p.output(ctx, "id", "-nG", p.User)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(strings.Fields(out), group), nil
+}
+
+// CanSudoWithoutPrompt reports whether sudo has cached credentials; any failure counts as no.
+func (p Probe) CanSudoWithoutPrompt(ctx context.Context) bool {
+	_, err := p.output(ctx, "sudo", "-n", "-v")
+	return err == nil
 }
 
 func (Probe) HasCommand(name string) bool {

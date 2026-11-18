@@ -11,4 +11,6 @@ type SystemProbe interface {
 	// ReadSystemFile reads an allow-listed system file; a missing file returns an error wrapping fs.ErrNotExist.
 	ReadSystemFile(path string) ([]byte, error)
 	IsRoot() bool
+	// InGroup reports whether the user belongs to the named group.
+	InGroup(ctx context.Context, group string) (bool, error)
 }

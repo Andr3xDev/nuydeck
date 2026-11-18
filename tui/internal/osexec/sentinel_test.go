@@ -85,6 +85,7 @@ func (sentinelProbe) ExplicitPackages(context.Context) ([]string, error) { retur
 func (sentinelProbe) HasCommand(string) bool                             { return true }
 func (sentinelProbe) LoginShell(context.Context) (string, error)         { return "/usr/bin/zsh", nil }
 func (sentinelProbe) IsRoot() bool                                       { return false }
+func (sentinelProbe) InGroup(context.Context, string) (bool, error)      { return false, nil }
 func (sentinelProbe) ReadSystemFile(path string) ([]byte, error) {
 	if path == pacmanConfPath {
 		return []byte(activeMultilib), nil
