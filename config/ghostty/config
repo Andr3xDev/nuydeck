@@ -13,7 +13,7 @@
 #　　 　 /　　　 　 |
 #　　　 /　 ヽ　　 ﾉ
 #　 　 │　　|　|　|         AUTHOR:  Andr3xDev
-#　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/hypr-abysal
+#　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
 #　| (￣ヽ＿_ヽ_)__)
 #　＼二つ
 #--------------------------------------------------------------------------------
@@ -54,9 +54,9 @@ mouse-scroll-multiplier = 0.9
 keybind = ctrl+shift+c=copy_to_clipboard
 keybind = ctrl+shift+v=paste_from_clipboard
 keybind = ctrl+shift+r=reload_config
-
+keybind = ctrl+enter=ignore
 
 #--------------------------------------------------------------------------------
 # Theme
 #--------------------------------------------------------------------------------
-theme = abysal-obsidian
+theme = nuytek-nadir
