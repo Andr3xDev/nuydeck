@@ -101,15 +101,7 @@ path = "git/ignore"
 
 [[entry]]
 root = "config"
-path = "mimeapps.list"
-
-[[entry]]
-root = "config"
 path = "openspec/config.json"
-
-[[entry]]
-root = "config"
-path = "Vial/Vial.conf"
 
 # home root
 [[entry]]
