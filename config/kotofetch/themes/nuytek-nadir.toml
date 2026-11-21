@@ -1,0 +1,37 @@
+#--------------------------------------------------------------------------------
+#                                                                      
+#    ,--.            ,--.          ,---.         ,--.        ,--.      
+#    |  |,-. ,---. ,-'  '-. ,---. /  .-' ,---. ,-'  '-. ,---.|  ,---.  
+#    |     /| .-. |'-.  .-'| .-. ||  `-,| .-. :'-.  .-'| .--'|  .-.  | 
+#    |  \  \' '-' '  |  |  ' '-' '|  .-'\   --.  |  |  \ `--.|  | |  | 
+#    `--'`--'`---'   `--'   `---' `--'   `----'  `--'   `---'`--' `--' 
+#                                                                      
+#           _______
+#　　　　　 /  ＞　　フ     
+#　　　　　| 　_　 _ l      RESUME: Quotes to show when terminal is open
+#　 　　　／` ミ＿xノ               
+#　　 　 /　　　 　 |       THEME: nuytek-nadir
+#　　　 /　 ヽ　　 ﾉ
+#　 　 │　　|　|　|         AUTHOR:  Andr3xDev
+#　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
+#　| (￣ヽ＿_ヽ_)__)
+#　＼二つ
+#--------------------------------------------------------------------------------
+
+
+[display]
+horizontal_padding = 0
+vertical_padding = 1
+width = 90
+show_translation = "english"
+quote_color = "#E9EDEB"
+translation_color = "#A7B4B0"
+font_size = "small"
+bold = true
+border = false
+rounded_border = false
+source = true
+modes = ["proverb", "anime"]
+seed = 0
+centered = true
+dynamic = false
