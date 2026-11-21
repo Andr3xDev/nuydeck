@@ -13,18 +13,11 @@
 --　　 　 /　　　 　 |
 --　　　 /　 ヽ　　 ﾉ
 --　 　 │　　|　|　|         AUTHOR:  Andr3xDev
---　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/hypr-abysal
+--　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
 --　| (￣ヽ＿_ヽ_)__)
 --　＼二つ
 ----------------------------------------------------------------------------------
 
-
-hl.config({
-	master = {
-		new_status           = "master",
-		special_scale_factor = 1,
-	},
-})
 
 hl.config({
 	misc = {

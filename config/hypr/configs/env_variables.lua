@@ -13,7 +13,7 @@
 --　　 　 /　　　 　 |
 --　　　 /　 ヽ　　 ﾉ
 --　 　 │　　|　|　|         AUTHOR:  Andr3xDev
---　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/hypr-abysal
+--　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
 --　| (￣ヽ＿_ヽ_)__)
 --　＼二つ
 ----------------------------------------------------------------------------------
@@ -26,6 +26,7 @@ hl.env("XCURSOR_SIZE",    "24")
 hl.env("XCURSOR_THEME",   "phinger-cursors-light")
 hl.env("HYPRCURSOR_SIZE", "24")
 
+hl.env("ATES", "24")
 
 ----------------------------------------------------------------------------------
 --- Toolkit Backend
