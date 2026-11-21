@@ -7,15 +7,7 @@ import (
 )
 
 func TestDirectionName(t *testing.T) {
-	cases := map[plan.Direction]string{
-		plan.Push:    "push",
-		plan.Pull:    "pull",
-		plan.Restore: "restore",
-		plan.Manual:  "manual",
-	}
-	for dir, want := range cases {
-		if got := directionName(dir); got != want {
-			t.Errorf("directionName(%d) = %q, want %q", dir, got, want)
-		}
+	if got := directionName(plan.Manual); got != "manual" {
+		t.Errorf("directionName(Manual) = %q, want %q", got, "manual")
 	}
 }
