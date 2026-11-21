@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -71,7 +72,7 @@ func scopeRank(scope plan.Scope) int {
 func (s *Services) Title() string  { return "Services" }
 func (s *Services) Enter() tea.Cmd { return s.load() }
 
-func (s *Services) wired() bool { return s.svc.Services.Plan != nil && s.svc.Services.Run != nil }
+func (s *Services) wired() bool { return s.svc.Services.Plan != nil && s.svc.RunPlan != nil }
 
 func (s *Services) actions() []serviceAction {
 	k := s.svc.keys
@@ -92,7 +93,7 @@ func (s *Services) Keys() []key.Binding {
 		return s.flow.Keys()
 	}
 	k := s.svc.keys
-	keys := []key.Binding{k.Up, k.Down, k.Refresh}
+	keys := append(k.move(), k.Refresh)
 	if s.wired() {
 		for _, a := range s.actions() {
 			keys = append(keys, a.binding)
@@ -169,15 +170,12 @@ func (s *Services) Update(msg tea.Msg) (screen, tea.Cmd) {
 
 func (s *Services) listKey(msg tea.KeyPressMsg) tea.Cmd {
 	k := s.svc.keys
-	switch {
-	case key.Matches(msg, k.Refresh):
+	if delta := k.step(msg); delta != 0 {
+		s.cursor = moveCursor(s.cursor, delta, len(s.rows))
+		return nil
+	}
+	if key.Matches(msg, k.Refresh) {
 		return s.load()
-	case key.Matches(msg, k.Up):
-		s.cursor = max(s.cursor-1, 0)
-		return nil
-	case key.Matches(msg, k.Down):
-		s.cursor = max(min(s.cursor+1, len(s.rows)-1), 0)
-		return nil
 	}
 	entry, ok := s.selected()
 	if !ok {
@@ -222,13 +220,7 @@ func (s *Services) act(entry services.Entry, action plan.Action) tea.Cmd {
 		},
 		Run: func(p plan.Plan) runRequest {
 			s.ownRunPending = true
-			steps := make([]string, len(p.Steps))
-			for i, step := range p.Steps {
-				steps[i], _ = plan.Describe(step)
-			}
-			return runRequest{title: p.Title, steps: steps, work: func(ctx context.Context, emit func(plan.Event)) runEnd {
-				return runEnd{err: deps.Run(ctx, p, emit)}
-			}}
+			return planRunRequest(s.svc, p)
 		},
 	})
 	return s.flow.start()
@@ -271,11 +263,12 @@ func (s *Services) View(width, height int) string {
 		return screenBox(th, s.Title(), append(lines, th.muted.Render("No managed services.")), width, height)
 	}
 	lines = append(lines, th.title.Render(fmt.Sprintf("%d managed services", len(s.rows))))
-	rows := make([]listRow, len(s.rows))
+	rows := make([]tableRow, len(s.rows))
 	for i, e := range s.rows {
 		rows[i] = s.row(e)
 	}
-	list, at := listLines(th, rows, s.cursor, cw)
+	header, list, at := tableLines(th, serviceColumns, rows, s.cursor, cw)
+	lines = append(lines, header)
 	room := max(innerHeight(height)-len(lines)-2, 1)
 	lines = append(lines, windowAround(list, at, room)...)
 	if desc := s.rows[s.cursor].Description; desc != "" {
@@ -284,13 +277,21 @@ func (s *Services) View(width, height int) string {
 	return screenBox(th, s.Title(), lines, width, height)
 }
 
+var serviceColumns = []column{
+	{title: "Unit"},
+	{title: "Scope", priority: 3},
+	{title: "Enabled", priority: 2},
+	{title: "Active", priority: 2},
+	{title: "Flags", priority: 1},
+}
+
 // row shows the unit, its scope, the enabled and active state and the flags that need attention.
-func (s *Services) row(e services.Entry) listRow {
+func (s *Services) row(e services.Entry) tableRow {
 	scope := string(e.Scope)
 	if e.Scope == plan.ScopeUser {
 		scope = userScopeLabel
 	}
-	row := listRow{text: fmt.Sprintf("%s  %s  %s", e.Unit, scope, unavailableState)}
+	enabled, active := unavailableState, unavailableState
 	var flags []string
 	if e.Critical {
 		flags = append(flags, "critical")
@@ -298,18 +299,17 @@ func (s *Services) row(e services.Entry) listRow {
 	state, known := s.stateOf(e)
 	switch {
 	case !known:
-		flags = append(flags, unknownBadge)
+		enabled, active = unknownBadge, unknownBadge
 	case !state.Found:
 		flags = append(flags, notFoundBadge)
 	default:
-		row.text = fmt.Sprintf("%s  %s  %s %s", e.Unit, scope, state.Enabled, state.Active)
-		if state.Masked && string(state.Enabled) != maskedBadge {
+		enabled, active = string(state.Enabled), string(state.Active)
+		if state.Masked && enabled != maskedBadge {
 			flags = append(flags, maskedBadge)
 		}
 		if state.Active == services.ActiveFailed {
 			flags = append(flags, "failed")
 		}
 	}
-	row.badges = flags
-	return row
+	return tableRow{cells: []string{e.Unit, scope, enabled, active, strings.Join(flags, ", ")}}
 }

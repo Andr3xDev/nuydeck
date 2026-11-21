@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/services"
@@ -15,7 +16,7 @@ import (
 // openServices builds the Services screen as the shell does and loads its state through Enter.
 func openServices(t *testing.T, f *fakeServices, term *fakeTerminal, dryRun bool) *Services {
 	t.Helper()
-	deps := Deps{Services: f.deps()}
+	deps := Deps{Services: f.deps(), RunPlan: f.Run}
 	if term != nil {
 		deps.Terminal = term
 	}
@@ -42,6 +43,64 @@ func TestServicesEnterListsEveryUnitWithItsLiveState(t *testing.T) {
 		if !strings.Contains(view, want) {
 			t.Errorf("view lacks %q:\n%s", want, view)
 		}
+	}
+}
+
+func TestServicesRenderAsATableWithAHeaderAndFlags(t *testing.T) {
+	s := openServices(t, newFakeServices(), nil, false)
+
+	lines := strings.Split(viewOf(s), "\n")
+	var header string
+	for _, l := range lines {
+		if strings.Contains(l, "Unit") && strings.Contains(l, "Scope") {
+			header = l
+		}
+	}
+	for _, col := range []string{"Unit", "Scope", "Enabled", "Active", "Flags"} {
+		if !strings.Contains(header, col) {
+			t.Fatalf("header lacks %q:\n%s", col, viewOf(s))
+		}
+	}
+	for _, l := range lines {
+		if strings.Contains(l, unitNetworkManager) && !strings.Contains(l, "critical") {
+			t.Errorf("critical flag missing from its row: %q", l)
+		}
+	}
+}
+
+func TestServicesUnreadableStateShowsUnknownInTheStateCells(t *testing.T) {
+	f := newFakeServices()
+	f.busErr = services.ErrNoUserBus
+	s := openServices(t, f, nil, false)
+
+	for _, l := range strings.Split(viewOf(s), "\n") {
+		if strings.Contains(l, unitClipboardTimer) && strings.Count(l, "unknown") != 2 {
+			t.Errorf("row %q must show unknown for enabled and active", l)
+		}
+	}
+}
+
+func TestServicesNarrowPanelDropsColumnsButKeepsTheUnit(t *testing.T) {
+	s := openServices(t, newFakeServices(), nil, false)
+
+	view := ansi.Strip(s.View(40, 30))
+
+	if !strings.Contains(view, unitBluetooth) || strings.Contains(view, "Scope") {
+		t.Errorf("narrow view must keep the unit and drop low-priority columns:\n%s", view)
+	}
+}
+
+func TestServicesJumpKeysMoveFiveRowsAndClamp(t *testing.T) {
+	s := openServices(t, newFakeServices(), nil, false)
+
+	send(s, keyPress('J'))
+	if s.cursor != 5 {
+		t.Fatalf("J moved the cursor to %d, want 5", s.cursor)
+	}
+	send(s, keyPress('J'))
+	send(s, keyPress('K'), keyPress('K'))
+	if s.cursor != 0 || !claims(s.Keys(), "J") || !claims(s.Keys(), "K") {
+		t.Errorf("cursor = %d, want clamped at 0 with J and K listed", s.cursor)
 	}
 }
 
