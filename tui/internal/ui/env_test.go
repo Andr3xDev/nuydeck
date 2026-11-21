@@ -66,9 +66,11 @@ func TestEnvChosenSourceDrivesThePathAndTheList(t *testing.T) {
 		choose func(*Env)
 		path   func(envvars.Locations) string
 		want   string
+
+		commentedListed bool
 	}{
-		{"repo copy", chooseRepo, func(l envvars.Locations) string { return l.RepoPath }, "repo-value"},
-		{"live copy", chooseLive, func(l envvars.Locations) string { return l.DestPath }, "live-value"},
+		{"repo copy", chooseRepo, func(l envvars.Locations) string { return l.RepoPath }, "repo-value", true},
+		{"live copy", chooseLive, func(l envvars.Locations) string { return l.DestPath }, "live-value", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -84,8 +86,8 @@ func TestEnvChosenSourceDrivesThePathAndTheList(t *testing.T) {
 			if !strings.Contains(view, "THEME") || !strings.Contains(view, tc.want) {
 				t.Errorf("list lacks THEME=%s:\n%s", tc.want, view)
 			}
-			if strings.Contains(view, "COMMENTED") {
-				t.Errorf("a commented hl.env line was listed:\n%s", view)
+			if listed := strings.Contains(view, "COMMENTED"); listed != tc.commentedListed {
+				t.Errorf("commented hl.env line listed = %v, want %v:\n%s", listed, tc.commentedListed, view)
 			}
 		})
 	}

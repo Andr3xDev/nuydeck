@@ -32,6 +32,12 @@ func TestPaths_JoinsEnvFileOntoHyprEntry(t *testing.T) {
 	if got.DestPath != "/home/u/.config/hypr/configs/env_variables.lua" {
 		t.Errorf("DestPath = %q", got.DestPath)
 	}
+	if got.LiveRoot != "/home/u/.config" {
+		t.Errorf("LiveRoot = %q", got.LiveRoot)
+	}
+	if got.LiveRel != "hypr/configs/env_variables.lua" {
+		t.Errorf("LiveRel = %q", got.LiveRel)
+	}
 }
 
 func TestPaths_WithoutHyprEntryReturnsErrNoHyprEntry(t *testing.T) {

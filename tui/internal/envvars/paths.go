@@ -3,6 +3,7 @@ package envvars
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 )
@@ -25,6 +26,9 @@ const (
 type Locations struct {
 	RepoPath string
 	DestPath string
+	// LiveRoot and LiveRel split DestPath into the config root and the file path under it, as a backup needs.
+	LiveRoot string
+	LiveRel  string
 }
 
 // Path returns the copy chosen by source.
@@ -42,6 +46,8 @@ func Paths(entries []manifest.ResolvedEntry) (Locations, error) {
 			return Locations{
 				RepoPath: filepath.Join(e.RepoPath, envFile),
 				DestPath: filepath.Join(e.DestPath, envFile),
+				LiveRoot: strings.TrimSuffix(e.DestPath, "/"+e.Path),
+				LiveRel:  filepath.Join(e.Path, envFile),
 			}, nil
 		}
 	}
