@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // probeScreen records what the shell delivers to it.
@@ -114,6 +116,41 @@ func TestFocusTable(t *testing.T) {
 				t.Errorf("delivered = %v (%v), want %v", delivered, probe.received, tt.wantDelivered)
 			}
 		})
+	}
+}
+
+func TestBordersFollowFocus(t *testing.T) {
+	r := sizedRoot(Deps{}, 80, 24)
+	th := r.svc.th
+	// First row: the sidebar's right border directly followed by the panel's top-left corner.
+	seam := func(sidebar, panel lipgloss.Style) string { return sidebar.Render("│") + panel.Render("╭─") }
+
+	if top := strings.Split(r.View().Content, "\n")[0]; !strings.Contains(top, seam(th.borderFocus, th.border)) {
+		t.Errorf("sidebar focus: want accent sidebar border and muted panel border, got %q", top)
+	}
+	r.focus = focusPanel
+	if top := strings.Split(r.View().Content, "\n")[0]; !strings.Contains(top, seam(th.border, th.borderFocus)) {
+		t.Errorf("panel focus: want muted sidebar border and accent panel border, got %q", top)
+	}
+	r.focus = focusSidebar
+	r.run = &run{}
+	if !r.panelFocused() {
+		t.Error("an active run pane must count as focused")
+	}
+}
+
+func TestSidebarIgnoresTheJumpKeys(t *testing.T) {
+	// Each key starts where a jump would land elsewhere: J has room below row 0, K above row 1.
+	for k, start := range map[tea.KeyPressMsg]int{keyPress('J'): 0, keyPress('K'): 1} {
+		probe := &probeScreen{}
+		r, other := probeRoot(probe, focusSidebar)
+		r.selected = start
+
+		press(t, r, k)
+
+		if r.selected != start || probe.entered != 0 || other.entered != 0 {
+			t.Errorf("%q: selected=%d entered=%d/%d, want the selection at %d and nothing entered", k.String(), r.selected, probe.entered, other.entered, start)
+		}
 	}
 }
 

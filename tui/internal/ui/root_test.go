@@ -76,7 +76,7 @@ func sectionTitles(r *Root) []string {
 func TestRootSidebarOrderKeepsSyncSection(t *testing.T) {
 	r := NewRoot("", false, Deps{})
 
-	want := []string{"Dashboard", "Sync", "Backups", "Install", "Packages"}
+	want := []string{"Dashboard", "Sync", "Backups", "Install", "Packages", "Config"}
 	if got := sectionTitles(r); !slices.Equal(got, want) {
 		t.Fatalf("sections = %v, want %v", got, want)
 	}
@@ -96,8 +96,8 @@ func TestRootCatalogErrorReplacesOnlyInstallAndPackages(t *testing.T) {
 	}
 
 	r = NewRoot("", false, Deps{ManifestError: errors.New("paths.toml:1: bad"), CatalogError: errors.New("packages.toml:3: bad source")})
-	if got := sectionTitles(r); !slices.Equal(got, []string{"Manifest"}) {
-		t.Errorf("sections with a paths.toml error = %v, want only Manifest", got)
+	if got := sectionTitles(r); !slices.Equal(got, []string{"Manifest", "Config"}) {
+		t.Errorf("sections with a paths.toml error = %v, want only Manifest and Config", got)
 	}
 }
 
@@ -118,5 +118,19 @@ func TestRootViewShowsDryRunBadgeOnEverySection(t *testing.T) {
 	plain.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
 	if strings.Contains(ansi.Strip(plain.View().Content), dryRunBadge) {
 		t.Error("badge shown without dry-run")
+	}
+}
+
+func TestRootReturnToDashboardSelectsItWithSidebarFocus(t *testing.T) {
+	r := NewRoot("", false, Deps{})
+	_, dashboard, _ := sectionOf[*Dashboard](r)
+	_, install, _ := sectionOf[*Install](r)
+	r.selectSection(install)
+	r.focus = focusPanel
+
+	r.Update(returnToDashboardMsg{})
+
+	if r.selected != dashboard || r.focus != focusSidebar {
+		t.Errorf("selected=%d focus=%v, want the dashboard (%d) with sidebar focus", r.selected, r.focus, dashboard)
 	}
 }

@@ -270,11 +270,8 @@ func (st *syncStaged) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return st.updateSub(msg)
 	}
 	switch {
-	case key.Matches(msg, k.Up):
-		st.cursor = max(st.cursor-1, 0)
-		return st.Load()
-	case key.Matches(msg, k.Down):
-		st.cursor = max(min(st.cursor+1, len(st.syncPlan.Items)-1), 0)
+	case k.step(msg) != 0:
+		st.cursor = moveCursor(st.cursor, k.step(msg), len(st.syncPlan.Items))
 		return st.Load()
 	case key.Matches(msg, k.Toggle):
 		st.toggle()

@@ -214,8 +214,8 @@ func TestRootOpensSyncOnStartSync(t *testing.T) {
 
 func TestRootManifestErrorOffersNoOperations(t *testing.T) {
 	r := NewRoot("", false, Deps{ManifestError: errors.New("paths.toml:7: duplicate path")})
-	if len(r.sections) != 1 {
-		t.Fatalf("sections = %d, want only the error screen", len(r.sections))
+	if got := sectionTitles(r); !slices.Equal(got, []string{"Manifest", "Config"}) {
+		t.Fatalf("sections = %v, want only the error screen and Config", got)
 	}
 	r.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	for _, k := range []rune{'p', 'P', 'r'} {
@@ -226,5 +226,9 @@ func TestRootManifestErrorOffersNoOperations(t *testing.T) {
 	}
 	if !strings.Contains(ansi.Strip(r.View().Content), "paths.toml:7: duplicate path") {
 		t.Error("manifest error not shown")
+	}
+	r.selectSection(1)
+	if !strings.Contains(ansi.Strip(r.View().Content), "Repo path:") {
+		t.Error("Config must stay usable and show its values on manifest error")
 	}
 }

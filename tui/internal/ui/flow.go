@@ -249,15 +249,19 @@ func (f *flow) Keys() []key.Binding {
 		if f.canApply() {
 			keys = append(keys, described(k.Confirm, "apply"))
 		}
+		var stagedKeys []key.Binding
 		if f.st != nil {
-			keys = append(keys, f.st.Keys()...)
+			stagedKeys = f.st.Keys()
 		}
-		return append(keys, k.Back)
+		if len(stagedKeys) == 0 {
+			keys = append(keys, k.move()...) // the body scrolls when the staged claims no keys
+		}
+		return append(append(keys, stagedKeys...), k.Back)
 	case stageOffer:
 		return []key.Binding{k.Yes, described(k.Confirm, "yes"), k.No, k.Back}
 	case stageConfirm, stageExtra:
 		if f.src.SkipPreview {
-			return []key.Binding{k.Yes, k.Up, k.Down, described(k.Back, "back")}
+			return append(k.move(), k.Yes, described(k.Back, "back"))
 		}
 		return []key.Binding{k.Yes, described(k.Back, "back")}
 	}

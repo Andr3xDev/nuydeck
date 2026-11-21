@@ -53,11 +53,11 @@ func (st *syncStaged) Keys() []key.Binding {
 	k := st.svc.keys
 	switch st.sub {
 	case subDiff:
-		return []key.Binding{k.Up, k.Down, k.Back}
+		return append(k.move(), k.Back)
 	case subResult:
-		return []key.Binding{described(k.Yes, "use edit"), described(k.No, "discard"), k.Up, k.Down, k.Back}
+		return append(k.move(), described(k.Yes, "use edit"), described(k.No, "discard"), k.Back)
 	}
-	return []key.Binding{k.Up, k.Down, k.Toggle, k.All, k.Edit, k.Diff}
+	return append(k.move(), k.Toggle, k.All, k.Edit, k.Diff)
 }
 
 // Load reads both ends of the item under the cursor, once.

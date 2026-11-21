@@ -40,7 +40,7 @@ func (r *References) Enter() tea.Cmd {
 
 func (r *References) Keys() []key.Binding {
 	k := r.svc.keys
-	return []key.Binding{k.Up, k.Down, k.Link}
+	return append(k.move(), k.Link)
 }
 
 func (r *References) Update(msg tea.Msg) (screen, tea.Cmd) {
@@ -59,10 +59,8 @@ func (r *References) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	k := r.svc.keys
 	catalog := r.svc.References.Catalog
 	switch {
-	case key.Matches(msg, k.Up):
-		r.cursor = max(r.cursor-1, 0)
-	case key.Matches(msg, k.Down):
-		r.cursor = max(min(r.cursor+1, len(catalog)-1), 0)
+	case k.step(msg) != 0:
+		r.cursor = moveCursor(r.cursor, k.step(msg), len(catalog))
 	case key.Matches(msg, k.Link) && r.cursor < len(catalog):
 		open, ctx, url := r.svc.References.Open, r.svc.ctx, catalog[r.cursor].URL
 		r.err = nil

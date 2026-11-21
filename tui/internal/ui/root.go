@@ -26,7 +26,7 @@ const wideRowWidth = 60
 
 // screenBox draws a screen's box; lines must fit contentWidth(width).
 func screenBox(th theme, title string, lines []string, width, height int) string {
-	return renderBox(th, title, lines, width, height, true)
+	return renderBox(th, title, lines, width, height, th.panelFocused())
 }
 
 // innerHeight is the number of lines a screen can fill inside its box.
@@ -54,6 +54,7 @@ func styled(style lipgloss.Style, lines []string) []string {
 type section struct {
 	title  string
 	screen screen
+	pinned bool // drawn on the bottom rows of the sidebar; pinned sections come last
 }
 
 // focus is the one pane that receives keys.
@@ -89,9 +90,10 @@ func NewRoot(variant string, dryRun bool, deps Deps) *Root {
 	svc := &shell{Deps: deps, ctx: ctx, dryRun: dryRun, th: th, keys: newKeyMap()}
 	r := &Root{dryRun: dryRun, svc: svc, help: h, cancel: cancel}
 	svc.running = func() bool { return r.run != nil }
+	svc.th.panelHasFocus = r.panelFocused
 	for _, spec := range sectionSpecs {
 		if spec.enabled(deps) {
-			r.sections = append(r.sections, section{title: spec.title, screen: spec.build(svc)})
+			r.sections = append(r.sections, section{title: spec.title, screen: spec.build(svc), pinned: spec.pinned})
 		}
 	}
 	return r
@@ -140,6 +142,13 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			r.selectSection(i)
 			r.focus = focusPanel
 			return r, s.startPlan(msg.direction)
+		}
+		return r, nil
+	case returnToDashboardMsg:
+		if _, i, ok := sectionOf[*Dashboard](r); ok {
+			r.selectSection(i)
+			r.focus = focusSidebar
+			return r, r.active().Enter()
 		}
 		return r, nil
 	case execRequestMsg:
@@ -232,7 +241,7 @@ func (r *Root) routeRun(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return r.quit()
 	case run.done && key.Matches(msg, keys.Back):
 		r.run = nil
-		return r.broadcast(runClosed{})
+		return r.broadcast(runClosed{err: run.err})
 	case run.done:
 	case ctrlC:
 		run.cancel()
@@ -246,6 +255,9 @@ func (r *Root) routeRun(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return r, nil
 }
 
+// panelFocused is true while the panel has focus or the run pane, which is modal, is shown.
+func (r *Root) panelFocused() bool { return r.focus == focusPanel || r.run != nil }
+
 func (r *Root) toggleFocus() {
 	if r.focus == focusSidebar {
 		r.focus = focusPanel
@@ -258,7 +270,7 @@ func (r *Root) routeSidebar(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	keys := r.svc.keys
 	if key.Matches(msg, keys.Open) {
 		r.focus = focusPanel
-	} else if delta := keys.step(msg); delta != 0 {
+	} else if delta := keys.arrow(msg); delta != 0 {
 		r.selectSection(max(min(r.selected+delta, len(r.sections)-1), 0))
 		return r, r.active().Enter()
 	}
@@ -326,11 +338,14 @@ func (r *Root) render() string {
 		panel = r.active().View(panelWidth, bodyHeight)
 	}
 	panel = lipgloss.NewStyle().MaxWidth(panelWidth).MaxHeight(bodyHeight).Render(panel)
-	titles := make([]string, len(r.sections))
+	titles, pinned := make([]string, len(r.sections)), 0
 	for i, s := range r.sections {
 		titles[i] = s.title
+		if s.pinned {
+			pinned++
+		}
 	}
-	body := lipgloss.JoinHorizontal(lipgloss.Top, renderSidebar(r.svc.th, titles, r.selected, r.focus == focusPanel, sidebarCells, bodyHeight), panel)
+	body := lipgloss.JoinHorizontal(lipgloss.Top, renderSidebar(r.svc.th, titles, r.selected, pinned, r.panelFocused(), sidebarCells, bodyHeight), panel)
 	if r.showHelp {
 		body = overlayCentered(body, helpPopup(r.svc.th, r.help, r.helpGroups(), r.width, bodyHeight), r.width, bodyHeight)
 	}

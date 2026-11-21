@@ -52,6 +52,33 @@ func TestRootFitsTheTerminal(t *testing.T) {
 	}
 }
 
+func TestRootSidebarShowsTheTitleFirstAndConfigOnTheLastRow(t *testing.T) {
+	const sidebarWidth = 30
+	for _, size := range []struct{ w, h int }{{100, 24}, {40, 8}} {
+		r := sizedRoot(Deps{}, size.w, size.h)
+		rows := make([]string, 0, size.h)
+		for _, line := range renderedLines(r)[:size.h-1] {
+			rows = append(rows, strings.TrimSpace(line[:strings.Index(line, "│")]))
+		}
+
+		if rows[0] != "NUYDECK" || rows[1] != "Dashboard" || rows[len(rows)-1] != "Config" {
+			t.Errorf("%dx%d: sidebar rows = %q, want NUYDECK first, Dashboard under it and Config last", size.w, size.h, rows)
+		}
+	}
+	if got := sidebarColumns(sizedRoot(Deps{}, 100, 24)); got != sidebarWidth {
+		t.Errorf("sidebar width = %d, want %d", got, sidebarWidth)
+	}
+}
+
+func TestRootSidebarKeepsTheSelectionVisibleWhenSectionsDoNotFit(t *testing.T) {
+	r := sizedRoot(fullDeps(), 100, 9)
+	r.selectSection(6)
+
+	if view := ansi.Strip(r.View().Content); !strings.Contains(view, "Services") || !strings.Contains(view, "Config") {
+		t.Errorf("sidebar lost the selected section or Config:\n%s", view)
+	}
+}
+
 func TestRootBelowMinimumSizeShowsOnlyTheTooSmallMessage(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{39, 8}, {40, 7}} {
 		view := ansi.Strip(sizedRoot(Deps{}, size.w, size.h).View().Content)

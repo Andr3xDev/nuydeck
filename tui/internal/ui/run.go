@@ -202,7 +202,7 @@ func (r *run) hint() string {
 
 // keys are the bindings the pane answers to now, for the keybar.
 func (r *run) keys(k keyMap) []key.Binding {
-	scroll := []key.Binding{k.Up, k.Down}
+	scroll := k.move()
 	switch {
 	case r.done:
 		return append(scroll, described(k.Back, "close"))

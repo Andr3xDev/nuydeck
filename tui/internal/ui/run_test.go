@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -220,6 +221,43 @@ func TestRunEscClosesAFinishedRunAndBroadcastsRunClosed(t *testing.T) {
 	closed := slices.ContainsFunc(listener.broadcasts, func(m tea.Msg) bool { _, ok := m.(runClosed); return ok })
 	if !closed {
 		t.Errorf("screens got %v, want runClosed", listener.broadcasts)
+	}
+}
+
+func TestRunClosedCarriesHowTheRunEnded(t *testing.T) {
+	boom := errors.New("step failed")
+	cases := map[string]struct {
+		work testWork
+		want error
+	}{
+		"failed": {func(context.Context, func(plan.Event)) runEnd { return runEnd{err: boom} }, boom},
+		"cancelled": {func(ctx context.Context, _ func(plan.Event)) runEnd {
+			<-ctx.Done()
+			return runEnd{err: ctx.Err()}
+		}, context.Canceled},
+		"succeeded": {finishesAtOnce, nil},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			d := runningRoot(t, false, focusPanel, nil, c.work)
+			listener := &probeScreen{}
+			d.root.sections = append(d.root.sections, section{title: "Listener", screen: listener})
+			if name == "cancelled" {
+				d.press(keyCtrlC)
+			}
+			d.must(t, "the run to finish", d.runDone)
+
+			d.press(keyEsc)
+			d.settle()
+
+			i := slices.IndexFunc(listener.broadcasts, func(m tea.Msg) bool { _, ok := m.(runClosed); return ok })
+			if i < 0 {
+				t.Fatalf("screens got %v, want runClosed", listener.broadcasts)
+			}
+			if got := listener.broadcasts[i].(runClosed).err; !errors.Is(got, c.want) {
+				t.Errorf("runClosed.err = %v, want %v", got, c.want)
+			}
+		})
 	}
 }
 

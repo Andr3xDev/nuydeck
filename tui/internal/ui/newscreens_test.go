@@ -259,7 +259,7 @@ func fullDeps() Deps {
 func TestRootSidebarListsTheNewSectionsAfterTheExistingOnes(t *testing.T) {
 	r := NewRoot("", false, fullDeps())
 
-	want := []string{"Dashboard", "Sync", "Backups", "Install", "Packages", "Services", "Env", "References"}
+	want := []string{"Dashboard", "Sync", "Backups", "Install", "Packages", "Services", "Env", "References", "Config"}
 	if got := sectionTitles(r); !slices.Equal(got, want) {
 		t.Errorf("sections = %v, want %v", got, want)
 	}

@@ -59,7 +59,13 @@ type theme struct {
 	section                        lipgloss.Style
 	border, borderFocus            lipgloss.Style
 	ok, warning, err, badge        lipgloss.Style
+
+	// panelHasFocus reports whether the content panel holds focus; nil means always, as for popups and a zero theme.
+	// theme values must not be compared with ==: a func field makes that a compile error.
+	panelHasFocus func() bool
 }
+
+func (t theme) panelFocused() bool { return t.panelHasFocus == nil || t.panelHasFocus() }
 
 func newTheme(p palette) theme {
 	fg := func(c color.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }

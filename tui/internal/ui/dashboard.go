@@ -71,7 +71,7 @@ func (d *Dashboard) Title() string  { return "Dashboard" }
 func (d *Dashboard) Enter() tea.Cmd { return nil }
 
 func (d *Dashboard) Keys() []key.Binding {
-	return []key.Binding{d.keys.Up, d.keys.Down, d.keys.Refresh, d.keys.Pull, d.keys.Push}
+	return append(d.keys.move(), d.keys.Refresh, d.keys.Pull, d.keys.Push)
 }
 
 // start cancels any prior run, bumps the generation and begins a new drift stream.
@@ -136,10 +136,8 @@ func (d *Dashboard) Update(msg tea.Msg) (screen, tea.Cmd) {
 		switch {
 		case key.Matches(msg, d.keys.Refresh):
 			return d, d.start()
-		case key.Matches(msg, d.keys.Up):
-			d.cursor = max(d.cursor-1, 0)
-		case key.Matches(msg, d.keys.Down):
-			d.cursor = max(min(d.cursor+1, len(d.entries)-1), 0)
+		case d.keys.step(msg) != 0:
+			d.cursor = moveCursor(d.cursor, d.keys.step(msg), len(d.entries))
 		case key.Matches(msg, d.keys.Pull):
 			return d, requestSync(plan.Pull)
 		case key.Matches(msg, d.keys.Push):
