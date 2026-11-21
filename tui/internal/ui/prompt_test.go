@@ -49,6 +49,7 @@ func TestChoicePickMovesWithoutWrappingPicksOnEnterAndClosesOnEsc(t *testing.T) 
 	}{
 		{"up at the top stays", []tea.KeyPressMsg{keyPress('k')}, 0, false, false},
 		{"down moves", []tea.KeyPressMsg{keyPress('j')}, 1, false, false},
+		{"J jumps to the last row", []tea.KeyPressMsg{keyPress('J')}, 2, false, false},
 		{"down at the bottom stays", []tea.KeyPressMsg{keyPress('j'), keyPress('j'), keyPress('j')}, 2, false, false},
 		{"enter picks the cursor row", []tea.KeyPressMsg{keyPress('j'), keyEnter}, 1, true, false},
 		{"esc closes", []tea.KeyPressMsg{keyPress('j'), keyEsc}, 1, false, true},

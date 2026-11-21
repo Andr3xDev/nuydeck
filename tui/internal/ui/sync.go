@@ -43,7 +43,7 @@ func (s *Sync) Keys() []key.Binding {
 	case s.flow.active():
 		return s.flow.Keys()
 	case s.pick != nil:
-		return []key.Binding{k.Up, k.Down, k.Confirm, k.Back}
+		return append(k.move(), k.Confirm, k.Back)
 	}
 	return []key.Binding{k.Pull, k.Push}
 }

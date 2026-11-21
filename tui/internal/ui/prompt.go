@@ -42,7 +42,7 @@ func (c *choicePick) update(keys keyMap, msg tea.KeyPressMsg) (picked, closed bo
 	case key.Matches(msg, keys.Confirm):
 		return true, false
 	}
-	c.cursor = max(min(c.cursor+keys.step(msg), len(c.options)-1), 0)
+	c.cursor = moveCursor(c.cursor, keys.step(msg), len(c.options))
 	return false, false
 }
 

@@ -101,7 +101,7 @@ func (e *Env) Keys() []key.Binding {
 	case e.flow.active():
 		return e.flow.Keys()
 	case e.pick != nil:
-		return []key.Binding{k.Up, k.Down, k.Confirm, k.Back}
+		return append(k.move(), k.Confirm, k.Back)
 	case e.locErr != nil:
 		return nil
 	case !e.chosen:
