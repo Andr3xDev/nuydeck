@@ -1,0 +1,6 @@
+[Unit]
+Description=Wipe cliphist history
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/cliphist wipe
