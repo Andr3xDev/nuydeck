@@ -32,7 +32,7 @@ func (s *Service) PlanSync(ctx context.Context, dir plan.Direction, entries []ma
 			src, dst = dst, src
 		}
 		items, err := s.PlanEntry(ctx, dir, e, src, dst, managed)
-		if errors.Is(err, errSourceMissing) {
+		if errors.Is(err, ErrSourceMissing) {
 			syncPlan.Notices = append(syncPlan.Notices, fmt.Sprintf("skipped: source missing: %s/%s", e.Root, e.Path))
 			continue
 		}
@@ -55,7 +55,7 @@ func defaultSelected(it PlanItem) bool {
 	return !it.Blocked && !it.Ignored && it.Change.Type != plan.Delete
 }
 
-var errSourceMissing = errors.New("source missing")
+var ErrSourceMissing = errors.New("source missing")
 
 // PlanEntry diffs one entry and turns the changes into plan items.
 func (s *Service) PlanEntry(ctx context.Context, dir plan.Direction, e manifest.ResolvedEntry, src, dst string, managed []manifest.Entry) ([]PlanItem, error) {
@@ -64,7 +64,7 @@ func (s *Service) PlanEntry(ctx context.Context, dir plan.Direction, e manifest.
 		return nil, fmt.Errorf("%s/%s: %w", e.Root, e.Path, err)
 	}
 	if srcKind == plan.KindNone {
-		return nil, fmt.Errorf("%s/%s: source %s: %w", e.Root, e.Path, src, errSourceMissing)
+		return nil, fmt.Errorf("%s/%s: source %s: %w", e.Root, e.Path, src, ErrSourceMissing)
 	}
 	changes, err := s.Inspector.Diff(ctx, e, plan.Endpoint{Path: src}, plan.Endpoint{Path: dst})
 	if err != nil {
