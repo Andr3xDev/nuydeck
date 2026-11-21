@@ -65,10 +65,6 @@ path = "starship"
 
 [[entry]]
 root = "config"
-path = "starship.toml"
-
-[[entry]]
-root = "config"
 path = "xsettingsd"
 
 [[entry]]
