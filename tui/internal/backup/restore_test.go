@@ -69,24 +69,3 @@ func TestApply_RestoreCopiesFromBackupAndOffersBackupForOverwrite(t *testing.T) 
 		t.Error("restore must not delete")
 	}
 }
-
-func TestDeleteBackup_DeclinedRunsNoStep(t *testing.T) {
-	dir := "/home/u/.nuydeck-backups/20261103-100000"
-	tests := []struct {
-		name      string
-		confirmed bool
-		wantSteps []plan.Step
-	}{
-		{"declined", false, nil},
-		{"confirmed", true, []plan.Step{plan.DeleteBackupStep{Dir: dir}}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &fakeRunner{}
-			_, ran := newService(t, &fakeInspector{}, r).DeleteBackup(context.Background(), dir, tt.confirmed)
-			if ran != tt.confirmed || len(r.steps) != len(tt.wantSteps) || (ran && r.steps[0] != tt.wantSteps[0]) {
-				t.Fatalf("ran = %v, steps = %v, want %v", ran, r.steps, tt.wantSteps)
-			}
-		})
-	}
-}

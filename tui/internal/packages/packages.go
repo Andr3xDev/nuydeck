@@ -26,16 +26,6 @@ type Packages struct {
 	CatalogPath string
 }
 
-// ListUnregistered returns the explicitly installed packages that are neither registered nor ignored.
-func (p *Packages) ListUnregistered(ctx context.Context) ([]string, error) {
-	explicit, err := p.Probe.ExplicitPackages(ctx)
-	if err != nil {
-		return nil, err
-	}
-	saved, _ := p.LoadState(ctx)
-	return Unregistered(explicit, p.Catalog, p.Drivers, manifest.ParuPrerequisites, saved.IgnoredPackages), nil
-}
-
 // List returns the catalog rows and the drift rows; any failed query returns its error and no rows.
 func (p *Packages) List(ctx context.Context) ([]Row, error) {
 	installed, err := p.Probe.InstalledPackages(ctx)

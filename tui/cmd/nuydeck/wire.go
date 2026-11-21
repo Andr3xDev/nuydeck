@@ -82,7 +82,6 @@ func wireSync(deps *ui.Deps, svc *cfgsync.Service, backups *backup.Service, drif
 	deps.ListBackups = backups.ListBackups
 	deps.PlanRestore = backups.PlanRestore
 	deps.PlanManualBackup = backups.PlanManual
-	deps.DeleteBackup = backups.DeleteBackup
 	deps.ReadSide = osfs.ReadSide
 }
 
@@ -124,7 +123,7 @@ func planItems(steps []plan.Step) []plan.Item {
 }
 
 // wireServices loads the services catalog; a bad file only sets Services.Err, so the other sections keep working.
-func wireServices(deps *ui.Deps, repo, username string, runner plan.Runner) {
+func wireServices(deps *ui.Deps, repo, username string) {
 	catalog, err := services.Load(filepath.Join(repo, servicesRelPath))
 	if err != nil {
 		deps.Services.Err = err
@@ -136,9 +135,6 @@ func wireServices(deps *ui.Deps, repo, username string, runner plan.Runner) {
 		State:   sysx.SystemctlProbe{}.Read,
 		Plan: func(ctx context.Context, req services.Request, state services.UnitState) (plan.Plan, error) {
 			return services.PlanAction(catalog, req, state, probe.CanSudoWithoutPrompt(ctx))
-		},
-		Run: func(ctx context.Context, p plan.Plan, emit func(plan.Event)) error {
-			return plan.Apply(ctx, runner, planItems(p.Steps), plan.Hooks{}, emit).Err
 		},
 	}
 }
@@ -229,9 +225,8 @@ func wireCatalog(deps *ui.Deps, svc *cfgsync.Service, repo, home, username strin
 		CatalogPath: filepath.Join(repo, packagesRelPath),
 	}
 	deps.Packages = ui.PackagesDeps{
-		List:             pkgs.List,
-		ListUnregistered: pkgs.ListUnregistered,
-		AddPackage:       pkgs.AddPackage,
-		IgnorePackage:    pkgs.IgnorePackage,
+		List:          pkgs.List,
+		AddPackage:    pkgs.AddPackage,
+		IgnorePackage: pkgs.IgnorePackage,
 	}
 }

@@ -27,14 +27,13 @@ type Deps struct {
 	// Terminal is the one interface field: the bridge is shared and attached to the program.
 	Terminal plan.Terminal
 
-	Drift        func(ctx context.Context, entries []manifest.ResolvedEntry) <-chan drift.DriftResult
-	PlanSync     func(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.SyncPlan, error)
-	PlanHard     func(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.HardPlan, error)
-	NeedsBackup  func(p cfgsync.SyncPlan, sel cfgsync.Selection) bool
-	ApplySync    func(ctx context.Context, p cfgsync.SyncPlan, sel cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult
-	ListBackups  func(ctx context.Context) ([]backup.Backup, error)
-	PlanRestore  func(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
-	DeleteBackup func(ctx context.Context, dir string, confirmed bool) (plan.StepResult, bool)
+	Drift       func(ctx context.Context, entries []manifest.ResolvedEntry) <-chan drift.DriftResult
+	PlanSync    func(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.SyncPlan, error)
+	PlanHard    func(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.HardPlan, error)
+	NeedsBackup func(p cfgsync.SyncPlan, sel cfgsync.Selection) bool
+	ApplySync   func(ctx context.Context, p cfgsync.SyncPlan, sel cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult
+	ListBackups func(ctx context.Context) ([]backup.Backup, error)
+	PlanRestore func(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
 	// ReadSide reads one end of a plan item for the resolver's row state and diff view.
 	ReadSide func(path string) (cfgsync.Side, error)
 	Edit     func(ctx context.Context, req cfgsync.EditRequest) (cfgsync.EditResult, error)
@@ -64,8 +63,6 @@ type ServicesDeps struct {
 	// State reads the live state of the units of one scope.
 	State func(ctx context.Context, scope plan.Scope, units []string) (map[string]services.UnitState, error)
 	Plan  func(ctx context.Context, req services.Request, state services.UnitState) (plan.Plan, error)
-	// Run executes a confirmed plan, reporting each step to emit.
-	Run func(ctx context.Context, p plan.Plan, emit func(plan.Event)) error
 }
 
 // EnvDeps is what the Env section needs besides the shell and Deps.ReadSide.
@@ -101,8 +98,7 @@ type InstallDeps struct {
 
 // PackagesDeps is what the Packages section needs besides the shell.
 type PackagesDeps struct {
-	List             func(ctx context.Context) ([]packages.Row, error)
-	ListUnregistered func(ctx context.Context) ([]string, error)
-	AddPackage       func(ctx context.Context, pkg manifest.Package) (plan.StepResult, error)
-	IgnorePackage    func(ctx context.Context, name string) plan.StepResult
+	List          func(ctx context.Context) ([]packages.Row, error)
+	AddPackage    func(ctx context.Context, pkg manifest.Package) (plan.StepResult, error)
+	IgnorePackage func(ctx context.Context, name string) plan.StepResult
 }

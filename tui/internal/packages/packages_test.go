@@ -70,48 +70,6 @@ func newPackages(probe *fakeProbe, in *fakeInspector, r plan.Runner) *Packages {
 	}
 }
 
-func TestPackages_ListUnregisteredExcludesCatalogDriversPrerequisitesAndIgnored(t *testing.T) {
-	cases := []struct {
-		name     string
-		explicit []string
-		ignored  []string
-		want     []string
-	}{
-		{
-			name:     "unknown package is listed",
-			explicit: []string{"hyprland", "nvidia-utils", "base-devel", "htop", "wget"},
-			ignored:  []string{"wget"},
-			want:     []string{"htop"},
-		},
-		{
-			name:     "everything registered or ignored",
-			explicit: []string{"hyprland", "git", "wget"},
-			ignored:  []string{"wget"},
-			want:     []string{},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			in := &fakeInspector{state: state.State{IgnoredPackages: tc.ignored}}
-			got, err := newPackages(&fakeProbe{explicit: tc.explicit}, in, &fakeRunner{}).ListUnregistered(context.Background())
-			if err != nil || !slices.Equal(got, tc.want) {
-				t.Fatalf("ListUnregistered = %v, %v; want %v", got, err, tc.want)
-			}
-		})
-	}
-}
-
-func TestPackages_ListUnregisteredReturnsTheQueryErrorWithoutAList(t *testing.T) {
-	queryErr := errors.New("pacman: exit status 1")
-	probe := &fakeProbe{explicit: []string{"htop"}, explicitErr: queryErr}
-
-	got, err := newPackages(probe, &fakeInspector{}, &fakeRunner{}).ListUnregistered(context.Background())
-
-	if !errors.Is(err, queryErr) || got != nil {
-		t.Fatalf("ListUnregistered = %v, %v; want nil and the query error", got, err)
-	}
-}
-
 func TestPackages_ListMergesBothProbesIntoRows(t *testing.T) {
 	probe := &fakeProbe{
 		explicit:  []string{"hyprland", "htop", "wget"},
