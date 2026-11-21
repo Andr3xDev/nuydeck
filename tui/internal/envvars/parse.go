@@ -17,7 +17,9 @@ type Var struct {
 
 // Line-anchored on purpose: prose, multi-line calls and non-literal arguments are not listed.
 // A documentation comment such as `-- hl.env("X", "y")` cannot be told from a disabled variable and lists as off.
-var hlEnvLine = regexp.MustCompile(`^([ \t]*)(--[ \t]*)?hl\.env\([ \t]*"([^"]+)"[ \t]*,[ \t]*"([^"]*)"[ \t]*\)`)
+// Only whitespace, a ";" or a trailing comment may follow the call, so a line with two calls is not listed
+// (toggling it would comment both). A call inside a --[[ ]] block still lists as on.
+var hlEnvLine = regexp.MustCompile(`^([ \t]*)(--[ \t]*)?hl\.env\([ \t]*"([^"]+)"[ \t]*,[ \t]*"([^"]*)"[ \t]*\)[ \t\r]*;?[ \t\r]*(--.*)?$`)
 
 // parseLine parses one line; indentEnd and markEnd are the byte offsets after the indent and after the "--" marker.
 func parseLine(line string) (v Var, indentEnd, markEnd int, ok bool) {
