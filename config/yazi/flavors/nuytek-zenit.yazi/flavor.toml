@@ -1,0 +1,154 @@
+#--------------------------------------------------------------------------------
+#             _______
+#　　　　　 /  ＞　　フ
+#　　　　　| 　_　 _ l      THEME: nuytek-zenit
+#　 　　　／` ミ＿xノ
+#　　 　 /　　　 　 |
+#　　　 /　 ヽ　　 ﾉ
+#　 　 │　　|　|　|         AUTHOR:  Andr3xDev
+#　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
+#　| (￣ヽ＿_ヽ_)__)
+#　＼二つ
+#
+#--------------------------------------------------------------------------------
+
+
+[app]
+overall = { bg = "#F3F4F4" }
+
+[mgr]
+cwd = { fg = "#0E7A4C" }
+
+find_keyword = { fg = "#B85F1D", bold = true, italic = true, underline = true }
+find_position = { fg = "#0E7A4C", bg = "reset", bold = true, italic = true }
+
+symlink_target = { italic = true }
+
+marker_copied = { fg = "#0E7A4C", bg = "#0E7A4C" }
+marker_cut = { fg = "#8A7C12", bg = "#8A7C12" }
+marker_marked = { fg = "#146496", bg = "#146496" }
+marker_selected = { fg = "#146496", bg = "#146496" }
+
+count_copied = { fg = "#F7F8F8", bg = "#0E7A4C" }
+count_cut = { fg = "#F7F8F8", bg = "#8A7C12" }
+count_selected = { fg = "#F7F8F8", bg = "#0B726D" }
+
+border_symbol = "│"
+border_style = { fg = "#DADCDC" }
+
+syntect_theme = ""
+
+[indicator]
+padding = { open = "█", close = "█" }
+parent  = { fg = "#16211E", bg = "#DFF3F1" }
+current = { fg = "#F7F8F8", bg = "#0B726D" }
+preview = { fg = "#16211E", bg = "#DFF3F1" }
+
+[tabs]
+active = { fg = "#F7F8F8", bg = "#0B726D", bold = true }
+inactive = { fg = "#4B5A54", bg = "#DADCDC" }
+
+sep_inner = { open = "", close = "" }
+sep_outer = { open = "█", close = "" }
+
+[mode]
+normal_main = { fg = "#F7F8F8", bg = "#0B726D", bold = true }
+normal_alt = { fg = "#16211E", bg = "#FAFAFA", bold = true }
+
+select_main = { fg = "#F7F8F8", bg = "#146496", bold = true }
+select_alt = { fg = "#16211E", bg = "#FAFAFA", bold = true }
+
+unset_main = { fg = "#F7F8F8", bg = "#C23B46", bold = true }
+unset_alt = { fg = "#16211E", bg = "#FAFAFA", bold = true }
+
+[status]
+overall = { bg = "#F3F4F4" }
+sep_left = { open = "█", close = "" }
+sep_right = { open = "", close = "█" }
+
+perm_sep = { fg = "#5E6D67" }
+perm_type = { fg = "#B85F1D" }
+perm_read = { fg = "#0B726D" }
+perm_write = { fg = "#C23B46" }
+perm_exec = { fg = "#B85F1D" }
+
+progress_label = { fg = "#16211E", bold = true }
+progress_normal = { fg = "#0B726D", bg = "#F3F4F4" }
+progress_error = { fg = "#C23B46", bg = "#F3F4F4" }
+
+[which]
+cols = 3
+mask = { bg = "#F3F4F4" }
+cand = { fg = "#0B726D" }
+rest = { fg = "#5E6D67" }
+desc = { fg = "#16211E" }
+separator = "  "
+separator_style = { fg = "#5E6D67" }
+
+[confirm]
+border = { fg = "#0B726D" }
+title = { fg = "#C23B46", bold = true }
+body = { fg = "#16211E" }
+list = { fg = "#16211E" }
+btn_yes = { fg = "#F7F8F8", bg = "#0B726D", bold = true }
+btn_no = { fg = "#16211E", bg = "#FAFAFA", bold = true }
+btn_labels = ["  [y]es  ", "  (n)o  "]
+
+[spot]
+border = { fg = "#0B726D" }
+title = { fg = "#0B726D", bold = true }
+
+tbl_col = { fg = "#0B726D" }
+tbl_cell = { fg = "#F7F8F8", bg = "#0B726D", bold = true }
+
+[notify]
+title_info = { fg = "#0B726D" }
+title_warn = { fg = "#B85F1D" }
+title_error = { fg = "#C23B46" }
+
+[pick]
+border = { fg = "#0B726D" }
+active = { fg = "#0B726D", bold = true }
+inactive = { fg = "#4B5A54" }
+
+[input]
+border = { fg = "#0B726D" }
+title = { fg = "#0B726D", bold = true }
+value = { fg = "#16211E" }
+selected = { reversed = true }
+
+[cmp]
+border = { fg = "#0B726D" }
+active = { bg = "#FAFAFA", fg = "#0B726D", bold = true }
+inactive = { fg = "#4B5A54" }
+
+[tasks]
+border = { fg = "#0B726D" }
+title = { fg = "#0B726D", bold = true }
+hovered = { fg = "#F7F8F8", bg = "#0B726D", bold = true }
+
+[help]
+on = { fg = "#0B726D" }
+run = { fg = "#B85F1D" }
+desc = { fg = "#B85F1D" }
+hovered = { fg = "#F7F8F8", bg = "#0B726D", bold = true }
+footer = { fg = "#16211E", bg = "#FAFAFA" }
+
+[filetype]
+rules = [
+  { mime = "image/*", fg = "#146496" },
+  { mime = "{audio,video}/*", fg = "#B85F1D" },
+  { mime = "application/{zip,rar,7z*,tar,gzip,xz,zstd,bzip*,lzma,compress,archive,cpio,arj,xar,ms-cab*}", fg = "#C23B46" },
+  { mime = "application/{pdf,doc,rtf}", fg = "#B85F1D" },
+  { mime = "application/vnd.oasis.opendocument.*", fg = "#B85F1D" },
+  { mime = "application/vnd.openxmlformats-officedocument.*", fg = "#B85F1D" },
+
+  { url = "*", is = "orphan", fg = "#F7F8F8", bg = "#C23B46" },
+  { url = "*", is = "exec", fg = "#146496" },
+  { url = "*", is = "dummy", fg = "#F7F8F8", bg = "#C23B46" },
+  { url = "*/", is = "dummy", fg = "#F7F8F8", bg = "#C23B46" },
+
+  { url = "*/", fg = "#16211E" },
+
+  { url = "*", fg = "#16211E" },
+]

@@ -1,0 +1,155 @@
+#--------------------------------------------------------------------------------
+#             _______
+#　　　　　 /  ＞　　フ
+#　　　　　| 　_　 _ l      THEME: nuytek-nadir
+#　 　　　／` ミ＿xノ
+#　　 　 /　　　 　 |
+#　　　 /　 ヽ　　 ﾉ
+#　 　 │　　|　|　|         AUTHOR:  Andr3xDev
+#　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
+#　| (￣ヽ＿_ヽ_)__)
+#　＼二つ
+#
+#--------------------------------------------------------------------------------
+
+
+[app]
+overall = { bg = "#151515" }
+
+[mgr]
+cwd = { fg = "#67E4B2" }
+
+find_keyword = { fg = "#F39049", bold = true, italic = true, underline = true }
+find_position = { fg = "#67E4B2", bg = "reset", bold = true, italic = true }
+
+symlink_target = { italic = true }
+
+marker_copied = { fg = "#67E4B2", bg = "#67E4B2" }
+marker_cut = { fg = "#ECEC8D", bg = "#ECEC8D" }
+marker_marked = { fg = "#A6D5F2", bg = "#A6D5F2" }
+marker_selected = { fg = "#A6D5F2", bg = "#A6D5F2" }
+
+count_copied = { fg = "#151515", bg = "#67E4B2" }
+count_cut = { fg = "#151515", bg = "#ECEC8D" }
+count_selected = { fg = "#151515", bg = "#5AE2DD" }
+
+border_symbol = "│"
+border_style = { fg = "#323232" }
+
+syntect_theme = ""
+
+[indicator]
+padding = { open = "█", close = "█" }
+parent = { fg = "#E9EDEB", bg = "#143937" }
+current = { fg = "#151515", bg = "#5AE2DD" }
+preview = { fg = "#E9EDEB", bg = "#143937" }
+
+[tabs]
+active = { fg = "#151515", bg = "#5AE2DD", bold = true }
+inactive = { fg = "#A7B4B0", bg = "#323232" }
+
+sep_inner = { open = "", close = "" }
+sep_outer = { open = "█", close = "" }
+
+[mode]
+normal_main = { fg = "#151515", bg = "#5AE2DD", bold = true }
+normal_alt = { fg = "#E9EDEB", bg = "#232323", bold = true }
+
+select_main = { fg = "#151515", bg = "#A6D5F2", bold = true }
+select_alt = { fg = "#E9EDEB", bg = "#232323", bold = true }
+
+unset_main = { fg = "#151515", bg = "#EF616D", bold = true }
+unset_alt = { fg = "#E9EDEB", bg = "#232323", bold = true }
+
+[status]
+overall = { bg = "#151515" }
+sep_left = { open = "█", close = "" }
+sep_right = { open = "", close = "█" }
+
+perm_sep = { fg = "#72837D" }
+perm_type = { fg = "#F39049" }
+perm_read = { fg = "#5AE2DD" }
+perm_write = { fg = "#EF616D" }
+perm_exec = { fg = "#F39049" }
+
+progress_label = { fg = "#E9EDEB", bold = true }
+progress_normal = { fg = "#5AE2DD", bg = "#151515" }
+progress_error = { fg = "#EF616D", bg = "#151515" }
+
+[which]
+cols = 3
+mask = { bg = "#151515" }
+cand = { fg = "#5AE2DD" }
+rest = { fg = "#72837D" }
+desc = { fg = "#E9EDEB" }
+separator = "  "
+separator_style = { fg = "#72837D" }
+
+[confirm]
+border = { fg = "#5AE2DD" }
+title = { fg = "#EF616D", bold = true }
+body = { fg = "#E9EDEB" }
+list = { fg = "#E9EDEB" }
+btn_yes = { fg = "#151515", bg = "#5AE2DD", bold = true }
+btn_no = { fg = "#E9EDEB", bg = "#232323", bold = true }
+btn_labels = ["  [y]es  ", "  (n)o  "]
+
+[spot]
+border = { fg = "#5AE2DD" }
+title = { fg = "#5AE2DD", bold = true }
+
+tbl_col = { fg = "#5AE2DD" }
+tbl_cell = { fg = "#151515", bg = "#5AE2DD", bold = true }
+
+[notify]
+title_info = { fg = "#5AE2DD" }
+title_warn = { fg = "#F39049" }
+title_error = { fg = "#EF616D" }
+
+[pick]
+border = { fg = "#5AE2DD" }
+active = { fg = "#5AE2DD", bold = true }
+inactive = { fg = "#A7B4B0" }
+
+[input]
+border = { fg = "#5AE2DD" }
+title = { fg = "#5AE2DD", bold = true }
+value = { fg = "#E9EDEB" }
+selected = { reversed = true }
+
+[cmp]
+border = { fg = "#5AE2DD" }
+active = { bg = "#232323", fg = "#5AE2DD", bold = true }
+inactive = { fg = "#A7B4B0" }
+
+[tasks]
+border = { fg = "#5AE2DD" }
+title = { fg = "#5AE2DD", bold = true }
+hovered = { fg = "#151515", bg = "#5AE2DD", bold = true }
+
+[help]
+on = { fg = "#5AE2DD" }
+run = { fg = "#F39049" }
+desc = { fg = "#F39049" }
+hovered = { fg = "#151515", bg = "#5AE2DD", bold = true }
+footer = { fg = "#E9EDEB", bg = "#232323" }
+
+[filetype]
+rules = [
+  # Primary: turquoise — code/text handled by fallback
+  { mime = "image/*", fg = "#A6D5F2" },
+  { mime = "{audio,video}/*", fg = "#F39049" },
+  { mime = "application/{zip,rar,7z*,tar,gzip,xz,zstd,bzip*,lzma,compress,archive,cpio,arj,xar,ms-cab*}", fg = "#EF616D" },
+  { mime = "application/{pdf,doc,rtf}", fg = "#F39049" },
+  { mime = "application/vnd.oasis.opendocument.*", fg = "#F39049" },
+  { mime = "application/vnd.openxmlformats-officedocument.*", fg = "#F39049" },
+
+  { url = "*", is = "orphan", fg = "#151515", bg = "#EF616D" },
+  { url = "*", is = "exec", fg = "#A6D5F2" },
+  { url = "*", is = "dummy", fg = "#151515", bg = "#EF616D" },
+  { url = "*/", is = "dummy", fg = "#151515", bg = "#EF616D" },
+
+  { url = "*/", fg = "#E9EDEB" },
+
+  { url = "*", fg = "#E9EDEB" },
+]
