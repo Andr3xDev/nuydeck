@@ -2,6 +2,7 @@ package packages
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
@@ -26,7 +27,7 @@ func PlanInstall(rows []Row) (plan.Plan, []string) {
 	if missing == 0 {
 		notices = append(notices, "no marked package is missing")
 	}
-	return pacmanPlan("install packages", "Install the marked packages?", "", []string{"-S", "--needed", "--noconfirm"}, names), notices
+	return pacmanPlan("install packages", "Install the marked packages? If pacman fails with a 404, the sync database is stale: update the system first.", "", []string{"-S", "--needed", "--noconfirm"}, names), notices
 }
 
 // PlanUninstall removes the installed rows with pacman -Rns; the manifest is left as it is.
@@ -47,7 +48,7 @@ func pacmanPlan(title, confirm, extraConfirm string, flags, names []string) plan
 	if len(names) == 0 {
 		return plan.Plan{}
 	}
-	argv := append(append([]string{"pacman"}, flags...), names...)
+	argv := slices.Concat([]string{"pacman"}, flags, []string{"--"}, names)
 	steps := append(plan.PrivilegeSteps(), plan.CommandStep{Label: title, Argv: argv, Sudo: true})
 	return plan.Plan{Title: title, Steps: steps, Confirm: confirm, ExtraConfirm: extraConfirm}
 }

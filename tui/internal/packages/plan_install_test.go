@@ -45,12 +45,12 @@ func TestPlanInstall(t *testing.T) {
 		{
 			name:     "installs the missing rows only",
 			rows:     []Row{row("a", "missing", manifest.SourcePacman), row("b", "installed", manifest.SourcePacman), row("c", "drift", ""), row("d", "missing", manifest.SourcePacman)},
-			wantArgv: []string{"pacman", "-S", "--needed", "--noconfirm", "a", "d"},
+			wantArgv: []string{"pacman", "-S", "--needed", "--noconfirm", "--", "a", "d"},
 		},
 		{
 			name:        "drops a missing AUR package with one notice",
 			rows:        []Row{row("a", "missing", manifest.SourcePacman), row("paru-bin", "missing", manifest.SourceAUR)},
-			wantArgv:    []string{"pacman", "-S", "--needed", "--noconfirm", "a"},
+			wantArgv:    []string{"pacman", "-S", "--needed", "--noconfirm", "--", "a"},
 			noticeAbout: "paru-bin",
 		},
 		{
@@ -101,7 +101,7 @@ func TestPlanUninstall(t *testing.T) {
 	got, _ := PlanUninstall(rows)
 
 	cmd := pacmanCommand(t, got)
-	if want := []string{"pacman", "-Rns", "--noconfirm", "a", "d"}; !slices.Equal(cmd.Argv, want) {
+	if want := []string{"pacman", "-Rns", "--noconfirm", "--", "a", "d"}; !slices.Equal(cmd.Argv, want) {
 		t.Errorf("argv = %v, want %v", cmd.Argv, want)
 	}
 	if got.ExtraConfirm == "" {

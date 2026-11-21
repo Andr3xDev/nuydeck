@@ -160,7 +160,7 @@ func TestPackagesInstallRunsMarkedMissingRowsAndDropsAUR(t *testing.T) {
 	if len(f.ran) != 1 {
 		t.Fatalf("ran %d plans, want 1", len(f.ran))
 	}
-	if argv := pacmanArgv(t, f.ran[0]); !slices.Equal(argv, []string{"pacman", "-S", "--needed", "--noconfirm", "htop"}) {
+	if argv := pacmanArgv(t, f.ran[0]); !slices.Equal(argv, []string{"pacman", "-S", "--needed", "--noconfirm", "--", "htop"}) {
 		t.Errorf("argv = %v, want only the pacman missing package", argv)
 	}
 	if !strings.Contains(p.notice, "yay-bin") {
@@ -190,7 +190,7 @@ func TestPackagesUninstallNeedsBothConfirms(t *testing.T) {
 		runWork(r)
 	}
 
-	if len(f.ran) != 1 || !slices.Equal(pacmanArgv(t, f.ran[0]), []string{"pacman", "-Rns", "--noconfirm", "git"}) {
+	if len(f.ran) != 1 || !slices.Equal(pacmanArgv(t, f.ran[0]), []string{"pacman", "-Rns", "--noconfirm", "--", "git"}) {
 		t.Errorf("ran = %+v, want one pacman -Rns git", f.ran)
 	}
 }
