@@ -15,12 +15,18 @@ import (
 const catalogPath = "/repo/manifest/packages.toml"
 
 type fakeProbe struct {
-	explicit    []string
-	explicitErr error
+	explicit     []string
+	explicitErr  error
+	installed    map[string]bool
+	installedErr error
 }
 
 func (p *fakeProbe) ExplicitPackages(context.Context) ([]string, error) {
 	return p.explicit, p.explicitErr
+}
+
+func (p *fakeProbe) InstalledPackages(context.Context) (map[string]bool, error) {
+	return p.installed, p.installedErr
 }
 
 type fakeInspector struct{ state state.State }
@@ -103,6 +109,44 @@ func TestPackages_ListUnregisteredReturnsTheQueryErrorWithoutAList(t *testing.T)
 
 	if !errors.Is(err, queryErr) || got != nil {
 		t.Fatalf("ListUnregistered = %v, %v; want nil and the query error", got, err)
+	}
+}
+
+func TestPackages_ListMergesBothProbesIntoRows(t *testing.T) {
+	probe := &fakeProbe{
+		explicit:  []string{"hyprland", "htop", "wget"},
+		installed: map[string]bool{"hyprland": true, "htop": true, "wget": true},
+	}
+	in := &fakeInspector{state: state.State{IgnoredPackages: []string{"wget"}}}
+
+	got, err := newPackages(probe, in, &fakeRunner{}).List(context.Background())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := map[string]Status{}
+	for _, r := range got {
+		status[r.Name] = r.Status
+	}
+	if len(got) != 2 || status["hyprland"] != "installed" || status["htop"] != "drift" {
+		t.Errorf("List = %+v, want hyprland installed and htop drift only (wget ignored)", got)
+	}
+}
+
+func TestPackages_ListReturnsTheQueryErrorAndNoRowsWhenAProbeFails(t *testing.T) {
+	queryErr := errors.New("pacman: exit status 1")
+	cases := map[string]*fakeProbe{
+		"installed query fails": {explicit: []string{"htop"}, installedErr: queryErr},
+		"explicit query fails":  {installed: map[string]bool{"hyprland": true}, explicitErr: queryErr},
+	}
+	for name, probe := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := newPackages(probe, &fakeInspector{}, &fakeRunner{}).List(context.Background())
+
+			if !errors.Is(err, queryErr) || got != nil {
+				t.Fatalf("List = %v, %v; want nil rows and the query error", got, err)
+			}
+		})
 	}
 }
 

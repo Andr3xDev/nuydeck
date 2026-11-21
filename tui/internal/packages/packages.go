@@ -12,6 +12,7 @@ import (
 // Probe is the read-only machine query the packages screen needs.
 type Probe interface {
 	ExplicitPackages(ctx context.Context) ([]string, error)
+	InstalledPackages(ctx context.Context) (map[string]bool, error)
 }
 
 // Packages manages explicit packages that the catalog does not know.
@@ -33,6 +34,20 @@ func (p *Packages) ListUnregistered(ctx context.Context) ([]string, error) {
 	}
 	saved, _ := p.LoadState(ctx)
 	return Unregistered(explicit, p.Catalog, p.Drivers, manifest.ParuPrerequisites, saved.IgnoredPackages), nil
+}
+
+// List returns the catalog rows and the drift rows; any failed query returns its error and no rows.
+func (p *Packages) List(ctx context.Context) ([]Row, error) {
+	installed, err := p.Probe.InstalledPackages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	explicit, err := p.Probe.ExplicitPackages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	saved, _ := p.LoadState(ctx)
+	return Rows(installed, explicit, p.Catalog, p.Drivers, manifest.ParuPrerequisites, saved.IgnoredPackages), nil
 }
 
 // AddPackage appends pkg to the catalog file; an invalid or duplicate package is rejected before any write.
