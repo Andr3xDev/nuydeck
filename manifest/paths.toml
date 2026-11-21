@@ -61,11 +61,11 @@ path = "satty"
 
 [[entry]]
 root = "config"
-path = "startpage"
+path = "starship"
 
 [[entry]]
 root = "config"
-path = "starship"
+path = "starship.toml"
 
 [[entry]]
 root = "config"
@@ -98,10 +98,6 @@ path = "nuydeck/scripts"
 [[entry]]
 root = "config"
 path = "git/ignore"
-
-[[entry]]
-root = "config"
-path = "openspec/config.json"
 
 # home root
 [[entry]]

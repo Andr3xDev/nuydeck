@@ -56,10 +56,8 @@ func TestRepoPathsManifestHygiene(t *testing.T) {
 			t.Errorf("entry %s/%s must not be managed", e.Root, e.Path)
 		}
 	}
-	for _, want := range []string{"config/startpage", "config/xsettingsd"} {
-		if !have[want] {
-			t.Errorf("entry %s missing", want)
-		}
+	if !have["config/xsettingsd"] {
+		t.Error("entry config/xsettingsd missing")
 	}
 	if m.Roots[manifest.RootThemes] == "" {
 		t.Error("themes root must stay defined")
