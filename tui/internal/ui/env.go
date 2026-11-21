@@ -25,13 +25,13 @@ const (
 var errFileChanged = errors.New("the file changed, nothing was written")
 
 const (
-	envOnLabel  = "on"
-	envOffLabel = "off"
+	onLabel  = "on"
+	offLabel = "off"
 )
 
 var envColumns = []column{
 	{title: "Name"},
-	{title: "Value", priority: 2},
+	{title: "Value"},
 	{title: "State", priority: 1},
 }
 
@@ -131,13 +131,12 @@ func (e *Env) receiveRead(msg envReadMsg) {
 		return
 	}
 	e.loading = false
+	reason := unlistable(msg.path, msg.side)
 	switch {
 	case msg.err != nil:
 		e.err = msg.err
-	case !msg.side.Exists:
-		e.msg = fmt.Sprintf(envFileMissingFmt, msg.path)
-	case msg.side.Kind != plan.KindFile || msg.side.Binary || msg.side.TooLarge:
-		e.msg = notListableText
+	case reason != "":
+		e.msg = reason
 	default:
 		if e.vars = envvars.ParseHlEnv(string(msg.side.Content)); len(e.vars) == 0 {
 			e.msg = noVariablesText
@@ -203,17 +202,26 @@ func (e *Env) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// unlistable explains why the side cannot be parsed for variables, or returns "" when it can.
+func unlistable(path string, side cfgsync.Side) string {
+	switch {
+	case !side.Exists:
+		return fmt.Sprintf(envFileMissingFmt, path)
+	case side.Kind != plan.KindFile || side.Binary || side.TooLarge:
+		return notListableText
+	}
+	return ""
+}
+
 // planToggle reads the copy again, so the plan never rests on a cached read.
 func planToggle(read func(string) (cfgsync.Side, error), source envvars.Source, loc envvars.Locations, v envvars.Var) (plan.Plan, envvars.ToggleChange, error) {
 	path := loc.Path(source)
 	side, err := read(path)
-	switch {
-	case err != nil:
+	if err != nil {
 		return plan.Plan{}, envvars.ToggleChange{}, err
-	case !side.Exists:
-		return plan.Plan{}, envvars.ToggleChange{}, fmt.Errorf(envFileMissingFmt, path)
-	case side.Kind != plan.KindFile || side.Binary || side.TooLarge:
-		return plan.Plan{}, envvars.ToggleChange{}, errors.New(notListableText)
+	}
+	if reason := unlistable(path, side); reason != "" {
+		return plan.Plan{}, envvars.ToggleChange{}, errors.New(reason)
 	}
 	return envvars.PlanToggle(source, loc, side.Content, side.Mode, v)
 }
@@ -298,9 +306,9 @@ func (e *Env) View(width, height int) string {
 	if len(e.vars) > 0 {
 		rows := make([]tableRow, len(e.vars))
 		for i, v := range e.vars {
-			state := envOnLabel
+			state := onLabel
 			if v.Off {
-				state = envOffLabel
+				state = offLabel
 			}
 			rows[i] = tableRow{cells: []string{v.Name, v.Value, state}, muted: v.Off}
 		}

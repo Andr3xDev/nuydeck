@@ -13,6 +13,7 @@ import (
 const (
 	configUpdateLabel = "Update TUI"
 	restartNoteText   = "Restart nuydeck to run the new version."
+	repoNotFoundText  = "not found"
 )
 
 // Config shows the repo path, the backups directory and the dry-run state, and offers the TUI self-update.
@@ -82,12 +83,16 @@ func (c *Config) View(width, height int) string {
 		return c.flow.box(c.Title(), width, height)
 	}
 	th, cw := c.svc.th, contentWidth(width)
-	dryRun := envOffLabel
+	dryRun := offLabel
 	if c.svc.dryRun {
-		dryRun = envOnLabel
+		dryRun = onLabel
+	}
+	repoPath := c.svc.Config.RepoPath
+	if repoPath == "" {
+		repoPath = repoNotFoundText
 	}
 	lines := []string{
-		truncate(sanitizeLine(fmt.Sprintf("Repo path:   %s", c.svc.Config.RepoPath)), cw),
+		truncate(sanitizeLine(fmt.Sprintf("Repo path:   %s", repoPath)), cw),
 		truncate(sanitizeLine(fmt.Sprintf("Backups dir: %s", c.svc.Config.BackupsDir)), cw),
 		fmt.Sprintf("Dry-run:     %s", dryRun),
 	}

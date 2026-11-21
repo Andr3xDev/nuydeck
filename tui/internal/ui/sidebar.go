@@ -36,7 +36,7 @@ func renderSidebar(th theme, titles []string, selected, pinned int, panelFocus b
 	lines = append(lines, make([]string, free-len(body))...)
 	lines = append(lines, rows[split:]...)
 
-	return lipgloss.NewStyle().Width(width).Height(height).
+	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).
 		BorderStyle(lipgloss.NormalBorder()).BorderRight(true).BorderForeground(th.borderFor(!panelFocus).GetForeground()).
 		Render(strings.Join(lines, "\n"))
 }

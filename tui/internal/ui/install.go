@@ -205,8 +205,8 @@ func (s *Install) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	return s.summaryKey(msg)
 }
 
-// moveCursor applies up and down over n rows and reports whether the key was a move.
-func (s *Install) moveCursor(msg tea.KeyPressMsg, n int) bool {
+// moveBy applies up and down over n rows and reports whether the key was a move.
+func (s *Install) moveBy(msg tea.KeyPressMsg, n int) bool {
 	delta := s.keys.step(msg)
 	s.cursor = moveCursor(s.cursor, delta, n)
 	return delta != 0

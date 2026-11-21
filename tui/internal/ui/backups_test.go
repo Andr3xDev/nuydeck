@@ -93,7 +93,7 @@ func TestBackupsDeletePreviewListsTargetsAndAsksTheCount(t *testing.T) {
 		t.Errorf("preview must list only the cursor backup:\n%s", view)
 	}
 	send(b, keyEnter)
-	if view := ansi.Strip(b.View(100, 20)); !strings.Contains(view, "Delete 1 backups?") {
+	if view := ansi.Strip(b.View(100, 20)); !strings.Contains(view, "Delete 1 backup?") {
 		t.Errorf("confirm must ask the count:\n%s", view)
 	}
 }

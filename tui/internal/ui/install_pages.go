@@ -27,7 +27,7 @@ func detectGPUs(detect func(context.Context) ([]install.PCIDevice, error), drive
 
 func (s *Install) profileKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
-	case s.moveCursor(msg, len(profileChoices)):
+	case s.moveBy(msg, len(profileChoices)):
 	case key.Matches(msg, s.keys.Confirm):
 		s.draft.Profile = profileChoices[s.cursor]
 		return s.step(1)
@@ -40,7 +40,7 @@ func (s *Install) hardwareKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, s.keys.Back):
 		return s.step(-1)
 	case s.hwLoading:
-	case s.moveCursor(msg, len(s.deps.Drivers)+1):
+	case s.moveBy(msg, len(s.deps.Drivers)+1):
 	case key.Matches(msg, s.keys.Toggle):
 		if s.cursor == len(s.deps.Drivers) {
 			s.draft.SkipGPUEnvLink = !s.draft.SkipGPUEnvLink
@@ -141,7 +141,7 @@ func (s *Install) selectionKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, s.keys.Back):
 		return s.step(-1)
-	case s.moveCursor(msg, len(s.rows)):
+	case s.moveBy(msg, len(s.rows)):
 	case key.Matches(msg, s.keys.Toggle) && s.cursor < len(s.rows):
 		s.toggleRow(s.rows[s.cursor])
 	case key.Matches(msg, s.keys.All):

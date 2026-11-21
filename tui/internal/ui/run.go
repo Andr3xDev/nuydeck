@@ -37,6 +37,17 @@ type runRequest struct {
 	footer func(th theme, cw int, r *run) []string
 }
 
+// planRunRequest runs a confirmed plan through Deps.RunPlan in the run pane.
+func planRunRequest(svc *shell, p plan.Plan) runRequest {
+	steps := make([]string, len(p.Steps))
+	for i, step := range p.Steps {
+		steps[i], _ = plan.Describe(step)
+	}
+	return runRequest{title: p.Title, steps: steps, work: func(ctx context.Context, emit func(plan.Event)) runEnd {
+		return runEnd{err: svc.RunPlan(ctx, p, emit)}
+	}}
+}
+
 type stepStatus int
 
 const (

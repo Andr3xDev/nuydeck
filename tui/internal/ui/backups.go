@@ -175,7 +175,11 @@ func (b *Backups) delete(sel backup.Backup) tea.Cmd {
 	if marked := slices.DeleteFunc(slices.Clone(b.backups), func(bk backup.Backup) bool { return !b.marks[bk.Dir] }); len(marked) > 0 {
 		targets = marked
 	}
-	p := plan.Plan{Title: "Delete backups", Confirm: fmt.Sprintf("Delete %d backups?", len(targets))}
+	noun := "backups"
+	if len(targets) == 1 {
+		noun = "backup"
+	}
+	p := plan.Plan{Title: "Delete backups", Confirm: fmt.Sprintf("Delete %d %s?", len(targets), noun)}
 	for _, t := range targets {
 		p.Steps = append(p.Steps, plan.DeleteBackupStep{Dir: t.Dir})
 	}
@@ -205,17 +209,6 @@ func (b *Backups) startPlanFlow(title string, planFn func(context.Context) (plan
 		Run: func(p plan.Plan) runRequest { return planRunRequest(b.svc, p) },
 	})
 	return b.flow.start()
-}
-
-// planRunRequest runs a confirmed plan through Deps.RunPlan in the run pane.
-func planRunRequest(svc *shell, p plan.Plan) runRequest {
-	steps := make([]string, len(p.Steps))
-	for i, step := range p.Steps {
-		steps[i], _ = plan.Describe(step)
-	}
-	return runRequest{title: p.Title, steps: steps, work: func(ctx context.Context, emit func(plan.Event)) runEnd {
-		return runEnd{err: svc.RunPlan(ctx, p, emit)}
-	}}
 }
 
 var backupColumns = []column{
