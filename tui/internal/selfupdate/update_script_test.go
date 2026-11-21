@@ -231,6 +231,63 @@ func TestUpdateScript_FailedBuildKeepsTheCurrentBinary(t *testing.T) {
 	e.requireBinary(oldBinary)
 }
 
+func TestUpdateScript_BranchWithoutUpstreamPullsFromOriginBranch(t *testing.T) {
+	e := newScriptEnv(t)
+	e.git(e.root, "checkout", "-b", "feature")
+	e.git(e.root, "push", "origin", "feature")
+	other := filepath.Join(e.scratch, "other")
+	e.git(e.scratch, "clone", "-b", "feature", e.origin, other)
+	writeTestFile(t, filepath.Join(other, "feature.txt"), "feature\n", 0o644)
+	e.git(other, "add", ".")
+	e.git(other, "commit", "-m", "feature work")
+	e.git(other, "push", "origin", "feature")
+
+	out, code := e.run()
+
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0\n%s", code, out)
+	}
+	if _, err := os.Stat(filepath.Join(e.root, "feature.txt")); err != nil {
+		t.Errorf("remote branch commit not pulled: %v", err)
+	}
+	e.requireBinary(newBinary)
+}
+
+func TestUpdateScript_LocalOnlyBranchWarnsSkipsPullAndBuilds(t *testing.T) {
+	e := newScriptEnv(t)
+	e.pushUpstreamCommit()
+	e.git(e.root, "checkout", "-b", "local-only")
+
+	out, code := e.run()
+
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0\n%s", code, out)
+	}
+	if !strings.Contains(out, "no remote branch for local-only") {
+		t.Errorf("missing warning in output:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(e.root, "upstream.txt")); err == nil {
+		t.Error("pull ran for a branch with no remote counterpart")
+	}
+	e.requireBinary(newBinary)
+}
+
+func TestUpdateScript_UnreachableOriginOnBranchWithoutUpstreamAbortsBeforeBuild(t *testing.T) {
+	e := newScriptEnv(t)
+	e.git(e.root, "checkout", "-b", "local-only")
+	e.git(e.root, "remote", "set-url", "origin", filepath.Join(e.scratch, "missing.git"))
+
+	out, code := e.run()
+
+	if code == 0 {
+		t.Fatalf("exit = 0, want the unreachable origin to abort\n%s", out)
+	}
+	if e.buildCalls() != 0 {
+		t.Error("go build ran after a failed remote check")
+	}
+	e.requireBinary(oldBinary)
+}
+
 func TestUpdateScript_SuccessPullsAndReplacesTheBinary(t *testing.T) {
 	e := newScriptEnv(t)
 	e.pushUpstreamCommit()
