@@ -88,6 +88,8 @@ func run(dryRun bool, repoFlag string) error {
 	deps := ui.Deps{Terminal: bridge, StateWarning: stateWarning, LastSync: state.LastSync}
 	wireSync(&deps, svc, backups, drifter)
 	wireEdit(&deps, bridge)
+	wireRunPlan(&deps, runner)
+	wireConfig(&deps, repo, home)
 	if repo == "" {
 		deps.ManifestError = errRepoNotFound
 	} else if deps.Entries, err = loadEntries(repo, home); err != nil {

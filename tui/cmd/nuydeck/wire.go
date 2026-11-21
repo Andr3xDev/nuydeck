@@ -21,6 +21,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/references"
 	"github.com/Andr3xDev/nuydeck/tui/internal/rsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/selfupdate"
 	"github.com/Andr3xDev/nuydeck/tui/internal/services"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
 	"github.com/Andr3xDev/nuydeck/tui/internal/sysx"
@@ -80,8 +81,24 @@ func wireSync(deps *ui.Deps, svc *cfgsync.Service, backups *backup.Service, drif
 	deps.ApplySync = svc.Apply
 	deps.ListBackups = backups.ListBackups
 	deps.PlanRestore = backups.PlanRestore
+	deps.PlanManualBackup = backups.PlanManual
 	deps.DeleteBackup = backups.DeleteBackup
 	deps.ReadSide = osfs.ReadSide
+}
+
+// wireRunPlan binds the one executor every confirmed plan runs through; in dry-run the runner records instead of executing.
+func wireRunPlan(deps *ui.Deps, runner plan.Runner) {
+	deps.RunPlan = func(ctx context.Context, p plan.Plan, emit func(plan.Event)) error {
+		return plan.Apply(ctx, runner, planItems(p.Steps), plan.Hooks{}, emit).Err
+	}
+}
+
+// wireConfig fills the Config section, which stays usable without a manifest; without a repo there is nothing to update.
+func wireConfig(deps *ui.Deps, repo, home string) {
+	deps.Config = ui.ConfigDeps{RepoPath: repo, BackupsDir: backup.BackupsDir(home)}
+	if repo != "" {
+		deps.Config.PlanUpdate = func() plan.Plan { return selfupdate.Plan(repo) }
+	}
 }
 
 // wireEdit binds the conflict editor to the real environment, the temp dir and the shared terminal.
@@ -191,6 +208,14 @@ func wireCatalog(deps *ui.Deps, svc *cfgsync.Service, repo, home, username strin
 		Run:        installer.Run,
 		DetectGPUs: probe.DetectGPUs,
 		PathKind:   inspector.PathKind,
+		Dependencies: func(ctx context.Context) (map[string]bool, error) {
+			names, err := probe.DependencyPackages(ctx)
+			set := make(map[string]bool, len(names))
+			for _, name := range names {
+				set[name] = true
+			}
+			return set, err
+		},
 		Preview: func(ctx context.Context, step plan.Step) plan.StepResult {
 			return preview.Run(ctx, step, nil)
 		},
@@ -204,6 +229,7 @@ func wireCatalog(deps *ui.Deps, svc *cfgsync.Service, repo, home, username strin
 		CatalogPath: filepath.Join(repo, packagesRelPath),
 	}
 	deps.Packages = ui.PackagesDeps{
+		List:             pkgs.List,
 		ListUnregistered: pkgs.ListUnregistered,
 		AddPackage:       pkgs.AddPackage,
 		IgnorePackage:    pkgs.IgnorePackage,
