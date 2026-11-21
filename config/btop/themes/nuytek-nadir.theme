@@ -1,0 +1,95 @@
+#--------------------------------------------------------------------------------
+#             _______
+#　　　　　 /  ＞　　フ
+#　　　　　| 　_　 _ l      THEME: nuytek-nadir
+#　 　　　／` ミ＿xノ
+#　　 　 /　　　 　 |
+#　　　 /　 ヽ　　 ﾉ
+#　 　 │　　|　|　|         AUTHOR:  Andr3xDev
+#　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
+#　| (￣ヽ＿_ヽ_)__)
+#　＼二つ
+#--------------------------------------------------------------------------------
+
+
+# Main background
+theme[main_bg]="#151515"
+
+# Main text color
+theme[main_fg]="#E9EDEB"
+
+# Title color for boxes
+theme[title]="#E9EDEB"
+
+# Highlight color for keyboard shortcuts
+theme[hi_fg]="#5AE2DD"
+
+# Background color of selected items
+theme[selected_bg]="#143937"
+
+# Foreground color of selected items
+theme[selected_fg]="#5AE2DD"
+
+# Color of inactive/disabled text
+theme[inactive_fg]="#72837D"
+
+# Color of text appearing on top of graphs
+theme[graph_text]="#A7B4B0"
+
+# Misc colors for processes box
+theme[proc_misc]="#A6D5F2"
+
+# Cpu box outline color
+theme[cpu_box]="#323232"
+
+# Memory/disks box outline color
+theme[mem_box]="#323232"
+
+# Net up/down box outline color
+theme[net_box]="#323232"
+
+# Processes box outline color
+theme[proc_box]="#323232"
+
+# Box divider line and small boxes line color
+theme[div_line]="#323232"
+
+# Temperature graph colors
+theme[temp_start]="#A6D5F2"
+theme[temp_mid]="#ECEC8D"
+theme[temp_end]="#EF616D"
+
+# CPU graph colors
+theme[cpu_start]="#5AE2DD"
+theme[cpu_mid]="#F39049"
+theme[cpu_end]="#EF616D"
+
+# Mem/Disk free meter
+theme[free_start]="#5AE2DD"
+theme[free_mid]=""
+theme[free_end]=""
+
+# Mem/Disk cached meter
+theme[cached_start]="#F39049"
+theme[cached_mid]=""
+theme[cached_end]=""
+
+# Mem/Disk available meter
+theme[available_start]="#5AE2DD"
+theme[available_mid]=""
+theme[available_end]=""
+
+# Mem/Disk used meter
+theme[used_start]="#67E4B2"
+theme[used_mid]=""
+theme[used_end]=""
+
+# Download graph colors
+theme[download_start]="#ECEC8D"
+theme[download_mid]="#F39049"
+theme[download_end]="#EF616D"
+
+# Upload graph colors
+theme[upload_start]="#F39049"
+theme[upload_mid]="#ECEC8D"
+theme[upload_end]="#67E4B2"
