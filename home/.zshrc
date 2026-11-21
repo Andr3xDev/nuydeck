@@ -93,18 +93,12 @@ export PATH="$HOME/.local/bin:$PATH"
 [ -f ~/.secrets ] && source ~/.secrets
 export PATH="$HOME/.local/bin:$PATH"
 
-typeset -A ZSH_HIGHLIGHT_STYLES
-ZSH_HIGHLIGHT_STYLES[command]='fg=5'
-ZSH_HIGHLIGHT_STYLES[builtin]='fg=5'
-ZSH_HIGHLIGHT_STYLES[function]='fg=5'
-ZSH_HIGHLIGHT_STYLES[alias]='fg=5'
-ZSH_HIGHLIGHT_STYLES[hashed-command]='fg=5'
-
-export LS_COLORS="di=01;94:ln=01;36:ex=01;95:or=40;31;01:pi=01;33:so=01;95:bd=01;33:cd=01;33:su=37;41:sg=30;43:tw=30;42:ow=34;42"
-
-
 # editor varialbles
 export EDITOR=nvim
 export VISUAL=nvim
+export BROWSER=zen-browser
+
+# alias to use correct apps
 alias vim=nvim
 alias vi=nvim
+
