@@ -44,6 +44,7 @@ var domainEdges = map[string][]string{
 	"services":   {"plan", "manifest"},
 	"envvars":    {"plan", "manifest", "state", "editor"},
 	"references": {"plan", "manifest"},
+	"selfupdate": {"plan"},
 }
 
 func TestInternalPackages_AreAllClassified(t *testing.T) {
