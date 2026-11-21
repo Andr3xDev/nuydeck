@@ -75,6 +75,11 @@ func (p Probe) ExplicitPackages(ctx context.Context) ([]string, error) {
 	return p.packageNames(ctx, "-Qqe")
 }
 
+// DependencyPackages lists packages installed as dependencies. pacman -Qqd exits non-zero when none match, so callers treat any error as no dependencies.
+func (p Probe) DependencyPackages(ctx context.Context) ([]string, error) {
+	return p.packageNames(ctx, "-Qqd")
+}
+
 func (p Probe) packageNames(ctx context.Context, flags string) ([]string, error) {
 	out, err := p.output(ctx, "pacman", flags)
 	if err != nil {

@@ -109,6 +109,26 @@ func TestExplicitPackages_FailureReturnsErrorAndNoList(t *testing.T) {
 	}
 }
 
+func TestDependencyPackages_ParsesPacmanQqd(t *testing.T) {
+	f := &fakeRun{stdout: "glibc\nlibx11\n"}
+	got, err := sysx.Probe{Run: f.run}.DependencyPackages(context.Background())
+	if err != nil {
+		t.Fatalf("DependencyPackages() error = %v", err)
+	}
+	f.onlyCall(t, call{"pacman", []string{"-Qqd"}})
+	if !reflect.DeepEqual(got, []string{"glibc", "libx11"}) {
+		t.Errorf("got %v, want [glibc libx11]", got)
+	}
+}
+
+func TestDependencyPackages_NonZeroExitIsAnErrorAndNoList(t *testing.T) {
+	f := &fakeRun{result: execx.Result{ExitCode: 1}}
+	got, err := sysx.Probe{Run: f.run}.DependencyPackages(context.Background())
+	if err == nil || len(got) != 0 {
+		t.Errorf("got %v, %v; want an error and no list", got, err)
+	}
+}
+
 func TestLoginShell_ReadsField7OfGetentPasswd(t *testing.T) {
 	f := &fakeRun{stdout: "alice:x:1000:1000:Alice:/home/alice:/usr/bin/zsh\n"}
 	got, err := sysx.Probe{Run: f.run, User: "alice"}.LoginShell(context.Background())
@@ -224,16 +244,17 @@ func TestProbeCommandsAreReadOnly(t *testing.T) {
 	_, _ = p.DetectGPUs(ctx)
 	_, _ = p.InstalledPackages(ctx)
 	_, _ = p.ExplicitPackages(ctx)
+	_, _ = p.DependencyPackages(ctx)
 	_, _ = p.LoginShell(ctx)
 	for _, c := range f.calls {
 		joined := c.name + " " + strings.Join(c.args, " ")
 		switch joined {
-		case "lspci -vmmnn", "pacman -Qq", "pacman -Qqe", "getent passwd alice":
+		case "lspci -vmmnn", "pacman -Qq", "pacman -Qqe", "pacman -Qqd", "getent passwd alice":
 		default:
 			t.Errorf("unexpected command %q", joined)
 		}
 	}
-	if len(f.calls) != 4 {
-		t.Errorf("calls = %d, want 4", len(f.calls))
+	if len(f.calls) != 5 {
+		t.Errorf("calls = %d, want 5", len(f.calls))
 	}
 }
