@@ -22,6 +22,8 @@ type fakeInspector struct {
 	mu        sync.Mutex
 	diff      func(e manifest.ResolvedEntry, src, dst plan.Endpoint) ([]plan.Change, error)
 	diffCalls []diffCall
+	// kinds answers PathKind by path; a nil map means every path is a directory, an absent path is KindNone.
+	kinds map[string]plan.NodeKind
 }
 
 func (f *fakeInspector) Diff(_ context.Context, e manifest.ResolvedEntry, src, dst plan.Endpoint) ([]plan.Change, error) {
@@ -35,7 +37,12 @@ func (f *fakeInspector) LinkTarget(string) (string, error) { return "", nil }
 
 func (f *fakeInspector) ReadSide(string) (cfgsync.Side, error) { return cfgsync.Side{}, nil }
 
-func (f *fakeInspector) PathKind(string) (plan.NodeKind, error) { return plan.KindDir, nil }
+func (f *fakeInspector) PathKind(path string) (plan.NodeKind, error) {
+	if f.kinds == nil {
+		return plan.KindDir, nil
+	}
+	return f.kinds[path], nil
+}
 
 func (f *fakeInspector) NewestMTime(context.Context, string, manifest.Filter) (time.Time, error) {
 	return time.Time{}, nil

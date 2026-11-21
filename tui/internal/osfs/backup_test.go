@@ -66,6 +66,37 @@ func TestBackupStep_WritesCompleteBackupWithoutPartial(t *testing.T) {
 	}
 }
 
+func TestBackupStep_CopiesDirectoryEntryNestedFiles(t *testing.T) {
+	requireRsync(t)
+	home := t.TempDir()
+	dest := filepath.Join(home, ".config")
+	writeFile(t, filepath.Join(dest, "hypr", "hyprland.lua"), "top")
+	writeFile(t, filepath.Join(dest, "hypr", "configs", "env.lua"), "nested")
+	writeFile(t, filepath.Join(dest, "other", "unrelated"), "skip")
+	ts := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	step := backupStep(dest, "hypr")
+	step.Direction = plan.Manual
+
+	res := osfs.Runner{Home: home, Now: fixedNow(ts)}.Run(context.Background(), step, nil)
+
+	if res.Status != plan.StepOK {
+		t.Fatalf("status = %v, err = %v", res.Status, res.Err)
+	}
+	final := filepath.Join(backup.BackupsDir(home), "20260301-100000", "config")
+	for rel, want := range map[string]string{"hypr/hyprland.lua": "top", "hypr/configs/env.lua": "nested"} {
+		if b, err := os.ReadFile(filepath.Join(final, rel)); err != nil || string(b) != want {
+			t.Errorf("backed up %s = %q, %v, want %q", rel, b, err, want)
+		}
+	}
+	if exists(filepath.Join(final, "other")) {
+		t.Error("an entry outside the backed up directory was copied")
+	}
+	backups, err := backup.ListBackups(context.Background(), home)
+	if err != nil || len(backups) != 1 || backups[0].Direction != plan.Manual {
+		t.Fatalf("ListBackups = %+v, %v; want one backup with direction Manual", backups, err)
+	}
+}
+
 func TestBackupStep_DanglingLinkAtDestinationIsBackedUpAsALink(t *testing.T) {
 	requireRsync(t)
 	home := t.TempDir()

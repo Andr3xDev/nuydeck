@@ -14,6 +14,8 @@ func directionName(d plan.Direction) string {
 		return "pull"
 	case plan.Restore:
 		return "restore"
+	case plan.Manual:
+		return "manual"
 	}
 	return "push"
 }
