@@ -12,6 +12,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
+	"github.com/Andr3xDev/nuydeck/tui/internal/packages"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -148,9 +149,9 @@ func TestRefreshIsListedOnlyForScreensThatRefresh(t *testing.T) {
 }
 
 func TestPackagesFormTitleKeepsTheSpaceBeforeThePackageName(t *testing.T) {
-	f := &fakePackagesDeps{names: []string{"htop"}}
-	p, _, _ := sectionOf[*Packages](NewRoot("", false, Deps{Packages: f.deps()}))
-	p.Update(unregisteredMsg{names: f.names})
+	f := &fakePackagesDeps{rows: []packages.Row{{Name: "htop", Status: packages.StatusDrift}}}
+	p, _, _ := sectionOf[*Packages](NewRoot("", false, f.deps()))
+	p.Update(packagesMsg{rows: f.rows})
 	p.Update(keyPress('m'))
 
 	if view := ansi.Strip(p.View(100, 30)); !strings.Contains(view, "Add htop to the catalog") {

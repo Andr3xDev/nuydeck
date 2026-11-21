@@ -8,6 +8,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/packages"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/references"
 	"github.com/Andr3xDev/nuydeck/tui/internal/services"
@@ -100,6 +101,7 @@ type InstallDeps struct {
 
 // PackagesDeps is what the Packages section needs besides the shell.
 type PackagesDeps struct {
+	List             func(ctx context.Context) ([]packages.Row, error)
 	ListUnregistered func(ctx context.Context) ([]string, error)
 	AddPackage       func(ctx context.Context, pkg manifest.Package) (plan.StepResult, error)
 	IgnorePackage    func(ctx context.Context, name string) plan.StepResult
