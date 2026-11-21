@@ -19,8 +19,7 @@ Singleton {
     })
 
     /*!
-        Returns true if the given date is a Colombian public holiday.
-        month is 1-based (January = 1).
+        `month` is 1-based (January = 1).
     */
     function isHoliday(year, month, day) {
         if (_cache.year !== year)
@@ -41,6 +40,7 @@ Singleton {
 
         mark(_emiliani(year, 1,  6));  // Reyes Magos
         mark(_emiliani(year, 3,  19)); // San José
+        mark(_emiliani(year, 7,  9));  // Virgen del Rosario de Chiquinquirá (Ley 2578)
         mark(_emiliani(year, 6,  29)); // San Pedro y San Pablo
         mark(_emiliani(year, 8,  15)); // Asunción de la Virgen
         mark(_emiliani(year, 10, 12)); // Día de la Raza

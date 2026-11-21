@@ -1,5 +1,7 @@
 import "." as Local
+import "../../../core/animations" as Animations
 import "../../../core/theme" as Theme
+import "../../../core/components/atomic"
 import QtQuick
 import QtQuick.Layouts
 
@@ -10,22 +12,27 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    // State
-    property int displayMonth: _todayMonth
-    property int displayYear: _todayYear
-    // Layout constants
     readonly property int _cellSize: 34
-    readonly property int _cellGap: 4
+    readonly property int _cellGap: Theme.Tokens.space.xs
+    readonly property int _pad: Theme.Tokens.space.md
     readonly property int _headerH: 36
     readonly property int _weekdayH: 20
-    readonly property int _pad: 12
-    // Today
+    readonly property int _headerSpacing: 6
+    readonly property int _headerBottomMargin: 3
+    readonly property int _panelWidth: 7 * _cellSize + 6 * _cellGap + 2 * _pad
+    // Equal left/right slots keep the title centered.
+    readonly property int _headerSlotW: Math.max(prevButton.implicitWidth, nextButton.implicitWidth)
+    property int displayMonth: _todayMonth
+    property int displayYear: _todayYear
+    readonly property bool _isCurrentMonth: displayMonth === _todayMonth && displayYear === _todayYear
+
+    implicitWidth: _panelWidth
+    implicitHeight: content.implicitHeight + 2 * _pad
     property var _today: new Date()
     readonly property int _todayDay:   _today.getDate()
     readonly property int _todayMonth: _today.getMonth() + 1
     readonly property int _todayYear:  _today.getFullYear()
     readonly property color _todayColor: Theme.Tokens.color.accentSurface
-    // Static data
     readonly property var _monthNames: ["January","February","March","April","May","June","July","August","September","October","November","December"]
     readonly property var _weekLabels: ["Su","Mo","Tu","We","Th","Fr","Sa"]
 
@@ -61,17 +68,17 @@ Item {
         return out;
     }
 
-    function _prevMonth() {
+    function prevMonth() {
         if (displayMonth === 1) { displayYear--;  displayMonth = 12; }
         else                    { displayMonth--; }
     }
 
-    function _nextMonth() {
+    function nextMonth() {
         if (displayMonth === 12) { displayYear++; displayMonth = 1; }
         else                     { displayMonth++; }
     }
 
-    function _goToday() {
+    function goToday() {
         displayMonth = _todayMonth;
         displayYear  = _todayYear;
     }
@@ -84,33 +91,90 @@ Item {
     }
 
     ColumnLayout {
+        id: content
         anchors.fill: parent
         anchors.margins: root._pad
-        spacing: 6
+        spacing: root._headerSpacing
 
-        // Header
         RowLayout {
             Layout.fillWidth: true
-            Layout.bottomMargin: 3
-            implicitHeight: root._headerH
+            Layout.bottomMargin: root._headerBottomMargin
+            Layout.preferredHeight: root._headerH
             spacing: Theme.Tokens.space.xs
 
-            Text {
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignLeft
-                leftPadding: 5
-                text: root._monthNames[root.displayMonth - 1] + "  " + root.displayYear
-                color: Theme.Tokens.color.textPrimary
-                font.pixelSize: Theme.Tokens.text.md
-                font.bold: true
+            Item {
+                Layout.preferredWidth: root._headerSlotW
+                Layout.fillHeight: true
+
+                QsButton {
+                    id: prevButton
+                    anchors.verticalCenter: parent.verticalCenter
+                    label: "‹"
+                    onClicked: root.prevMonth()
+                }
             }
 
-            NavButton { label: "Today"; labelColor: Theme.Tokens.color.accent; labelSize: Theme.Tokens.text.xs; onActivated: root._goToday() }
-            NavButton { implicitWidth: 26; label: "‹"; onActivated: root._prevMonth() }
-            NavButton { implicitWidth: 26; label: "›"; onActivated: root._nextMonth() }
+            Item {
+                id: title
+                readonly property bool _showToday: !root._isCurrentMonth && titleHover.containsMouse
+
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                implicitHeight: monthLabel.implicitHeight
+                clip: true
+
+                component TitleLabel: QsText {
+                    property bool shown
+                    property int hiddenY
+
+                    width: parent.width
+                    y: shown ? 0 : hiddenY
+                    opacity: shown ? 1 : 0
+                    horizontalAlignment: Text.AlignHCenter
+                    role: "subtitle"
+                    font.bold: true
+
+                    Behavior on y { Animations.MotionAnimation { role: "stateFast" } }
+                    Behavior on opacity { Animations.MotionAnimation { role: "stateFast" } }
+                }
+
+                TitleLabel {
+                    id: monthLabel
+                    shown: !title._showToday
+                    hiddenY: -title.height
+                    text: root._monthNames[root.displayMonth - 1] + " " + root.displayYear
+                }
+
+                TitleLabel {
+                    shown: title._showToday
+                    hiddenY: title.height
+                    text: "Today"
+                    color: Theme.Tokens.color.aquamarine
+                }
+
+                MouseArea {
+                    id: titleHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: root._isCurrentMonth ? Qt.ArrowCursor : Qt.PointingHandCursor
+                    onClicked: if (!root._isCurrentMonth) root.goToday()
+                }
+            }
+
+            Item {
+                Layout.preferredWidth: root._headerSlotW
+                Layout.fillHeight: true
+
+                QsButton {
+                    id: nextButton
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    label: "›"
+                    onClicked: root.nextMonth()
+                }
+            }
         }
 
-        // Weekday labels
         Row {
             Layout.alignment: Qt.AlignHCenter
             spacing: root._cellGap
@@ -118,20 +182,19 @@ Item {
             Repeater {
                 model: root._weekLabels
 
-                Text {
+                QsText {
                     width: root._cellSize
                     height: root._weekdayH
                     text: modelData
+                    role: "caption"
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     color: Theme.Tokens.color.textMuted
-                    font.pixelSize: Theme.Tokens.text.xs
                     font.bold: true
                 }
             }
         }
 
-        // Day grid
         Grid {
             Layout.alignment: Qt.AlignHCenter
             columns: 7
@@ -147,16 +210,16 @@ Item {
 
                     Rectangle {
                         anchors.centerIn: parent
-                        width: root._cellSize - 4
-                        height: root._cellSize - 4
-                        radius: (root._cellSize - 4) / 2
+                        width: root._cellSize - root._cellGap
+                        height: width
+                        radius: width / 2
                         color: modelData.isToday ? root._todayColor : Theme.Tokens.color.bg
                     }
 
-                    Text {
+                    QsText {
                         anchors.centerIn: parent
                         text: modelData.day
-                        font.pixelSize: Theme.Tokens.text.sm
+                        role: "body"
                         font.bold: modelData.isToday
                         color: !modelData.isCurrentMonth
                             ? Theme.Tokens.color.textMuted
@@ -167,38 +230,5 @@ Item {
                 }
             }
         }
-    }
-
-    // NavButton inline component
-    component NavButton: Rectangle {
-        id: btn
-
-        property alias label: lbl.text
-        property alias labelColor: lbl.color
-        property alias labelSize: lbl.font.pixelSize
-
-        signal activated()
-
-        implicitWidth: lbl.implicitWidth + Theme.Tokens.space.md
-        implicitHeight: 26
-        radius: Theme.Tokens.radius.md
-        color: ma.containsMouse ? Theme.Tokens.color.bgHover : Theme.Tokens.color.bg
-
-        Text {
-            id: lbl
-            anchors.centerIn: parent
-            color: Theme.Tokens.color.textPrimary
-            font.pixelSize: Theme.Tokens.text.md
-        }
-
-        MouseArea {
-            id: ma
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: btn.activated()
-        }
-
-        Behavior on color { ColorAnimation { duration: Theme.Tokens.motion.fast } }
     }
 }

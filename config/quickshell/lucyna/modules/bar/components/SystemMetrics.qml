@@ -1,9 +1,9 @@
 import QtQuick
 import QtQuick.Layouts
 import "../../../core/theme" as Theme
-import "../../../core/services" as Services
-import "../../../core/components"
+import "../../../core/services/system" as Services
 import "../layout"
+import "../../../core/animations" as Animations
 
 /*!
     Group of circular indicators showing CPU, GPU, RAM and disk usage.
@@ -21,7 +21,7 @@ ExpandableRow {
         opacity: root.expanded ? 1 : 0
 
         Behavior on opacity {
-            NumberAnimation { duration: Theme.Tokens.motion.standard }
+            Animations.MotionAnimation { role: "stateStandard" }
         }
 
         CircularMetric {

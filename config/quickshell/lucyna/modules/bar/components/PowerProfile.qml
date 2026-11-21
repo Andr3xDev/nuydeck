@@ -1,16 +1,18 @@
 import QtQuick
 import QtQuick.Layouts
 import "../../../core/theme" as Theme
-import "../../../core/services" as Services
-import "../../../core/components"
+import "../../../core/services/system" as Services
+import "../layout"
+import "../../../core/components/atomic"
+import "../../../core/animations" as Animations
 
 /*!
-    Power profile selector component to set different profiles
+    Power profile selector: one icon per profile, the active one underlined in
+    its profile color.
 */
 ExpandableRow {
     id: root
 
-    // Profile color mapping
     readonly property var profileColors: ({
         "power-saver": Theme.Tokens.color.info,
         "balanced": Theme.Tokens.color.warning,
@@ -24,7 +26,7 @@ ExpandableRow {
         opacity: root.expanded ? 1 : 0
 
         Behavior on opacity {
-            NumberAnimation { duration: Theme.Tokens.motion.standard }
+            Animations.MotionAnimation { role: "stateStandard" }
         }
 
         Repeater {
@@ -41,26 +43,20 @@ ExpandableRow {
                     id: buttonContent
                     spacing: 1
                     
-                    // Icon
-                    Text {
+                    QsText {
                         id: iconText
                         text: modelData.icon
+                        role: "icon"
                         color: profileButton.isActive
                             ? profileButton.profileColor
                             : Theme.Tokens.color.textPrimary
-                        font.pixelSize: Theme.Tokens.text.icon
-                        font.family: Theme.Tokens.text.iconFont
                         Layout.alignment: Qt.AlignHCenter
                         
                         Behavior on color {
-                            ColorAnimation {
-                                duration: Theme.Tokens.motion.standard
-                                easing.type: Theme.Tokens.motion.ease
-                            }
+                            Animations.MotionColorAnimation { role: "stateStandard" }
                         }
                     }
 
-                    // Underline indicator
                     Rectangle {
                         Layout.preferredWidth: iconText.implicitWidth
                         Layout.preferredHeight: 2
@@ -70,15 +66,12 @@ ExpandableRow {
                         opacity: profileButton.isActive ? 1 : 0
 
                         Behavior on opacity {
-                            NumberAnimation {
-                                duration: Theme.Tokens.motion.standard
-                                easing.type: Theme.Tokens.motion.ease
-                            }
+                            Animations.MotionAnimation { role: "stateStandard" }
                         }
                     }
                 }
                 
-                HoverScale {
+                Animations.HoverScale {
                     anchors.fill: parent
                     target: iconText
                     cursorShape: Qt.PointingHandCursor

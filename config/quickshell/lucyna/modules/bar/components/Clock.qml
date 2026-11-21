@@ -2,7 +2,9 @@ import Quickshell
 import QtQuick
 import QtQuick.Layouts
 import "../../../core/theme" as Theme
-import "../../../core/ipc" as Ipc
+import "../../../core/bridge" as Ipc
+import "../../../core/components/atomic"
+import "../../../core/animations" as Animations
 
 /*!
     Clock text to show current time & day of the week.
@@ -10,10 +12,10 @@ import "../../../core/ipc" as Ipc
 */
 Item {
     id: clock
-    implicitWidth: clockText.implicitWidth + Theme.Tokens.space.lg
+    implicitWidth: clockRow.implicitWidth
     Layout.fillHeight: true
 
-    // Tracks calendar open/close state via EventBus — no direct module coupling
+    // Driven through EventBus so the bar does not depend on the calendar module.
     property bool _calendarOpen: false
 
     Connections {
@@ -35,19 +37,35 @@ Item {
         var now = new Date()
         var timeStr = Qt.formatDateTime(now, "hh:mm ap")
         var dateStr = Qt.formatDateTime(now, "dd - ddd")
-        clockText.text = timeStr + "   |   " + dateStr
+        timeText.text = timeStr
+        dateText.text = dateStr
     }
 
-    Text {
-        id: clockText
-        anchors.centerIn: parent
-        font.bold:       true
-        font.pixelSize:  Theme.Tokens.text.sm
+    component ClockText: QsText {
+        role:      "mono"
+        font.bold: true
         color: clock._calendarOpen
             ? Theme.Tokens.color.accent
             : Theme.Tokens.color.textPrimary
 
-        Behavior on color { ColorAnimation { duration: Theme.Tokens.motion.fast } }
+        Behavior on color { Animations.MotionColorAnimation { role: "stateFast" } }
+    }
+
+    // Divider gap: three mono-space characters wide, so it scales with the clock font.
+    TextMetrics {
+        id: dividerGap
+        font: dividerText.font
+        text: "   "
+    }
+
+    RowLayout {
+        id: clockRow
+        anchors.centerIn: parent
+        spacing: dividerGap.advanceWidth
+
+        ClockText { id: timeText }
+        ClockText { id: dividerText; text: "|" }
+        ClockText { id: dateText }
     }
 
     MouseArea {

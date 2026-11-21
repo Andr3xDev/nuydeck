@@ -1,219 +1,207 @@
-import "../../../core/components"
-import "../../../core/services" as Services
+import "../../../core/services/system" as Services
+import "../../../core/services/panel" as PanelServices
 import "../../../core/theme" as Theme
+import "../../../core/components/atomic"
+import "../../../core/components/panel"
+import "../../../core/components/input"
+import "../../../core/animations" as Animations
 import QtQuick
-import Quickshell
 import Quickshell.Io
-import Quickshell.Wayland
 
 /*!
-    Power management overlay with lock, suspend, reboot, and shutdown actions.
-    Destructive actions require a second confirmation press.
+    Power overlay: lock, suspend, reboot, shutdown. Destructive actions
+    require a second press to confirm. Floating PanelBase panel: screen-centered
+    on a PanelCard, rising from below the bottom screen edge.
+
+    Toggle: qs -c lucyna ipc call togglePower handle
 */
-PanelWindow {
+PanelBase {
     id: root
 
-    // ── State ────────────────────────────────────────────
-    property int    confirmIndex:  -1   // -1 = none pending
-    property int    selectedIndex: 0
-    property string uptimeText:    ""
+    name: "powerLauncher"
+    placement: PanelPlacement {
+        type: PanelServices.PanelRules.Type.Floating
+        size: Qt.size(root.cardW, root.cardH)
+    }
+    focusTarget: root.contentItem
+    onShown: {
+        root.confirmIndex = -1;
+        root.selectedIndex = 0;
+        uptimeProcess.running = true;
+    }
+    onHiding: root.confirmIndex = -1
 
-    // ── Layout constants ─────────────────────────────────
-    readonly property int cardW: 280
-    readonly property int cardH: 110
-    readonly property int actionSize: 52
-
-    readonly property var actions: [{
-        "label": "Lock",
-        "icon": "󰌾",
-        "destructive": false,
-        "action": () => { Services.PowerOptionService.lock();    root.close() }
-    }, {
-        "label": "Suspend",
-        "icon": "󰒲",
-        "destructive": false,
-        "action": () => { Services.PowerOptionService.suspend(); root.close() }
-    }, {
-        "label": "Reboot",
-        "icon": "󰜉",
-        "destructive": true,
-        "action": () => { Services.PowerOptionService.reboot();  root.close() }
-    }, {
-        "label": "Shutdown",
-        "icon": "󰐥",
-        "destructive": true,
-        "action": () => { Services.PowerOptionService.shutdown(); root.close() }
-    }]
-
-    // ── Public API ───────────────────────────────────────
-    function toggle() {
-        if (root.visible) close();
-        else open();
+    ModalKeymap {
+        id: keymap
+        enabled: root.open
+        useBase: true
+        axis: "horizontal"
+        wrap: true
+        modifierPolicy: "exactArrows"
+        readonly property var handlers: ({
+            moveLeft: () => root.selectedIndex = keymap.step(root.selectedIndex, -1, root.actions.length),
+            moveRight: () => root.selectedIndex = keymap.step(root.selectedIndex, 1, root.actions.length),
+            activate: () => root.trigger(root.selectedIndex),
+            cancel: () => {
+                if (root.confirmIndex !== -1)
+                    root.confirmIndex = -1;
+                else
+                    root.hide();
+            }
+        })
+        onActionTriggered: action => keymap.handlerFor(handlers, action)?.()
     }
 
-    function open() {
-        root.screen = Services.ScreenService.focusedScreen();
-        confirmIndex  = -1;
-        selectedIndex = 0;
-        root.visible  = true;
-    }
+    property int confirmIndex: -1   // -1 = none pending
+    property int selectedIndex: 0
+    onSelectedIndexChanged: confirmIndex = -1
+    property string uptimeText: ""
 
-    function close() {
-        root.visible  = false;
-        confirmIndex  = -1;
-    }
+    readonly property int cardW: 320
+    readonly property int cardH: 124
+    readonly property int actionSize: 60
+    readonly property real statusLetterSpacing: 0.4
+    readonly property int secondsPerMinute: 60
+    readonly property int secondsPerHour: 3600
+
+    readonly property var actions: [
+        {
+            "label": "Lock",
+            "icon": "󰌾",
+            "destructive": false,
+            "action": () => {
+                Services.PowerOptionService.lock();
+            }
+        },
+        {
+            "label": "Suspend",
+            "icon": "󰒲",
+            "destructive": false,
+            "action": () => {
+                Services.PowerOptionService.suspend();
+            }
+        },
+        {
+            "label": "Reboot",
+            "icon": "󰜉",
+            "destructive": true,
+            "action": () => {
+                Services.PowerOptionService.reboot();
+            }
+        },
+        {
+            "label": "Shutdown",
+            "icon": "󰐥",
+            "destructive": true,
+            "action": () => {
+                Services.PowerOptionService.shutdown();
+            }
+        }
+    ]
 
     function trigger(index) {
+        if (!root.open)
+            return;
         const a = actions[index];
         if (a.destructive && confirmIndex !== index) {
             confirmIndex = index;
             return;
         }
         confirmIndex = -1;
-        a.action();
+        root.closeThenRun(a.action);
     }
 
-    // ── Visibility ───────────────────────────────────────
-    color: "transparent" // layer-shell root — must not paint, real card bg is the Rectangle below
-    visible: false
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "powerLauncher"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-    exclusionMode: ExclusionMode.Ignore
-    onVisibleChanged: {
-        if (visible) {
-            uptimeProcess.running = true;
-            card.forceActiveFocus();
-        }
-    }
-
-    anchors {
-        top: true
-        bottom: true
-        left: true
-        right: true
-    }
-
-    // ── Uptime reader ────────────────────────────────────
     Process {
         id: uptimeProcess
         command: ["cat", "/proc/uptime"]
         stdout: SplitParser {
-            onRead: (data) => {
+            onRead: data => {
                 const secs = Math.floor(parseFloat(data.trim().split(" ")[0]));
-                const h = Math.floor(secs / 3600);
-                const m = Math.floor((secs % 3600) / 60);
+                const h = Math.floor(secs / root.secondsPerHour);
+                const m = Math.floor((secs % root.secondsPerHour) / root.secondsPerMinute);
                 root.uptimeText = h > 0 ? h + "h " + m + "m" : m + "m";
             }
         }
     }
 
-    // ── IPC — external keybind (Hyprland) ────────────────
     IpcHandler {
-        function handle() { root.toggle(); }
+        function handle() {
+            root.toggle();
+        }
         target: "togglePower"
     }
 
-    // ── Background overlay ───────────────────────────────
-    DarkOverlay {
-        visible: root.visible
-        onClicked: root.close()
-    }
+    contentComponent: Component {
+        Item {
+            implicitWidth: root.cardW
+            implicitHeight: root.cardH
+            width: implicitWidth
+            height: implicitHeight
+            focusPolicy: Qt.StrongFocus
+            Keys.onPressed: event => keymap.handleKey(event)
 
-    // ── Card ─────────────────────────────────────────────
-    Rectangle {
-        id: card
-
-        width: root.cardW
-        height: root.cardH
-        anchors.centerIn: parent
-        color: Theme.Tokens.color.bg
-        radius: Theme.Tokens.radius.md
-        border.width: 1
-        border.color: Theme.Tokens.color.border
-        opacity: root.visible ? 1 : 0
-        scale: root.visible ? 1 : 0.97
-        focusPolicy: Qt.StrongFocus
-        Keys.onEscapePressed: {
-            if (root.confirmIndex !== -1) root.confirmIndex = -1;
-            else root.close();
-        }
-        Keys.onLeftPressed: root.selectedIndex = (root.selectedIndex - 1 + root.actions.length) % root.actions.length
-        Keys.onRightPressed: root.selectedIndex = (root.selectedIndex + 1) % root.actions.length
-        Keys.onReturnPressed: root.trigger(root.selectedIndex)
-        Keys.onEnterPressed: root.trigger(root.selectedIndex)
-        Keys.onSpacePressed: root.trigger(root.selectedIndex)
-
-        MouseArea { anchors.fill: parent }
-
-        Column {
-            anchors.centerIn: parent
-            spacing: Theme.Tokens.space.md
-
-            // Action buttons
-            Row {
-                anchors.horizontalCenter: parent.horizontalCenter
+            Column {
+                anchors.centerIn: parent
                 spacing: Theme.Tokens.space.md
 
-                Repeater {
-                    model: root.actions
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: Theme.Tokens.space.md
 
-                    delegate: Rectangle {
-                        readonly property bool isConfirming: root.confirmIndex === index
-                        readonly property bool isSelected: root.selectedIndex === index
-                        readonly property bool isHighlighted: isConfirming || isSelected || hoverArea.containsMouse
+                    Repeater {
+                        model: root.actions
 
-                        width: root.actionSize
-                        height: root.actionSize
-                        radius: Theme.Tokens.radius.lg
-                        color: isConfirming
-                            ? Theme.Tokens.color.accentSurface
-                            : Theme.Tokens.color.bgElevated
-                        border.width: isSelected ? 2 : 1
-                        border.color: isHighlighted
-                            ? Theme.Tokens.color.accent
-                            : Theme.Tokens.color.border
+                        delegate: Rectangle {
+                            readonly property bool isConfirming: root.confirmIndex === index
+                            readonly property bool isSelected: root.selectedIndex === index
+                            readonly property bool isHighlighted: isConfirming || isSelected || hoverArea.containsMouse
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData.icon
-                            color: Theme.Tokens.color.textPrimary
-                            font.pixelSize: Theme.Tokens.text.iconLg
-                            font.family: Theme.Tokens.text.iconFont
+                            width: root.actionSize
+                            height: root.actionSize
+                            radius: Theme.Tokens.radius.lg
+                            color: isConfirming ? Theme.Tokens.color.accentSurface : Theme.Tokens.color.surface
+                            border.width: isSelected ? Theme.Tokens.border.md : Theme.Tokens.border.sm
+                            border.color: isHighlighted ? Theme.Tokens.color.accent : Theme.Tokens.color.border
+
+                            QsText {
+                                anchors.centerIn: parent
+                                text: modelData.icon
+                                role: "icon"
+                                iconSize: "xl"
+                                color: Theme.Tokens.color.textPrimary
+                            }
+
+                            MouseArea {
+                                id: hoverArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onEntered: root.selectedIndex = index
+                                onClicked: root.trigger(index)
+                            }
+
+                            Behavior on color {
+                                Animations.MotionColorAnimation { role: "stateFast" }
+                            }
+                            Behavior on border.color {
+                                Animations.MotionColorAnimation { role: "stateFast" }
+                            }
                         }
+                    }
+                }
 
-                        MouseArea {
-                            id: hoverArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onEntered: root.selectedIndex = index
-                            onClicked: root.trigger(index)
-                        }
+                QsText {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: root.confirmIndex !== -1 ? "Press again to " + root.actions[root.confirmIndex].label.toLowerCase() : (root.uptimeText ? "󱑎  Uptime: " + root.uptimeText : " ")
+                    role: "body"
+                    color: root.confirmIndex !== -1 ? Theme.Tokens.color.accent : Theme.Tokens.color.textPrimary
+                    font.letterSpacing: root.statusLetterSpacing
 
-                        Behavior on color        { ColorAnimation { duration: Theme.Tokens.motion.fast } }
-                        Behavior on border.color { ColorAnimation { duration: Theme.Tokens.motion.fast } }
+                    Behavior on color {
+                        Animations.MotionColorAnimation { role: "stateFast" }
                     }
                 }
             }
-
-            // Uptime label / confirmation prompt
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: root.confirmIndex !== -1
-                    ? "Press again to " + root.actions[root.confirmIndex].label.toLowerCase()
-                    : (root.uptimeText ? "󱑎  Uptime: " + root.uptimeText : " ")
-                color: root.confirmIndex !== -1
-                    ? Theme.Tokens.color.accent
-                    : Theme.Tokens.color.textPrimary
-                font.pixelSize: Theme.Tokens.text.sm
-                font.letterSpacing: 0.4
-
-                Behavior on color { ColorAnimation { duration: Theme.Tokens.motion.fast } }
-            }
         }
-
-        Behavior on opacity { NumberAnimation { duration: Theme.Tokens.motion.fast; easing.type: Theme.Tokens.motion.ease } }
-        Behavior on scale   { NumberAnimation { duration: Theme.Tokens.motion.fast; easing.type: Theme.Tokens.motion.ease } }
     }
 }

@@ -1,10 +1,11 @@
 import QtQuick
 import QtQuick.Layouts
 import "../../../core/theme" as Theme
-import "../../../core/components"
+import "../../../core/components/atomic"
+import "../../../core/animations" as Animations
 
 /*!
-    Toogle sistem to hide information & show it by clicking the square with an icon
+    Square icon button (optional label) that toggles `expanded`.
 */
 Rectangle {
     id: toggleIndicator
@@ -14,7 +15,6 @@ Rectangle {
     implicitHeight: 20
     readonly property real hPad: Theme.Tokens.space.xs
 
-    // Visuals
     color: expanded
         ? Theme.Tokens.color.accentSurface
         : Theme.Tokens.color.bg
@@ -22,17 +22,12 @@ Rectangle {
     border.color: Theme.Tokens.color.borderStrong
     border.width: 1
 
-    // Values to show
     property string icon: ""
     property string label: ""
     property bool expanded: false
 
-    // Animation to open
     Behavior on color {
-        ColorAnimation {
-            duration: Theme.Tokens.motion.standard
-            easing.type: Theme.Tokens.motion.ease
-        }
+        Animations.MotionColorAnimation { role: "stateStandard" }
     }
 
     RowLayout {
@@ -40,42 +35,35 @@ Rectangle {
         anchors.centerIn: parent
         spacing: Theme.Tokens.space.xs
 
-        Text {
+        QsText {
             text: icon
+            role: "icon"
             color: expanded
                 ? Theme.Tokens.color.accent
                 : Theme.Tokens.color.textPrimary
-            font.pixelSize: Theme.Tokens.text.icon
-            font.family: Theme.Tokens.text.iconFont
             Layout.alignment: Qt.AlignCenter
 
             Behavior on color {
-                ColorAnimation {
-                    duration: Theme.Tokens.motion.standard
-                    easing.type: Theme.Tokens.motion.ease
-                }
+                Animations.MotionColorAnimation { role: "stateStandard" }
             }
         }
 
-        Text {
+        QsText {
             visible: label !== ""
             text: label
+            role: "body"
             color: expanded
                 ? Theme.Tokens.color.accent
                 : Theme.Tokens.color.textPrimary
-            font.pixelSize: Theme.Tokens.text.sm
             Layout.alignment: Qt.AlignCenter
 
             Behavior on color {
-                ColorAnimation {
-                    duration: Theme.Tokens.motion.standard
-                    easing.type: Theme.Tokens.motion.ease
-                }
+                Animations.MotionColorAnimation { role: "stateStandard" }
             }
         }
     }
 
-    HoverScale {
+    Animations.HoverScale {
         anchors.fill: parent
         target: toggleIndicator
         cursorShape: Qt.PointingHandCursor

@@ -1,11 +1,14 @@
 import QtQuick
 import QtQuick.Layouts
 import "../../../core/theme" as Theme
-import "../../../core/services" as Services
-import "../../../core/components"
+import "../../../core/services/system" as Services
+import "../layout"
+import "../../../core/components/atomic"
+import "../../../core/animations" as Animations
 
 /*!
-    Group of controls to manage PC's components like network or volume
+    Network, Bluetooth and audio controls. Network and Bluetooth clicks open
+    their managers; on audio the wheel adjusts volume and click toggles mute.
 */
 ExpandableRow {
     id: root
@@ -19,28 +22,26 @@ ExpandableRow {
         opacity: root.expanded ? 1 : 0
         
         Behavior on opacity {
-            NumberAnimation { duration: Theme.Tokens.motion.standard }
+            Animations.MotionAnimation { role: "stateStandard" }
         }
         
-        // Network
         Item {
             Layout.preferredWidth: root.iconSize
             Layout.preferredHeight: root.iconSize
 
-            Text {
+            QsText {
                 id: networkIconText
                 anchors.centerIn: parent
                 text: Services.NetworkService.ethernetEnabled ? "󰈀" :
                       (Services.NetworkService.wifiEnabled ? "󰖩" : "󰖪")
+                role: "icon"
                 color: (Services.NetworkService.ethernetEnabled ||
                         Services.NetworkService.wifiEnabled)
-                    ? Theme.Tokens.hue.aquamarine.fill
+                    ? Theme.Tokens.color.aquamarine
                     : Theme.Tokens.color.danger
-                font.pixelSize: Theme.Tokens.text.icon
-                font.family: Theme.Tokens.text.iconFont
             }
 
-            HoverScale {
+            Animations.HoverScale {
                 anchors.fill: parent
                 target: networkIconText
                 cursorShape: Qt.PointingHandCursor
@@ -48,23 +49,21 @@ ExpandableRow {
             }
         }
         
-        // Bluetooth
         Item {
             Layout.preferredWidth: root.iconSize
             Layout.preferredHeight: root.iconSize
 
-            Text {
+            QsText {
                 id: bluetoothIconText
                 anchors.centerIn: parent
                 text: Services.BluetoothService.enabled ? "󰂯" : "󰂲"
+                role: "icon"
                 color: Services.BluetoothService.enabled
-                    ? Theme.Tokens.hue.aquamarine.fill
+                    ? Theme.Tokens.color.aquamarine
                     : Theme.Tokens.color.danger
-                font.pixelSize: Theme.Tokens.text.icon
-                font.family: Theme.Tokens.text.iconFont
             }
 
-            HoverScale {
+            Animations.HoverScale {
                 anchors.fill: parent
                 target: bluetoothIconText
                 cursorShape: Qt.PointingHandCursor
@@ -72,7 +71,6 @@ ExpandableRow {
             }
         }
         
-        // Audio
         Item {
             Layout.preferredWidth: audioRow.implicitWidth
             Layout.preferredHeight: root.iconSize
@@ -82,30 +80,28 @@ ExpandableRow {
                 anchors.centerIn: parent
                 spacing: Theme.Tokens.space.xs
 
-                Text {
+                QsText {
                     id: aIconText
                     text: Services.AudioService.muted ? " 󰖁" :
                           Services.AudioService.volume > 50 ? " 󰕾" : " 󰖀"
+                    role: "icon"
                     color: Services.AudioService.muted
                         ? Theme.Tokens.color.danger
-                        : Theme.Tokens.hue.aquamarine.fill
-                    font.pixelSize: Theme.Tokens.text.icon
-                    font.family: Theme.Tokens.text.iconFont
+                        : Theme.Tokens.color.aquamarine
                 }
 
-                Text {
+                QsText {
                     text: `${Services.AudioService.volume}%`
+                    role: "mono"
                     color: Theme.Tokens.color.textPrimary
-                    font.pixelSize: Theme.Tokens.text.sm
                 }
             }
 
-            HoverScale {
+            Animations.HoverScale {
                 anchors.fill: parent
                 target: aIconText
                 cursorShape: Qt.PointingHandCursor
 
-                // Scroll set values
                 property int wheelAccumulator: 0
                 onClicked: Services.AudioService.toggleMute()
                 onWheel: wheel => {

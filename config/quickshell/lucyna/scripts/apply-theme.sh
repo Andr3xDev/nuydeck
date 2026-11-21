@@ -1,13 +1,10 @@
 #!/bin/bash
 
-# ---------------------------------------------------------------------------
-# Apply Theme
-# Master script that applies a theme (abysal-obsidian, abysal-marble) across all applications
-# ---------------------------------------------------------------------------
+# Master script that applies a theme (nadir, zenit) across all applications
 
 THEME="$1"
 
-source "${HOME}/.config/scripts/logger.sh"
+source "${HOME}/.config/nuydeck/lib/logger.sh"
 log INFO "---------------------------------------------------------------"
 log INFO "Applying theme: ${THEME} for all applications"
 
@@ -16,15 +13,13 @@ if [ -z "${THEME}" ]; then
     exit 1
 fi
 
-# Map quickshell theme names to app-specific names
+# Validate the variant sent by Quickshell (nadir|zenit)
 case "${THEME}" in
-    "abysal-obsidian")
-        GTK_THEME="abysal-obsidian"
-        HYPR_THEME="abysal-obsidian"
+    "nadir")
+        VARIANT="nadir"
         ;;
-    "abysal-marble")
-        GTK_THEME="abysal-marble"
-        HYPR_THEME="abysal-marble"
+    "zenit")
+        VARIANT="zenit"
         ;;
     *)
         log ERROR "Unknown theme: ${THEME}"
@@ -32,47 +27,26 @@ case "${THEME}" in
         ;;
 esac
 
-# ============================================
-# Theme Change Commands
-# ============================================
+~/.config/ghostty/theme.sh "${VARIANT}"
 
-# Ghostty
-~/.config/ghostty/theme.sh ${THEME}
+~/.config/hypr/scripts/theme.sh "${VARIANT}"
 
-# Hyprland
-~/.config/hypr/scripts/theme.sh ${THEME}
+~/.config/yazi/theme.sh "${VARIANT}"
 
-# Yazi
-~/.config/yazi/theme.sh ${THEME}
+~/.config/fastfetch/theme.sh "${VARIANT}"
 
-# Fastfetch
-~/.config/fastfetch/theme.sh ${THEME}
+~/.config/btop/theme.sh "${VARIANT}"
 
-# Btop
-~/.config/btop/theme.sh ${THEME}
+~/.config/starship/theme.sh "${VARIANT}"
 
-# Starship
-~/.config/starship/theme.sh ${THEME}
+~/.config/awww/theme.sh "${VARIANT}"
 
-# swww
-~/.config/awww/theme.sh ${THEME}
+~/.config/kotofetch/theme.sh "${VARIANT}"
 
-# Kotofetch
-~/.config/kotofetch/theme.sh ${THEME}
+~/.config/nuydeck/scripts/spotify-theme.sh "${VARIANT}"
 
-# spotify
-~/.config/scripts/spotify-theme.sh ${THEME}
+~/.config/nuydeck/scripts/gtk-theme.sh "${VARIANT}"
 
-# VScode theme
-~/.config/scripts/vscode-theme.sh ${THEME}
-
-# GTK
-~/.config/scripts/gtk-theme.sh ${THEME}
-
-# Firefox tabs
-~/.config/startpage/theme.sh ${THEME}
-
-# Dunst
-~/.config/dunst/theme.sh ${THEME}
+~/.config/dunst/theme.sh "${VARIANT}"
 
 log SUCCESS "All themes applied successfully: ${THEME}"

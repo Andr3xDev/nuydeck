@@ -1,163 +1,81 @@
-import Quickshell
 import QtQuick
-import QtQuick.Layouts
 import "../../core/theme" as Theme
-import "components"
-import "layout"
+import "../../core/animations" as Animations
+import "../../core/services/panel" as Services
+import "../../core/bridge" as Ipc
 
 /*!
-    Bar of the system. Shows workspaces, clock, power profiles, metrics and battery.
+    Top bar, one per screen: a thin registration wrapper hosted inside
+    quickshell-top (core/components/surface/QuickshellTop.qml), not its own
+    PanelWindow. quickshell-exclusion owns the reserved screen space.
+    Registered in PanelService as PanelService.barNameFor(screen) so
+    bar-attached panels can read its geometry (PanelService.barOffset).
+    Content is in BarContent.qml.
+
+    `open` drives PanelService/exclusion immediately; `visible` stays true
+    while progress > 0 so the exit slide is seen.
 */
-PanelWindow {
+Item {
     id: bar
+
+    required property QtObject screen
+
     anchors {
-        left: true
-        top: true
-        right: true
+        left: parent.left
+        top: parent.top
+        right: parent.right
     }
-    margins { top: 4; left: 40; right: 40}
-    implicitHeight: 32
-    color: "transparent" // layer-shell root — must not paint, real bar bg is the Rectangle below
+    implicitHeight: Theme.Tokens.comp.bar.height
+    height: implicitHeight
 
-    property var modelData
-    screen: modelData
+    readonly property string name: Services.PanelService.barNameFor(bar.screen)
+    readonly property real visualExtent: bar.implicitHeight - Theme.Tokens.comp.panelSurface.depthInset
 
-    Rectangle {
+    property string parentName: ""
+    property bool open: true
+    readonly property bool active: bar.open
+
+    // The bar hides while its own screen is fullscreen, without touching `open`/exclusion, so a
+    // panel opened over fullscreen (QuickshellTop remaps above the fullscreen client) shows alone.
+    readonly property bool _fullscreenOnThisScreen: Ipc.HyprlandIpc.isFullscreen(bar.screen)
+
+    // Initialized from `open` directly (not via onOpenChanged) so no Behavior fires on shell start.
+    property real progress: bar.open ? 1 : 0
+    // Fullscreen hides and reappears instantly: `progress` is untouched, so the user's own slide still animates.
+    visible: (bar.open || bar.progress > 0) && !bar._fullscreenOnThisScreen
+
+    Behavior on progress {
+        Animations.MotionAnimation {
+            role: bar.open ? "panelEnter" : "panelExit"
+        }
+    }
+
+    onOpenChanged: bar.progress = bar.open ? 1 : 0
+
+    transform: Translate {
+        y: -(1 - bar.progress) * bar.height
+    }
+
+    function show() {
+        bar.open = true;
+    }
+
+    function hide() {
+        bar.open = false;
+    }
+
+    function toggle() {
+        if (bar.open)
+            bar.hide();
+        else
+            bar.show();
+    }
+
+    Component.onCompleted: Services.PanelService.register(bar.name, bar)
+    Component.onDestruction: Services.PanelService.unregister(bar.name, bar)
+
+    BarContent {
         anchors.fill: parent
-        border.color: Theme.Tokens.color.border
-        color: Theme.Tokens.color.bg
-        radius: Theme.Tokens.radius.md
-        border.width: 2
-    }
-
-    // Left section
-    Item {
-        id: leftSection
-        anchors {
-            left: parent.left
-            top: parent.top
-            bottom: parent.bottom
-        }
-        width: Math.max(100, leftContent.implicitWidth + Theme.Tokens.space.xxl)
-
-        RowLayout {
-            id: leftContent
-            anchors.fill: parent
-            spacing: Theme.Tokens.space.sm
-
-            Item { Layout.preferredWidth: Theme.Tokens.space.xs }
-
-            ArchLogo {}
-
-            // Subtle separator
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: parent.height * 0.7
-                Layout.alignment: Qt.AlignVCenter
-                color: Theme.Tokens.color.borderMuted
-                radius: Theme.Tokens.radius.full
-            }
-
-            Item { Layout.preferredWidth: Theme.Tokens.space.sm }
-
-            Clock {}
-
-            Item { Layout.preferredWidth: Theme.Tokens.space.sm; Layout.fillWidth: true }
-        }
-    }
-
-    // Center section - Clock
-    Item {
-        id: centerSection
-        anchors {
-            horizontalCenter: parent.horizontalCenter
-            top: parent.top
-            bottom: parent.bottom
-        }
-        width: clockContent.implicitWidth + Theme.Tokens.space.xxl
-
-        RowLayout {
-            id: clockContent
-            anchors.centerIn: parent
-            height: parent.height
-
-            Workspaces {
-                screen: bar.screen
-            }
-        }
-    }
-
-    // Right section - Metrics, Controls and Battery
-    Item {
-        id: rightSection
-        anchors {
-            right: parent.right
-            top: parent.top
-            bottom: parent.bottom
-        }
-        width: rightContent.implicitWidth + 2  // pixel offset, not layout spacing
-
-        RowLayout {
-            id: rightContent
-            anchors { fill: parent; rightMargin: 1 }  // pixel offset, pairs with rightSection's +2
-            spacing: Theme.Tokens.space.sm
-
-            Item { Layout.preferredWidth: Theme.Tokens.space.xs }
-
-            PowerProfile {
-                id: powerProfile
-                expanded: powerToggle.expanded
-            }
-
-            ToggleIndicator {
-                id: powerToggle
-                icon: "󱐋"
-            }
-
-            Item { Layout.preferredWidth: Theme.Tokens.space.xs }
-
-            SystemControls {
-                id: systemControls
-                expanded: controlsToggle.expanded
-            }
-
-            ToggleIndicator {
-                id: controlsToggle
-                icon: "󰒓"
-            }
-
-            Item { Layout.preferredWidth: Theme.Tokens.space.xs }
-
-            SystemTemperatures {
-                id: systemTemperatures
-                expanded: tempToggle.expanded
-            }
-
-            ToggleIndicator {
-                id: tempToggle
-                icon: "󰔏"
-            }
-
-            Item { Layout.preferredWidth: Theme.Tokens.space.xs }
-
-            SystemMetrics {
-                id: systemMetrics
-                expanded: metricsToggle.expanded
-            }
-
-            ToggleIndicator {
-                id: metricsToggle
-                icon: "󰕮"
-            }
-
-            Item { Layout.preferredWidth: Theme.Tokens.space.xs }
-
-            Battery {
-                id: batteryWidget
-            }
-
-            // fillWidth absorbs the 1px surplus so RowLayout doesn't spread it across cells
-            Item { Layout.preferredWidth: Theme.Tokens.space.sm; Layout.fillWidth: true }
-        }
+        screen: bar.screen
     }
 }

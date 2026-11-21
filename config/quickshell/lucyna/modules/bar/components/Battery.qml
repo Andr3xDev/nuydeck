@@ -1,11 +1,10 @@
 import QtQuick
 import QtQuick.Layouts
 import "../../../core/theme" as Theme
-import "../../../core/services" as Services
+import "../../../core/services/system" as Services
+import "../../../core/components/atomic"
+import "../../../core/animations" as Animations
 
-/*!
-    Battery indicator showing icon and charge percentage.
-*/
 RowLayout {
     id: root
     spacing: Theme.Tokens.space.xs
@@ -14,32 +13,28 @@ RowLayout {
         ? Theme.Tokens.color.danger
         : Theme.Tokens.color.textPrimary
 
-    // Battery icon
-    Text {
+    QsText {
         Layout.alignment: Qt.AlignVCenter
         visible: Services.BatteryService.battery !== null
         text: Services.BatteryService.getBatteryIcon()
+        role: "icon"
         color: root._statusColor
-        font.pixelSize: Theme.Tokens.text.icon
-        font.family: Theme.Tokens.text.iconFont
 
-        // Animation for critical battery
         SequentialAnimation on color {
             running: Services.BatteryService.isCritical()
             loops: Animation.Infinite
-            ColorAnimation { from: Theme.Tokens.color.danger; to: Theme.Tokens.color.textMuted; duration: 800 }
-            ColorAnimation { from: Theme.Tokens.color.textMuted; to: Theme.Tokens.color.danger; duration: 800 }
+            Animations.MotionColorAnimation { role: "alertPulse"; from: Theme.Tokens.color.danger; to: Theme.Tokens.color.textMuted }
+            Animations.MotionColorAnimation { role: "alertPulse"; from: Theme.Tokens.color.textMuted; to: Theme.Tokens.color.danger }
         }
     }
 
-    // Battery percentage
-    Text {
+    QsText {
         visible: !Services.BatteryService.shouldHideLevel()
         text: Services.BatteryService.battery
             ? Math.round(Services.BatteryService.batteryLevel) + "%"
             : "N/A"
+        role: "body"
         color: root._statusColor
-        font.pixelSize: Theme.Tokens.text.sm
         font.bold: Services.BatteryService.isCritical()
     }
 }
