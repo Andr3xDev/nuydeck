@@ -272,7 +272,7 @@ func TestInstallLeaveForgetsSecretsInThePlanAndTheInput(t *testing.T) {
 func TestSyncOffersNoApplyWithoutApplySync(t *testing.T) {
 	f := &fakeSyncDeps{plan: selectedPlan()}
 	s := newSync(testServices(Deps{PlanSync: f.PlanSync}))
-	runCmds(s, s.startPlan(plan.Push))
+	runCmds(s, s.startPlan(plan.Push, nil))
 
 	if s.flow.canApply() || claims(s.Keys(), "enter") {
 		t.Error("apply is offered although no ApplySync is wired")

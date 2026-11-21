@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
@@ -26,10 +28,11 @@ type applyDoneMsg struct{ result cfgsync.ApplyResult }
 
 // Sync starts a push or a pull and hosts its flow.
 type Sync struct {
-	svc  *shell
-	flow *flow
-	pick *choicePick // the open Normal/Hard popup, nil when closed
-	dir  plan.Direction
+	svc   *shell
+	flow  *flow
+	pick  *choicePick // the open Normal/Hard popup, nil when closed
+	dir   plan.Direction
+	scope []manifest.ResolvedEntry // the entries the open popup will plan; empty means every managed entry
 }
 
 func newSync(svc *shell) *Sync { return &Sync{svc: svc} }
@@ -48,19 +51,52 @@ func (s *Sync) Keys() []key.Binding {
 	return []key.Binding{k.Pull, k.Push}
 }
 
-// CapturesText is true at the hard confirm, so any key reaches it: only y goes on and every other key declines.
+// CapturesText is true at the hard confirm, so any key reaches it: move scrolls, y applies, esc goes back and any other key declines.
 func (s *Sync) CapturesText() bool {
-	return s.flow.active() && s.flow.src.SkipPreview && s.flow.stage >= stageConfirm
+	return s.flow.active() && s.flow.src.HardConfirm && s.flow.stage >= stageConfirm
 }
 
-// openMode asks Normal or Hard; without a hard planner there is nothing to ask.
-func (s *Sync) openMode(dir plan.Direction) tea.Cmd {
+// openMode asks Normal or Hard for the scope; without a hard planner there is nothing to ask.
+func (s *Sync) openMode(dir plan.Direction, scope []manifest.ResolvedEntry) tea.Cmd {
 	if s.svc.PlanSync == nil || s.svc.PlanHard == nil {
-		return s.startPlan(dir)
+		return s.startPlan(dir, scope)
 	}
-	s.pick = &choicePick{title: directionLabel(dir), options: []string{normalModeText, hardModeText}}
-	s.dir = dir
+	// The popup is too narrow for direction and scope together: a partial run shows the scope alone, the flow title shows both.
+	s.pick = &choicePick{title: cmp.Or(s.scopeNames(scope), directionLabel(dir)), options: []string{normalModeText, hardModeText}}
+	s.dir, s.scope = dir, scope
+	if s.flow != nil {
+		s.flow.reset() // cancels a plan still being computed
+		s.flow = nil   // a flow left open from an earlier visit must not hide the popup
+	}
 	return nil
+}
+
+// runTitle is the direction label, with the entries named when the run covers only some of them.
+func (s *Sync) runTitle(dir plan.Direction, scope []manifest.ResolvedEntry) string {
+	if names := s.scopeNames(scope); names != "" {
+		return directionLabel(dir) + " - " + names
+	}
+	return directionLabel(dir)
+}
+
+// scopeNames lists the entries of a partial scope; it is empty when the run covers every entry.
+func (s *Sync) scopeNames(scope []manifest.ResolvedEntry) string {
+	if len(scope) == 0 || len(scope) >= len(s.svc.Entries) {
+		return ""
+	}
+	names := make([]string, len(scope))
+	for i, e := range scope {
+		names[i] = fmt.Sprintf("%s:%s", e.Root, e.Path)
+	}
+	return sanitizeLine(strings.Join(names, ", "))
+}
+
+// scoped is the entries a run covers: the scope, or every managed entry when there is none.
+func (s *Sync) scoped(scope []manifest.ResolvedEntry) []manifest.ResolvedEntry {
+	if len(scope) == 0 {
+		return s.svc.Entries
+	}
+	return scope
 }
 
 // updatePick moves the choice, takes it on enter and closes the popup on esc.
@@ -72,29 +108,29 @@ func (s *Sync) updatePick(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	switch {
 	case picked && hard:
-		return s.startHard(s.dir)
+		return s.startHard(s.dir, s.scope)
 	case picked:
-		return s.startPlan(s.dir)
+		return s.startPlan(s.dir, s.scope)
 	}
 	return nil
 }
 
-// startHard plans a hard reinstall, which goes straight to its confirm.
-func (s *Sync) startHard(dir plan.Direction) tea.Cmd {
-	entries := s.svc.Entries
-	s.flow = newFlow(s.svc, hardSource(s.svc, directionLabel(dir), func(ctx context.Context) (cfgsync.HardPlan, error) {
+// startHard plans a hard reinstall of the scope: a read-only list, then its confirm.
+func (s *Sync) startHard(dir plan.Direction, scope []manifest.ResolvedEntry) tea.Cmd {
+	entries := s.scoped(scope)
+	s.flow = newFlow(s.svc, hardSource(s.svc, s.runTitle(dir, scope), func(ctx context.Context) (cfgsync.HardPlan, error) {
 		return s.svc.PlanHard(ctx, dir, entries)
 	}))
 	return s.flow.start()
 }
 
 // startPlan always recomputes: a plan is never cached (spec).
-func (s *Sync) startPlan(dir plan.Direction) tea.Cmd {
+func (s *Sync) startPlan(dir plan.Direction, scope []manifest.ResolvedEntry) tea.Cmd {
 	if s.svc.PlanSync == nil {
 		return nil
 	}
-	entries := s.svc.Entries
-	s.flow = newFlow(s.svc, syncSource(s.svc, directionLabel(dir), func(ctx context.Context) (cfgsync.SyncPlan, error) {
+	entries := s.scoped(scope)
+	s.flow = newFlow(s.svc, syncSource(s.svc, s.runTitle(dir, scope), func(ctx context.Context) (cfgsync.SyncPlan, error) {
 		return s.svc.PlanSync(ctx, dir, entries)
 	}))
 	return s.flow.start()
@@ -118,9 +154,9 @@ func (s *Sync) Update(msg tea.Msg) (screen, tea.Cmd) {
 		case s.pick != nil:
 			return s, s.updatePick(msg)
 		case key.Matches(msg, keys.Pull):
-			return s, s.openMode(plan.Pull)
+			return s, s.openMode(plan.Pull, nil)
 		case key.Matches(msg, keys.Push):
-			return s, s.openMode(plan.Push)
+			return s, s.openMode(plan.Push, nil)
 		}
 	}
 	return s, nil
@@ -189,12 +225,12 @@ func syncSource(svc *shell, title string, planFn func(context.Context) (cfgsync.
 	}
 }
 
-// hardSource is the hard reinstall flow: no preview, a forced backup and the plan's own confirm text.
+// hardSource is the hard reinstall flow: a read-only list of what it covers, a forced backup and the plan's own confirm text.
 func hardSource(svc *shell, title string, planFn func(context.Context) (cfgsync.HardPlan, error)) flowSource {
 	var confirmed syncApply
 	return flowSource{
 		Title:       title,
-		SkipPreview: true,
+		HardConfirm: true,
 		Plan: func(ctx context.Context, _ []string) (staged, error) {
 			hp, err := planFn(ctx)
 			if err != nil {
@@ -202,7 +238,9 @@ func hardSource(svc *shell, title string, planFn func(context.Context) (cfgsync.
 			}
 			p := hp.SyncPlan
 			p.Selection = hp.Selection
-			return hardStaged{newSyncStaged(svc, p, &confirmed), hp.Confirm}, nil
+			st := newSyncStaged(svc, p, &confirmed)
+			st.readOnly = true
+			return hardStaged{st, hp.Confirm}, nil
 		},
 		Run: func(plan.Plan) runRequest { return confirmed.request(svc, title) },
 	}
@@ -228,10 +266,14 @@ func (h hardStaged) CanApply() bool {
 
 func (hardStaged) Offer() (string, bool) { return "", false }
 
-// A hard run has no per-file choices: the selection is fixed by the plan.
-func (hardStaged) Keys() []key.Binding { return nil }
-
-func (hardStaged) Update(tea.KeyPressMsg) tea.Cmd { return nil }
+// A hard run has no per-file choices: the selection is fixed by the plan, so only moving and the diff are offered.
+// Only these keys reach the embedded Update, never toggle or edit.
+func (h hardStaged) Keys() []key.Binding {
+	if h.sub != subNone {
+		return h.syncStaged.Keys()
+	}
+	return append(h.svc.keys.move(), h.svc.keys.Diff)
+}
 
 func (h hardStaged) Build(bool) plan.Plan {
 	h.syncStaged.Build(false)
@@ -247,8 +289,10 @@ type syncStaged struct {
 	res       cfgsync.Resolutions // edits the owner accepted; only selected items reach the apply
 	cursor    int
 	confirmed *syncApply
+	readOnly  bool // a hard run lists its items without a choice per item
 
 	sides       map[cfgsync.ItemKey]*sideState
+	diffWanted  bool // the owner asked for the diff of the item under the cursor before its sides were read
 	sub         subStage
 	subScroll   scroller
 	pending     *editedMsg // the edit result waiting for y or n
@@ -272,6 +316,7 @@ func (st *syncStaged) Update(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case k.step(msg) != 0:
 		st.cursor = moveCursor(st.cursor, k.step(msg), len(st.syncPlan.Items))
+		st.diffWanted = false
 		return st.Load()
 	case key.Matches(msg, k.Toggle):
 		st.toggle()
@@ -280,7 +325,7 @@ func (st *syncStaged) Update(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, k.Edit):
 		return st.edit()
 	case key.Matches(msg, k.Diff):
-		st.openDiff()
+		return st.openDiff()
 	}
 	return nil
 }
@@ -364,6 +409,9 @@ func (st *syncStaged) View(th theme, w, h int) []string {
 		return st.diffView(th, w, h)
 	}
 	header := fmt.Sprintf("%d of %d selected", st.selectedCount(), len(st.syncPlan.Items))
+	if st.readOnly {
+		header = fmt.Sprintf("%d items", len(st.syncPlan.Items))
+	}
 	lines := []string{th.title.Render(truncate(header, w))}
 	if len(st.syncPlan.Items) == 0 {
 		return append(lines, styled(th.muted, wrap("Nothing to sync.", w))...)
@@ -386,10 +434,14 @@ func (st *syncStaged) marker(it cfgsync.PlanItem) string {
 	k := it.Key()
 	_, edited := st.res[k]
 	switch {
-	case it.Blocked:
+	case it.Blocked, st.readOnly && !st.sel[k]:
 		return "[-]"
+	case st.readOnly && it.Change.Type == plan.Delete:
+		return "delete"
 	case it.Change.Type == plan.Delete:
 		return "extra"
+	case st.readOnly:
+		return "[x] take"
 	case edited && st.sel[k]:
 		return "[e] edit"
 	case st.sel[k]:

@@ -461,13 +461,13 @@ func TestSyncDropsASideReadFromAnEarlierPlan(t *testing.T) {
 	f.withText("a.conf", "old\n", "new\n")
 	s := newSync(testServices(f.deps()))
 
-	_, readCmd := s.Update(s.startPlan(plan.Push)())
+	_, readCmd := s.Update(s.startPlan(plan.Push, nil)())
 	stale := collect(readCmd)
 	if len(stale) == 0 {
 		t.Fatal("the plan must return the read of the side under the cursor")
 	}
 
-	_, freshCmd := s.Update(s.startPlan(plan.Push)())
+	_, freshCmd := s.Update(s.startPlan(plan.Push, nil)())
 	for _, msg := range stale {
 		s.Update(msg)
 	}

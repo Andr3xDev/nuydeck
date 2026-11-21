@@ -110,6 +110,17 @@ func inStage(s *Sync, stage flowStage) func() bool {
 	return func() bool { return s.flow.active() && s.flow.stage == stage }
 }
 
+// openHardConfirm picks Hard for the direction key and goes on from the read-only list to the confirm.
+func openHardConfirm(t *testing.T, d *driver, s *Sync, direction tea.KeyPressMsg) {
+	t.Helper()
+	d.press(direction)
+	d.press(keyDown)
+	d.press(keyEnter)
+	d.must(t, "the Hard list", inStage(s, stagePreview))
+	d.press(keyEnter)
+	d.must(t, "the Hard confirm", inStage(s, stageConfirm))
+}
+
 var modeDirections = []struct {
 	name string
 	key  tea.KeyPressMsg
@@ -190,11 +201,7 @@ func TestSyncModePopupPicksNormalOrHardForTheChosenDirection(t *testing.T) {
 
 				d.press(keyEnter)
 
-				if pick.hard {
-					d.must(t, "the Hard confirm", inStage(s, stageConfirm))
-				} else {
-					d.must(t, "the Normal preview", inStage(s, stagePreview))
-				}
+				d.must(t, "the preview", inStage(s, stagePreview))
 				syncs, hards := f.planned()
 				wantSync, wantHard := []plan.Direction{dir.dir}, []plan.Direction(nil)
 				if pick.hard {
@@ -216,10 +223,7 @@ func TestSyncHardConfirmShowsTheHardConfirmAndYAppliesForcedHard(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newModeDeps()
 			d, s := modeRoot(t, f)
-			d.press(tt.key)
-			d.press(keyDown)
-			d.press(keyEnter)
-			d.must(t, "the Hard confirm", inStage(s, stageConfirm))
+			openHardConfirm(t, d, s, tt.key)
 
 			for _, line := range []string{firstLine(hardConfirmFor(tt.dir)), "delete home:extra"} {
 				if !strings.Contains(d.view(), line) {
@@ -249,16 +253,13 @@ func TestSyncHardConfirmShowsTheHardConfirmAndYAppliesForcedHard(t *testing.T) {
 
 func TestSyncHardConfirmAnyKeyButYReturnsWithNothingRun(t *testing.T) {
 	declines := map[string]tea.KeyPressMsg{
-		"n": keyPress('n'), "x": keyPress('x'), "enter": keyEnter, "esc": keyEsc, "space": keyPress(tea.KeySpace),
+		"n": keyPress('n'), "x": keyPress('x'), "enter": keyEnter, "space": keyPress(tea.KeySpace),
 	}
 	for name, k := range declines {
 		t.Run(name, func(t *testing.T) {
 			f := newModeDeps()
 			d, s := modeRoot(t, f)
-			d.press(keyPress('P'))
-			d.press(keyDown)
-			d.press(keyEnter)
-			d.must(t, "the Hard confirm", inStage(s, stageConfirm))
+			openHardConfirm(t, d, s, keyPress('P'))
 
 			d.press(k)
 
@@ -270,6 +271,20 @@ func TestSyncHardConfirmAnyKeyButYReturnsWithNothingRun(t *testing.T) {
 	}
 }
 
+// Esc at the confirm steps back to the list, like every flow; nothing runs.
+func TestSyncHardConfirmEscReturnsToTheListWithNothingRun(t *testing.T) {
+	f := newModeDeps()
+	d, s := modeRoot(t, f)
+	openHardConfirm(t, d, s, keyPress('P'))
+
+	d.press(keyEsc)
+
+	d.must(t, "the Hard list", inStage(s, stagePreview))
+	if f.applyCalls.Load() != 0 {
+		t.Error("esc applied something")
+	}
+}
+
 func TestSyncHardConfirmScrollsToTheLastDeletionWithoutDeclining(t *testing.T) {
 	const deletions = 60
 	f := newModeDeps()
@@ -278,10 +293,7 @@ func TestSyncHardConfirmScrollsToTheLastDeletionWithoutDeclining(t *testing.T) {
 		f.hardItems = append(f.hardItems, resolverItem(fmt.Sprintf("extra%02d", i), plan.Delete))
 	}
 	d, s := modeRoot(t, f)
-	d.press(keyPress('P'))
-	d.press(keyDown)
-	d.press(keyEnter)
-	d.must(t, "the Hard confirm", inStage(s, stageConfirm))
+	openHardConfirm(t, d, s, keyPress('P'))
 	last := fmt.Sprintf("extra%02d", deletions-1)
 	f.mu.Lock()
 	s.flow.built.Confirm = ""
@@ -313,11 +325,8 @@ func TestSyncHardReachesTheConfirmWhenItOnlyDeletes(t *testing.T) {
 	f := newModeDeps()
 	f.hardItems = []cfgsync.PlanItem{resolverItem("extra", plan.Delete)}
 	d, s := modeRoot(t, f)
-	d.press(keyPress('P'))
-	d.press(keyDown)
-	d.press(keyEnter)
 
-	d.must(t, "the Hard confirm for a delete-only plan", inStage(s, stageConfirm))
+	openHardConfirm(t, d, s, keyPress('P'))
 }
 
 // Spec: ignored items are never overwritten by a hard run, and hard has no resolver to opt them in.

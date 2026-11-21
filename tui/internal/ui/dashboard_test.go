@@ -193,13 +193,22 @@ func TestDashboardRefreshesAfterApply(t *testing.T) {
 	}
 }
 
-func TestDashboardPullPushRequestSync(t *testing.T) {
-	d := newTestDashboard(&fakeDrift{}, resolved("a"))
+func TestDashboardPullPushRequestSyncOfTheEntryUnderTheCursor(t *testing.T) {
+	d := newTestDashboard(&fakeDrift{}, resolved("a"), resolved("b"))
+	d.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	for key, want := range map[rune]plan.Direction{'p': plan.Pull, 'P': plan.Push} {
 		_, cmd := d.Update(tea.KeyPressMsg{Code: key, Text: string(key)})
-		if got := cmd().(startSyncMsg).direction; got != want {
-			t.Errorf("%q: direction = %v, want %v", key, got, want)
+		got := cmd().(startSyncMsg)
+		if got.direction != want || len(got.entries) != 1 || got.entries[0].Path != "b" {
+			t.Errorf("%q: got %+v, want %v over entry b only", key, got, want)
 		}
+	}
+}
+
+func TestDashboardPullPushWithoutEntriesRequestNothing(t *testing.T) {
+	d := newTestDashboard(&fakeDrift{})
+	if _, cmd := d.Update(tea.KeyPressMsg{Code: 'p', Text: "p"}); cmd != nil {
+		t.Error("p with no entries must not request a sync")
 	}
 }
 

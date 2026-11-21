@@ -31,4 +31,7 @@ type Service struct {
 	Runner    plan.Runner
 	RepoDir   string
 	Now       func() time.Time
+	// AllEntries is the whole manifest. A plan over fewer entries is partial and still classifies
+	// links against all of them; empty means the planned entries are the whole manifest.
+	AllEntries []manifest.ResolvedEntry
 }

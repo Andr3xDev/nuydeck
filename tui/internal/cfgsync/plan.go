@@ -17,11 +17,15 @@ const repoTimesFileKey = "."
 
 func (s *Service) PlanSync(ctx context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (SyncPlan, error) {
 	state, warning := s.LoadState(ctx)
-	managed := make([]manifest.Entry, len(entries))
-	for i, e := range entries {
+	all := entries
+	if len(s.AllEntries) > 0 {
+		all = s.AllEntries
+	}
+	managed := make([]manifest.Entry, len(all))
+	for i, e := range all {
 		managed[i] = e.Entry
 	}
-	syncPlan := SyncPlan{Direction: dir, Selection: Selection{}, StateWarning: warning}
+	syncPlan := SyncPlan{Direction: dir, Selection: Selection{}, StateWarning: warning, Partial: len(entries) < len(all)}
 	for _, e := range entries {
 		src, dst := e.RepoPath, e.DestPath
 		if dir == plan.Pull {

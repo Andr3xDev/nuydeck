@@ -108,4 +108,42 @@ func TestReadSide_SymlinkIsReportedAsLinkNotFollowed(t *testing.T) {
 	if s.Kind != plan.KindLink || s.LinkTarget != "target" || s.Content != nil {
 		t.Errorf("side = %+v; want a link to target with no content", s)
 	}
+	if s.LinkBroken {
+		t.Error("a link to an existing file must not be broken")
+	}
+}
+
+func TestReadSide_DanglingLinkIsBroken(t *testing.T) {
+	link := filepath.Join(t.TempDir(), "l")
+	if err := os.Symlink("missing", link); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := osfs.ReadSide(link)
+
+	if err != nil || !s.LinkBroken || s.LinkTarget != "missing" {
+		t.Errorf("ReadSide = %+v, %v; want a broken link to missing", s, err)
+	}
+}
+
+func TestReadSide_DirListsSortedChildrenWithKinds(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "b.conf"), "xy")
+	writeFile(t, filepath.Join(dir, "sub", "c"), "")
+	if err := os.Symlink("b.conf", filepath.Join(dir, "a.lnk")); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := osfs.ReadSide(dir)
+
+	if err != nil {
+		t.Fatalf("ReadSide: %v", err)
+	}
+	got := make([]string, len(s.Children))
+	for i, c := range s.Children {
+		got[i] = c.Name
+	}
+	if strings.Join(got, ",") != "a.lnk,b.conf,sub" || s.Children[0].Kind != plan.KindLink || s.Children[1].Size != 2 || s.Children[2].Kind != plan.KindDir {
+		t.Errorf("children = %+v", s.Children)
+	}
 }

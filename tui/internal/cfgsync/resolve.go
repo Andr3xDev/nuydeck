@@ -19,7 +19,18 @@ type Side struct {
 	Binary     bool
 	TooLarge   bool
 	LinkTarget string
-	Mode       fs.FileMode
+	// LinkBroken is true for a link whose target does not resolve.
+	LinkBroken bool
+	// Children lists a directory's direct entries, sorted by name.
+	Children []Child
+	Mode     fs.FileMode
+}
+
+// Child is one direct entry of a directory side.
+type Child struct {
+	Name string
+	Kind plan.NodeKind
+	Size int64
 }
 
 // Edited is the content the user wrote for an item, applied instead of a copy.

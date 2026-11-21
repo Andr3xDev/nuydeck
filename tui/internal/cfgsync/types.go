@@ -54,7 +54,9 @@ func (i PlanItem) endpoint(entryPath string) string {
 func (i PlanItem) Key() ItemKey { return ItemKey{Root: i.Change.Entry.Root, Path: i.rel()} }
 
 type SyncPlan struct {
-	Direction    plan.Direction
+	Direction plan.Direction
+	// Partial marks a plan over a subset of the manifest; applying it does not record a last sync.
+	Partial      bool
 	Items        []PlanItem
 	Selection    Selection
 	StateWarning string

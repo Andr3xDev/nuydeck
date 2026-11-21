@@ -19,7 +19,7 @@ func (s *Service) Apply(ctx context.Context, syncPlan SyncPlan, sel Selection, o
 	}
 	var res ApplyResult
 	batches := Steps(syncPlan, sel, syncPlan.Resolutions, opts)
-	if syncPlan.Direction != plan.Restore {
+	if syncPlan.Direction != plan.Restore && !syncPlan.Partial {
 		if st, warning := s.syncedState(ctx, syncPlan.Direction); warning == "" {
 			batches = append(batches, Batch{Step: plan.SaveStateStep{State: st}})
 		} else {

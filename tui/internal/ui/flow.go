@@ -36,7 +36,7 @@ type staged interface {
 // flowSource is what a screen supplies to run the flow: how to plan and how to run what was accepted.
 type flowSource struct {
 	Title       string
-	SkipPreview bool // planning goes straight to the confirm
+	HardConfirm bool // at the confirm, move scrolls, y applies, esc goes back and any other key declines
 	Plan        func(ctx context.Context, selection []string) (staged, error)
 	Run         func(plan.Plan) runRequest
 }
@@ -134,10 +134,6 @@ func (f *flow) receive(msg plannedMsg) tea.Cmd {
 	}
 	f.st, f.err = msg.st, msg.err
 	f.body.reset()
-	if f.src.SkipPreview && f.canApply() {
-		f.openConfirm(false)
-		return nil
-	}
 	f.stage = stagePreview
 	if l, ok := f.st.(loader); ok && f.err == nil {
 		return l.Load()
@@ -178,7 +174,7 @@ func (f *flow) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			f.openConfirm(false)
 		}
 	case stageConfirm, stageExtra:
-		if f.src.SkipPreview && k.step(msg) != 0 {
+		if f.src.HardConfirm && k.step(msg) != 0 {
 			f.body.by(k.step(msg))
 			return nil
 		}
@@ -194,7 +190,7 @@ func (f *flow) back() {
 		f.stage = stageConfirm
 	case f.stage == stageConfirm && f.asked:
 		f.stage = stageOffer
-	case f.stage == stageConfirm && !f.src.SkipPreview, f.stage == stageOffer:
+	case f.stage == stageConfirm, f.stage == stageOffer:
 		f.stage = stagePreview
 	default:
 		f.reset()
@@ -260,7 +256,7 @@ func (f *flow) Keys() []key.Binding {
 	case stageOffer:
 		return []key.Binding{k.Yes, described(k.Confirm, "yes"), k.No, k.Back}
 	case stageConfirm, stageExtra:
-		if f.src.SkipPreview {
+		if f.src.HardConfirm {
 			return append(k.move(), k.Yes, described(k.Back, "back"))
 		}
 		return []key.Binding{k.Yes, described(k.Back, "back")}

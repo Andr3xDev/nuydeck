@@ -1,0 +1,219 @@
+package ui
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+)
+
+func otherEntry() manifest.ResolvedEntry {
+	return manifest.ResolvedEntry{Entry: manifest.Entry{Root: manifest.RootConfig, Path: "kitty"}}
+}
+
+// Dashboard p and P hand the entry to the mode popup; the Sync screen's own keys cover every entry.
+func TestSyncScopeFromTheDashboardPlansOnlyThatEntryAndNamesItInTheTitle(t *testing.T) {
+	f := newModeDeps()
+	deps := f.deps()
+	deps.Entries = []manifest.ResolvedEntry{hyprEntry(), otherEntry()}
+	var mu sync.Mutex
+	var recorded [][]manifest.ResolvedEntry
+	planned := func() [][]manifest.ResolvedEntry {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(recorded)
+	}
+	deps.PlanHard = func(_ context.Context, dir plan.Direction, entries []manifest.ResolvedEntry) (cfgsync.HardPlan, error) {
+		mu.Lock()
+		recorded = append(recorded, entries)
+		mu.Unlock()
+		return f.PlanHard(context.Background(), dir, entries)
+	}
+	root := NewRoot("", false, deps)
+	root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	d := newDriver(t, root)
+	s, _, _ := sectionOf[*Sync](root)
+
+	_, cmd := root.Update(startSyncMsg{direction: plan.Push, entries: []manifest.ResolvedEntry{hyprEntry()}})
+	if cmd != nil || !strings.Contains(d.view(), "config:hypr") || !strings.Contains(d.view(), hardModeText) {
+		t.Fatalf("the dashboard request must open the mode popup naming the entry:\n%s", d.view())
+	}
+	d.press(keyDown)
+	d.press(keyEnter)
+	d.must(t, "the Hard list", inStage(s, stagePreview))
+	if got := planned(); len(got) != 1 || len(got[0]) != 1 || got[0][0].Path != "hypr" {
+		t.Errorf("hard planned %v, want only hypr", got)
+	}
+	if !strings.Contains(s.flow.src.Title, "config:hypr") {
+		t.Errorf("title = %q, want the scope in it", s.flow.src.Title)
+	}
+
+	d.press(keyEsc)
+	d.press(keyPress('P'))
+	d.press(keyDown)
+	d.press(keyEnter)
+	d.must(t, "the Hard list again", func() bool { return len(planned()) == 2 && inStage(s, stagePreview)() })
+	if got := planned(); len(got[1]) != 2 || s.flow.src.Title != directionLabel(plan.Push) {
+		t.Errorf("the Sync screen's own P planned %d entries under %q, want all 2 under the plain label", len(got[1]), s.flow.src.Title)
+	}
+}
+
+func TestSyncVBeforeTheSidesLoadOpensTheDiffWhenTheyArrive(t *testing.T) {
+	f := newResolverDeps(plan.Push, resolverItem("a.conf", plan.Update))
+	f.withText("a.conf", "old\n", "new\n")
+	f.gate = make(chan struct{})
+	d := resolverRoot(t, f)
+	d.mustShow(t, "loading")
+
+	d.press(keyPress('v'))
+	d.settle()
+	if strings.Contains(d.view(), "destination") {
+		t.Fatal("the diff opened before the sides were read")
+	}
+
+	close(f.gate)
+	d.mustShow(t, "destination")
+}
+
+func TestSyncVThenMovingAwayDoesNotOpenALaterDiff(t *testing.T) {
+	f := newResolverDeps(plan.Push, resolverItem("a.conf", plan.Update), resolverItem("b.conf", plan.Update))
+	f.withText("a.conf", "old\n", "new\n")
+	f.withText("b.conf", "old\n", "new\n")
+	f.gate = make(chan struct{})
+	d := resolverRoot(t, f)
+	d.mustShow(t, "loading")
+
+	d.press(keyPress('v'))
+	d.press(keyPress('j'))
+	close(f.gate)
+	d.mustLoad(t)
+	d.settle()
+
+	if strings.Contains(d.view(), "destination") {
+		t.Errorf("a diff asked for on a.conf opened after the cursor moved to b.conf:\n%s", d.view())
+	}
+}
+
+// hardListRoot opens the Hard list of the resolver deps' plan, selecting every item as PlanHard does.
+func hardListRoot(t *testing.T, f *resolverDeps) (*driver, *Sync) {
+	t.Helper()
+	deps := f.deps()
+	deps.PlanHard = func(_ context.Context, dir plan.Direction, _ []manifest.ResolvedEntry) (cfgsync.HardPlan, error) {
+		sel := cfgsync.Selection{}
+		for _, it := range f.plan.Items {
+			sel[it.Key()] = true
+		}
+		return cfgsync.HardPlan{SyncPlan: f.plan, Selection: sel, Confirm: "Hard reinstall: repo -> PC"}, nil
+	}
+	root := NewRoot("", false, deps)
+	root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	s, at, _ := sectionOf[*Sync](root)
+	root.selected, root.focus = at, focusPanel
+	d := newDriver(t, root)
+	d.press(keyPress('P'))
+	d.press(keyDown)
+	d.press(keyEnter)
+	d.must(t, "the Hard list", inStage(s, stagePreview))
+	return d, s
+}
+
+func TestSyncHardListShowsItemsOpensTheDiffAndStillConfirms(t *testing.T) {
+	f := newResolverDeps(plan.Push, resolverItem("a.conf", plan.Update), resolverItem("extra", plan.Delete))
+	f.withText("a.conf", "old\n", "new\n")
+	f.withText("extra", "gone\n", "")
+	d, s := hardListRoot(t, f)
+
+	view := d.view()
+	for _, want := range []string{"a.conf", "extra", "delete", "[x] take"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("hard list lacks %q:\n%s", want, view)
+		}
+	}
+	d.press(keyPress(tea.KeySpace))
+	d.press(keyPress('e'))
+	d.settle()
+	if f.editCalls() != 0 || !strings.Contains(rowOf(d.view(), "a.conf"), "[x] take") {
+		t.Fatal("a hard list must not toggle or edit items")
+	}
+
+	d.mustLoad(t)
+	d.press(keyPress('v'))
+	d.mustShow(t, "destination")
+	d.press(keyEsc)
+	d.must(t, "the list back", inStage(s, stagePreview))
+
+	d.press(keyEnter)
+	d.must(t, "the confirm", inStage(s, stageConfirm))
+	if f.applyCalls.Load() != 0 || !strings.Contains(d.view(), "Hard reinstall") {
+		t.Errorf("the hard confirm must show before anything is written:\n%s", d.view())
+	}
+}
+
+func TestSyncDiffViewOfLinksShowsBothTargetsAndWhetherTheyResolve(t *testing.T) {
+	linkItem := resolverItem("it.conf", plan.Update)
+	linkItem.Change.Kind = plan.KindLink
+	f := newResolverDeps(plan.Push, linkItem)
+	f.sides[resolverDst+"it.conf"] = cfgsync.Side{Exists: true, Kind: plan.KindLink, LinkTarget: "/old/target", LinkBroken: true}
+	f.sides[resolverSrc+"it.conf"] = cfgsync.Side{Exists: true, Kind: plan.KindLink, LinkTarget: "/new/target"}
+	d := resolverRoot(t, f)
+	d.mustLoad(t)
+
+	d.press(keyPress('v'))
+	d.mustShow(t, "destination")
+
+	view := d.view()
+	for _, want := range []string{"link -> /old/target (broken", "link -> /new/target (resolves)"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("link view lacks %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestSyncDiffViewOfDirectoriesListsDifferingChildren(t *testing.T) {
+	dirItem := resolverItem("d", plan.Update)
+	dirItem.Change.Kind = plan.KindDir
+	file := func(name string, size int64) cfgsync.Child {
+		return cfgsync.Child{Name: name, Kind: plan.KindFile, Size: size}
+	}
+	dst := []cfgsync.Child{file("only-dst", 1), file("changed", 1), file("same", 1)}
+	src := []cfgsync.Child{file("changed", 2), file("only-src", 1), file("same", 1)}
+	f := newResolverDeps(plan.Push, dirItem)
+	f.sides[resolverDst+"d"] = cfgsync.Side{Exists: true, Kind: plan.KindDir, Children: dst}
+	f.sides[resolverSrc+"d"] = cfgsync.Side{Exists: true, Kind: plan.KindDir, Children: src}
+	d := resolverRoot(t, f)
+	d.mustLoad(t)
+
+	d.press(keyPress('v'))
+	d.mustShow(t, "destination")
+
+	view := d.view()
+	for _, want := range []string{"- only-dst", "~ changed", "+ only-src"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("directory view lacks %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "same") {
+		t.Errorf("directory view lists an identical child:\n%s", view)
+	}
+}
+
+func TestDirDiffLinesCapsAndCountsTheRest(t *testing.T) {
+	var src []cfgsync.Child
+	for i := range maxDirChildLines + 5 {
+		src = append(src, cfgsync.Child{Name: fmt.Sprintf("n%03d", i), Kind: plan.KindFile})
+	}
+
+	lines := dirDiffLines(ForVariant("nadir"), 80, cfgsync.Side{Exists: true, Kind: plan.KindDir}, cfgsync.Side{Exists: true, Kind: plan.KindDir, Children: src})
+
+	if len(lines) != maxDirChildLines+1 || !strings.Contains(lines[len(lines)-1], "and 5 more") {
+		t.Errorf("got %d lines ending %q, want %d with a count of the 5 hidden", len(lines), lines[len(lines)-1], maxDirChildLines+1)
+	}
+}

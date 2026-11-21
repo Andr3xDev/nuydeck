@@ -140,7 +140,7 @@ func TestRootNoticeBandCarriesPlanNoticesAndShowsTheStateWarningOnce(t *testing.
 
 	s, i, _ := sectionOf[*Sync](r)
 	r.selectSection(i)
-	runCmds(s, s.startPlan(plan.Push))
+	runCmds(s, s.startPlan(plan.Push, nil))
 	view := ansi.Strip(r.View().Content)
 	if got := strings.Count(view, warning); got != 1 {
 		t.Errorf("Sync shows the state warning %d times, want 1", got)
@@ -160,7 +160,7 @@ func TestRootNoticeBandTruncatesWithAMoreLine(t *testing.T) {
 	r := sizedRoot((&fakeSyncDeps{plan: p}).deps(), 100, 24)
 	s, i, _ := sectionOf[*Sync](r)
 	r.selectSection(i)
-	runCmds(s, s.startPlan(plan.Push))
+	runCmds(s, s.startPlan(plan.Push, nil))
 
 	view := ansi.Strip(r.View().Content)
 	if !strings.Contains(view, "first notice") || !strings.Contains(view, "+2 more") || strings.Contains(view, "second notice") {

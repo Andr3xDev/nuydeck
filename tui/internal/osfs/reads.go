@@ -52,10 +52,13 @@ func ReadSide(p string) (cfgsync.Side, error) {
 	case info.Mode()&fs.ModeSymlink != 0:
 		side.Kind = plan.KindLink
 		side.LinkTarget, err = os.Readlink(p)
+		_, statErr := os.Stat(p)
+		side.LinkBroken = statErr != nil
 		return side, err
 	case info.IsDir():
 		side.Kind = plan.KindDir
-		return side, nil
+		side.Children, err = readChildren(p)
+		return side, err
 	}
 	side.Kind = plan.KindFile
 	if side.Size > cfgsync.MaxEditBytes {
@@ -72,6 +75,30 @@ func ReadSide(p string) (cfgsync.Side, error) {
 	}
 	side.Content = content
 	return side, nil
+}
+
+// readChildren lists the direct entries of dir, sorted by name; an entry that vanishes meanwhile is skipped.
+func readChildren(dir string) ([]cfgsync.Child, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	children := make([]cfgsync.Child, 0, len(entries))
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		child := cfgsync.Child{Name: e.Name(), Kind: plan.KindFile, Size: info.Size()}
+		switch {
+		case info.Mode()&fs.ModeSymlink != 0:
+			child.Kind = plan.KindLink
+		case info.IsDir():
+			child.Kind = plan.KindDir
+		}
+		children = append(children, child)
+	}
+	return children, nil
 }
 
 // ReadVariant returns the theme variant, "nadir" unless the file says "zenit".

@@ -9,6 +9,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
@@ -81,6 +82,11 @@ func (st *syncStaged) Handle(msg tea.Msg) tea.Cmd {
 	case sidesMsg:
 		if msg.st == st {
 			st.sides[msg.key] = &sideState{dst: msg.dst, src: msg.src, err: msg.err, loaded: true}
+			if it, ok := st.current(); ok && st.diffWanted && it.Key() == msg.key {
+				st.diffWanted = false
+				st.sub = subDiff
+				st.subScroll.reset()
+			}
 		}
 	case editedMsg:
 		if msg.st == st {
@@ -146,13 +152,19 @@ func (st *syncStaged) closeSub() {
 	st.subScroll.reset()
 }
 
-func (st *syncStaged) openDiff() {
-	if it, ok := st.current(); ok {
-		if s := st.sides[it.Key()]; s != nil && s.loaded {
-			st.sub = subDiff
-			st.subScroll.reset()
-		}
+// openDiff opens the diff of the item under the cursor; when its sides are not read yet it waits for them.
+func (st *syncStaged) openDiff() tea.Cmd {
+	it, ok := st.current()
+	if !ok {
+		return nil
 	}
+	if s := st.sides[it.Key()]; s != nil && s.loaded {
+		st.sub = subDiff
+		st.subScroll.reset()
+		return nil
+	}
+	st.diffWanted = true
+	return st.Load()
 }
 
 // diffView shows both ends of the item under the cursor; the direction is in the flow header.
@@ -167,7 +179,7 @@ func (st *syncStaged) diffView(th theme, w, h int) []string {
 	if opaque(s.dst) || opaque(s.src) {
 		lines = append(lines, wrap("destination: "+describeSide(s.dst), w)...)
 		lines = append(lines, wrap("source: "+describeSide(s.src), w)...)
-		lines = append(lines, styled(th.warning, wrap("differs", w))...)
+		lines = append(lines, opaqueSummary(th, w, s.dst, s.src)...)
 	} else {
 		lines = append(lines, diffBody(th, w, cfgsync.DiffLines(textLines(s.dst.Content), textLines(s.src.Content)))...)
 	}
@@ -210,12 +222,68 @@ func opaque(s cfgsync.Side) bool {
 	return s.Exists && (s.Kind != plan.KindFile || s.Binary || s.TooLarge)
 }
 
+// maxDirChildLines caps the differing children a directory diff lists.
+const maxDirChildLines = 50
+
+// opaqueSummary says how two sides that cannot be diffed as text differ.
+func opaqueSummary(th theme, w int, dst, src cfgsync.Side) []string {
+	switch {
+	case dst.Kind == plan.KindLink && src.Kind == plan.KindLink && dst.LinkTarget == src.LinkTarget:
+		return styled(th.muted, wrap("same link target", w))
+	case dst.Kind == plan.KindDir || src.Kind == plan.KindDir:
+		return dirDiffLines(th, w, dst, src)
+	}
+	return styled(th.warning, wrap("differs", w))
+}
+
+// dirDiffLines lists the children that differ, as making the destination equal the source would change them.
+// A child counts as changed when its kind or, for a file, its size differs; same-size edits and links with a changed target are not seen.
+func dirDiffLines(th theme, w int, dst, src cfgsync.Side) []string {
+	dstChildren := map[string]cfgsync.Child{}
+	for _, c := range dst.Children {
+		dstChildren[c.Name] = c
+	}
+	var lines []string
+	count := 0
+	note := func(style lipgloss.Style, mark, name string) {
+		if count++; count <= maxDirChildLines {
+			lines = append(lines, styled(style, wrap(mark+" "+name, w))...)
+		}
+	}
+	for _, c := range src.Children {
+		d, both := dstChildren[c.Name]
+		delete(dstChildren, c.Name)
+		switch {
+		case !both:
+			note(th.ok, "+", c.Name)
+		case d.Kind != c.Kind || d.Kind == plan.KindFile && d.Size != c.Size:
+			note(th.warning, "~", c.Name)
+		}
+	}
+	for _, c := range dst.Children {
+		if _, left := dstChildren[c.Name]; left {
+			note(th.err, "-", c.Name)
+		}
+	}
+	switch {
+	case count == 0:
+		return styled(th.muted, wrap("no child differs; only the directory itself does", w))
+	case count > maxDirChildLines:
+		lines = append(lines, styled(th.muted, wrap(fmt.Sprintf("... and %d more", count-maxDirChildLines), w))...)
+	}
+	return lines
+}
+
 func describeSide(s cfgsync.Side) string {
 	switch {
 	case !s.Exists:
 		return "missing"
+	case s.Kind == plan.KindLink && s.LinkBroken:
+		return "link -> " + s.LinkTarget + " (broken: target does not exist)"
 	case s.Kind == plan.KindLink:
-		return "link -> " + s.LinkTarget
+		return "link -> " + s.LinkTarget + " (resolves)"
+	case s.Kind == plan.KindDir:
+		return fmt.Sprintf("directory, %d entries", len(s.Children))
 	case s.Binary:
 		return fmt.Sprintf("binary file, %d bytes", s.Size)
 	case s.TooLarge:

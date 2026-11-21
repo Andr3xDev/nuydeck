@@ -70,7 +70,7 @@ func newPreview(f *fakeSyncDeps, dryRun bool) *Sync {
 	svc := testServices(f.deps())
 	svc.dryRun = dryRun
 	s := newSync(svc)
-	runCmds(s, s.startPlan(plan.Push))
+	runCmds(s, s.startPlan(plan.Push, nil))
 	return s
 }
 
@@ -177,8 +177,8 @@ func TestSyncOffersNoBackupWhenNothingIsOverwritten(t *testing.T) {
 
 func TestSyncDiscardsStalePlan(t *testing.T) {
 	s := newPreview(&fakeSyncDeps{}, false)
-	stale := s.startPlan(plan.Push)()
-	s.startPlan(plan.Pull)
+	stale := s.startPlan(plan.Push, nil)()
+	s.startPlan(plan.Pull, nil)
 	s.Update(stale)
 	if s.flow.stage != stagePlanning {
 		t.Error("stale plan must be discarded")

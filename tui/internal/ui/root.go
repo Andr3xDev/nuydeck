@@ -141,7 +141,7 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if s, i, ok := sectionOf[*Sync](r); ok && r.run == nil {
 			r.selectSection(i)
 			r.focus = focusPanel
-			return r, s.startPlan(msg.direction)
+			return r, s.openMode(msg.direction, msg.entries)
 		}
 		return r, nil
 	case returnToDashboardMsg:

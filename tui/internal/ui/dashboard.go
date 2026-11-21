@@ -28,8 +28,11 @@ type driftEntryMsg struct {
 
 type driftDoneMsg struct{ gen int }
 
-// startSyncMsg asks the root to open the Sync section for a direction.
-type startSyncMsg struct{ direction plan.Direction }
+// startSyncMsg asks the root to open the Sync section for a direction over the entries; none means every entry.
+type startSyncMsg struct {
+	direction plan.Direction
+	entries   []manifest.ResolvedEntry
+}
 
 // Dashboard lists drift per managed entry, computed in the background.
 type Dashboard struct {
@@ -139,9 +142,9 @@ func (d *Dashboard) Update(msg tea.Msg) (screen, tea.Cmd) {
 		case d.keys.step(msg) != 0:
 			d.cursor = moveCursor(d.cursor, d.keys.step(msg), len(d.entries))
 		case key.Matches(msg, d.keys.Pull):
-			return d, requestSync(plan.Pull)
+			return d, d.requestSync(plan.Pull)
 		case key.Matches(msg, d.keys.Push):
-			return d, requestSync(plan.Push)
+			return d, d.requestSync(plan.Push)
 		}
 	}
 	return d, nil
@@ -163,8 +166,13 @@ func (d *Dashboard) Cancel() {
 	}
 }
 
-func requestSync(dir plan.Direction) tea.Cmd {
-	return func() tea.Msg { return startSyncMsg{direction: dir} }
+// requestSync asks to sync only the entry under the cursor.
+func (d *Dashboard) requestSync(dir plan.Direction) tea.Cmd {
+	if d.cursor >= len(d.entries) {
+		return nil
+	}
+	msg := startSyncMsg{direction: dir, entries: []manifest.ResolvedEntry{d.entries[d.cursor]}}
+	return func() tea.Msg { return msg }
 }
 
 func (d *Dashboard) View(width, height int) string {

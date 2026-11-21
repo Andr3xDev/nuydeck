@@ -95,6 +95,7 @@ func run(dryRun bool, repoFlag string) error {
 	} else if deps.Entries, err = loadEntries(repo, home); err != nil {
 		deps.ManifestError = err
 	} else {
+		svc.AllEntries = deps.Entries
 		wireCatalog(&deps, svc, repo, home, current.Username, dryRun, runner, inspector)
 		wireServices(&deps, repo, current.Username)
 		wireEnv(&deps, runner)

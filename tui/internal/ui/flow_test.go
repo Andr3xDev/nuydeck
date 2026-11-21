@@ -33,13 +33,12 @@ type flowHarness struct {
 	state *fakeStaged
 }
 
-func newTestFlow(t *testing.T, st *fakeStaged, skipPreview bool) *flowHarness {
+func newTestFlow(t *testing.T, st *fakeStaged) *flowHarness {
 	t.Helper()
 	h := &flowHarness{state: st}
 	h.f = newFlow(testServices(Deps{}), flowSource{
-		Title:       "Test",
-		SkipPreview: skipPreview,
-		Plan:        func(context.Context, []string) (staged, error) { return st, nil },
+		Title: "Test",
+		Plan:  func(context.Context, []string) (staged, error) { return st, nil },
 		Run: func(p plan.Plan) runRequest {
 			h.ran = append(h.ran, p)
 			return runRequest{title: p.Title}
@@ -72,7 +71,7 @@ func withExtra(confirm, extra string) *fakeStaged {
 }
 
 func TestFlowStalePlanAfterEscAndRestartIsDropped(t *testing.T) {
-	h := newTestFlow(t, withExtra("", ""), false)
+	h := newTestFlow(t, withExtra("", ""))
 	stale := h.f.start()()
 	h.f.Update(keyEsc)
 	h.f.start()
@@ -85,7 +84,7 @@ func TestFlowStalePlanAfterEscAndRestartIsDropped(t *testing.T) {
 }
 
 func TestFlowEscInPlanningCancelsAndTheLatePlanIsIgnored(t *testing.T) {
-	h := newTestFlow(t, withExtra("", ""), false)
+	h := newTestFlow(t, withExtra("", ""))
 	late := h.f.start()()
 
 	h.f.Update(keyEsc)
@@ -135,7 +134,7 @@ func TestFlowPlanIsIgnoredWhileARunIsActive(t *testing.T) {
 
 func TestFlowExtraStageOnlyWhenThePlanCarriesExtraConfirm(t *testing.T) {
 	t.Run("without", func(t *testing.T) {
-		h := newTestFlow(t, withExtra("sure?", ""), false)
+		h := newTestFlow(t, withExtra("sure?", ""))
 		planned(h.f)
 
 		cmd := pressKeys(h.f, keyEnter, keyPress('y'))
@@ -145,7 +144,7 @@ func TestFlowExtraStageOnlyWhenThePlanCarriesExtraConfirm(t *testing.T) {
 		}
 	})
 	t.Run("with", func(t *testing.T) {
-		h := newTestFlow(t, withExtra("sure?", "really?"), false)
+		h := newTestFlow(t, withExtra("sure?", "really?"))
 		planned(h.f)
 
 		cmd := pressKeys(h.f, keyEnter, keyPress('y'))
@@ -168,7 +167,7 @@ func TestFlowAnyKeyButYDeclinesAndRunsNothing(t *testing.T) {
 				if atExtra {
 					extra = "really?"
 				}
-				h := newTestFlow(t, withExtra("sure?", extra), false)
+				h := newTestFlow(t, withExtra("sure?", extra))
 				planned(h.f)
 				pressKeys(h.f, keyEnter)
 				if atExtra {
@@ -204,7 +203,7 @@ func TestFlowEscStepsBackOneStagePerStage(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			h := newTestFlow(t, c.st, false)
+			h := newTestFlow(t, c.st)
 			planned(h.f)
 			pressKeys(h.f, c.to...)
 			if h.f.stage != c.stage {
@@ -220,23 +219,10 @@ func TestFlowEscStepsBackOneStagePerStage(t *testing.T) {
 	}
 }
 
-func TestFlowSkipPreviewGoesFromPlanningToConfirm(t *testing.T) {
-	h := newTestFlow(t, withExtra("wipe?", ""), true)
-
-	planned(h.f)
-
-	if h.f.stage != stageConfirm {
-		t.Fatalf("stage = %v, want confirm without a preview", h.f.stage)
-	}
-	if !isRunRequest(h.f.Update(keyPress('y'))) {
-		t.Fatal("y at confirm must produce a runRequest")
-	}
-}
-
 func TestFlowEnterAtPreviewDoesNothingWhenThePlanCannotApply(t *testing.T) {
 	st := withExtra("c", "")
 	st.cannotApply = true
-	h := newTestFlow(t, st, false)
+	h := newTestFlow(t, st)
 	planned(h.f)
 
 	cmd := h.f.Update(keyEnter)
@@ -247,7 +233,7 @@ func TestFlowEnterAtPreviewDoesNothingWhenThePlanCannotApply(t *testing.T) {
 }
 
 func TestFlowYSendsARunRequestWithTheBuiltPlanOtherKeysDoNot(t *testing.T) {
-	h := newTestFlow(t, withExtra("sure?", ""), false)
+	h := newTestFlow(t, withExtra("sure?", ""))
 	planned(h.f)
 
 	if isRunRequest(pressKeys(h.f, keyEnter, keyPress('x'))) || len(h.ran) != 0 {
@@ -270,7 +256,7 @@ func TestFlowOfferAnswerReachesBuildAndDefaultsToYes(t *testing.T) {
 	for name, a := range answers {
 		t.Run(name, func(t *testing.T) {
 			st := &fakeStaged{offer: "Back up the affected files first? [Y/n]", built: plan.Plan{Title: "built"}}
-			h := newTestFlow(t, st, false)
+			h := newTestFlow(t, st)
 			planned(h.f)
 
 			pressKeys(h.f, keyEnter, a.k)

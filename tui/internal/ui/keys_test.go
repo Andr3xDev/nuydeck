@@ -81,7 +81,7 @@ func TestKeyListsOfListStagesIncludeMove(t *testing.T) {
 	_, summary := newTestRoot(&fakeInstaller{plan: onePlan()})
 	toSummary(summary)
 	keyLists["install summary"] = summary.Keys()
-	h := newTestFlow(t, withExtra("", ""), false)
+	h := newTestFlow(t, withExtra("", ""))
 	planned(h.f)
 	keyLists["flow body"] = h.f.Keys()
 	keyLists["run pane"] = newRun(runRequest{}, func() {}).keys(newKeyMap())
