@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"charm.land/bubbles/v2/key"
@@ -15,10 +17,23 @@ const (
 	envPopupTitle     = "Env source"
 	chooseSourceText  = "Choose a source with s: the repo copy or the live copy."
 	envLoadingText    = "Loading..."
-	noVariablesText   = "No variables: the file has no hl.env lines."
+	noVariablesText   = "No variables: the file has no hl.env lines, commented or not."
 	notListableText   = "Cannot list variables: the file is not a readable text file."
 	envFileMissingFmt = "File missing: %s"
 )
+
+var errFileChanged = errors.New("the file changed, nothing was written")
+
+const (
+	envOnLabel  = "on"
+	envOffLabel = "off"
+)
+
+var envColumns = []column{
+	{title: "Name"},
+	{title: "Value", priority: 2},
+	{title: "State", priority: 1},
+}
 
 // envSourceOptions follow the order of envvars.SourceRepo and envvars.SourceLive.
 var envSourceOptions = []string{"repo copy", "live copy"}
@@ -52,6 +67,9 @@ type Env struct {
 	// preview is the dry-run editor line.
 	preview string
 	err     error
+
+	flow          *flow
+	ownRunPending bool // a run started here is open, so its close needs a reload
 }
 
 func newEnv(svc *shell) *Env {
@@ -80,6 +98,8 @@ func (e *Env) openPopup() {
 func (e *Env) Keys() []key.Binding {
 	k := e.svc.keys
 	switch {
+	case e.flow.active():
+		return e.flow.Keys()
 	case e.pick != nil:
 		return []key.Binding{k.Up, k.Down, k.Confirm, k.Back}
 	case e.locErr != nil:
@@ -87,7 +107,11 @@ func (e *Env) Keys() []key.Binding {
 	case !e.chosen:
 		return []key.Binding{described(k.Start, "source")}
 	}
-	return []key.Binding{k.Up, k.Down, described(k.Start, "source"), k.Edit, k.Refresh}
+	keys := append(k.move(), described(k.Start, "source"), k.Edit, k.Refresh)
+	if e.svc.RunPlan != nil {
+		keys = append(keys, described(k.Toggle, "toggle on/off"))
+	}
+	return keys
 }
 
 // reload reads the chosen copy off the event loop; nothing is read before a source is chosen.
@@ -131,7 +155,19 @@ func (e *Env) Update(msg tea.Msg) (screen, tea.Cmd) {
 		if msg.err == nil {
 			return e, e.reload()
 		}
+	case runClosed:
+		if e.ownRunPending {
+			e.ownRunPending = false
+			return e, e.reload()
+		}
+	case plannedMsg:
+		if e.flow.active() {
+			return e, e.flow.Update(msg)
+		}
 	case tea.KeyPressMsg:
+		if e.flow.active() {
+			return e, e.flow.Update(msg)
+		}
 		return e, e.handleKey(msg)
 	}
 	return e, nil
@@ -151,20 +187,79 @@ func (e *Env) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return cmd
 	}
-	switch {
+	switch delta := k.step(msg); {
 	case key.Matches(msg, k.Start):
 		e.openPopup()
 	case !e.chosen:
 	case key.Matches(msg, k.Refresh):
 		return e.reload()
-	case key.Matches(msg, k.Up):
-		e.cursor = max(e.cursor-1, 0)
-	case key.Matches(msg, k.Down):
-		e.cursor = max(min(e.cursor+1, len(e.vars)-1), 0)
+	case delta != 0:
+		e.cursor = moveCursor(e.cursor, delta, len(e.vars))
 	case key.Matches(msg, k.Edit):
 		return e.edit()
+	case key.Matches(msg, k.Toggle) && e.svc.RunPlan != nil && e.cursor < len(e.vars):
+		return e.toggle()
 	}
 	return nil
+}
+
+// planToggle reads the copy again, so the plan never rests on a cached read.
+func planToggle(read func(string) (cfgsync.Side, error), source envvars.Source, loc envvars.Locations, v envvars.Var) (plan.Plan, envvars.ToggleChange, error) {
+	path := loc.Path(source)
+	side, err := read(path)
+	switch {
+	case err != nil:
+		return plan.Plan{}, envvars.ToggleChange{}, err
+	case !side.Exists:
+		return plan.Plan{}, envvars.ToggleChange{}, fmt.Errorf(envFileMissingFmt, path)
+	case side.Kind != plan.KindFile || side.Binary || side.TooLarge:
+		return plan.Plan{}, envvars.ToggleChange{}, errors.New(notListableText)
+	}
+	return envvars.PlanToggle(source, loc, side.Content, side.Mode, v)
+}
+
+// toggle previews the change of the cursor variable. The run reads and plans again, so an edit made
+// elsewhere in the file after the preview is never overwritten.
+func (e *Env) toggle() tea.Cmd {
+	read, source, loc, v := e.svc.ReadSide, e.source, e.loc, e.vars[e.cursor]
+	e.flow = newFlow(e.svc, flowSource{
+		Title: "toggle " + v.Name,
+		Plan: func(context.Context, []string) (staged, error) {
+			p, change, err := planToggle(read, source, loc, v)
+			if err != nil {
+				return nil, err
+			}
+			return toggleStaged{planStaged: planStaged{p}, change: change}, nil
+		},
+		Run: func(p plan.Plan) runRequest {
+			e.ownRunPending = true
+			req := planRunRequest(e.svc, p)
+			req.work = func(ctx context.Context, emit func(plan.Event)) runEnd {
+				fresh, _, err := planToggle(read, source, loc, v)
+				if errors.Is(err, envvars.ErrLineChanged) {
+					return runEnd{err: errFileChanged}
+				}
+				if err != nil {
+					return runEnd{err: err}
+				}
+				return runEnd{err: e.svc.RunPlan(ctx, fresh, emit)}
+			}
+			return req
+		},
+	})
+	return e.flow.start()
+}
+
+// toggleStaged previews the line before and after the toggle, then the plan's steps.
+type toggleStaged struct {
+	planStaged
+	change envvars.ToggleChange
+}
+
+func (s toggleStaged) View(th theme, w, h int) []string {
+	lines := wrap("before: "+sanitizeLine(s.change.Before), w)
+	lines = append(lines, wrap("after:  "+sanitizeLine(s.change.After), w)...)
+	return append(append(lines, ""), s.planStaged.View(th, w, h)...)
 }
 
 func (e *Env) edit() tea.Cmd {
@@ -177,6 +272,9 @@ func (e *Env) edit() tea.Cmd {
 }
 
 func (e *Env) View(width, height int) string {
+	if e.flow.active() {
+		return e.flow.box(e.Title(), width, height)
+	}
 	th, cw := e.svc.th, contentWidth(width)
 	var lines []string
 	switch {
@@ -198,11 +296,16 @@ func (e *Env) View(width, height int) string {
 		lines = append(lines, styled(th.muted, wrap(e.msg, cw))...)
 	}
 	if len(e.vars) > 0 {
-		rows := make([]listRow, len(e.vars))
+		rows := make([]tableRow, len(e.vars))
 		for i, v := range e.vars {
-			rows[i] = listRow{text: v.Name + "  " + v.Value}
+			state := envOnLabel
+			if v.Off {
+				state = envOffLabel
+			}
+			rows[i] = tableRow{cells: []string{v.Name, v.Value, state}, muted: v.Off}
 		}
-		list, at := listLines(th, rows, e.cursor, cw)
+		header, list, at := tableLines(th, envColumns, rows, e.cursor, cw)
+		lines = append(lines, header)
 		lines = append(lines, windowAround(list, at, max(innerHeight(height)-len(lines), 1))...)
 	}
 	base := screenBox(th, e.Title(), lines, width, height)

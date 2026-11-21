@@ -94,7 +94,7 @@ type fakeServices struct {
 }
 
 func (f *fakeServices) deps() ServicesDeps {
-	return ServicesDeps{Catalog: f.catalog, State: f.State, Plan: f.Plan, Run: f.Run}
+	return ServicesDeps{Catalog: f.catalog, State: f.State, Plan: f.Plan}
 }
 
 func (f *fakeServices) State(_ context.Context, scope plan.Scope, units []string) (map[string]services.UnitState, error) {
@@ -179,6 +179,13 @@ type fakeEnv struct {
 	editErr     error
 	// afterEdit replaces the content of the edited file, as a saved editor session would.
 	afterEdit string
+	ran       []plan.Plan
+	runErr    error
+}
+
+func (f *fakeEnv) Run(_ context.Context, p plan.Plan, _ func(plan.Event)) error {
+	f.ran = append(f.ran, p)
+	return f.runErr
 }
 
 func fileSide(content string) cfgsync.Side {

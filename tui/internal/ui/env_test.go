@@ -6,8 +6,127 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/Andr3xDev/nuydeck/tui/internal/envvars"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
+
+const (
+	envLiveOnLine  = `hl.env("THEME", "live-value")`
+	envLiveOffLine = `-- ` + envLiveOnLine
+	fileChangedMsg = "the file changed, nothing was written"
+)
+
+var keySpace = keyPress(tea.KeySpace)
+
+// toggleLive opens the live copy, previews the toggle of its first variable and returns at the confirm.
+func toggleLive(t *testing.T, f *fakeEnv) (*Env, envvars.Locations) {
+	t.Helper()
+	s, loc := openEnv(t, f, Deps{RunPlan: f.Run})
+	chooseLive(s)
+	send(s, keySpace, keyEnter)
+	return s, loc
+}
+
+func TestEnvToggleShowsTheLineBeforeAndAfterAndWritesNothing(t *testing.T) {
+	f := newFakeEnv(envRepoText, envLiveText)
+	s, _ := openEnv(t, f, Deps{RunPlan: f.Run})
+	chooseLive(s)
+
+	send(s, keySpace)
+
+	var before, after bool
+	for _, line := range strings.Split(viewOf(s), "\n") {
+		after = after || strings.Contains(line, envLiveOffLine)
+		before = before || (strings.Contains(line, envLiveOnLine) && !strings.Contains(line, "--"))
+	}
+	if !before || !after || len(f.ran) != 0 {
+		t.Errorf("before shown=%v after shown=%v runs=%d, want both lines and no write:\n%s", before, after, len(f.ran), viewOf(s))
+	}
+}
+
+func TestEnvTogglePreviewStripsControlCharactersFromTheLines(t *testing.T) {
+	const bidiOverride = "‮"
+	f := newFakeEnv(envRepoText, "hl.env(\"THEME\", \"a"+bidiOverride+"b\")\n")
+	s, _ := openEnv(t, f, Deps{RunPlan: f.Run})
+	chooseLive(s)
+
+	send(s, keySpace)
+
+	if view := viewOf(s); strings.Contains(view, bidiOverride) || !strings.Contains(view, "THEME") {
+		t.Errorf("preview must show the line without the control character:\n%s", view)
+	}
+}
+
+func TestEnvToggleDeclinedRunsNothing(t *testing.T) {
+	f := newFakeEnv(envRepoText, envLiveText)
+	s, _ := toggleLive(t, f)
+
+	runs := send(s, keyPress('n'))
+
+	if len(runs) != 0 || len(f.ran) != 0 {
+		t.Errorf("runs=%d plans run=%d, want none after declining", len(runs), len(f.ran))
+	}
+}
+
+func TestEnvToggleLineChangedBetweenPreviewAndConfirmWritesNothing(t *testing.T) {
+	f := newFakeEnv(envRepoText, envLiveText)
+	s, loc := toggleLive(t, f)
+	f.files[loc.DestPath] = fileSide("hl.env(\"THEME\", \"changed-elsewhere\")\n")
+
+	runs := send(s, keyPress('y'))
+	if len(runs) != 1 {
+		t.Fatalf("run requests = %d, want 1", len(runs))
+	}
+	lines, end := runWork(runs[0])
+
+	reported := strings.Join(lines, "\n")
+	if end.err != nil {
+		reported += "\n" + end.err.Error()
+	}
+	if !strings.Contains(reported, fileChangedMsg) || len(f.ran) != 0 {
+		t.Errorf("reported %q, plans run=%d, want %q and nothing run", reported, len(f.ran), fileChangedMsg)
+	}
+}
+
+func TestEnvToggleLiveCopyRunsTheBackupBeforeTheWriteOfTheFreshContent(t *testing.T) {
+	f := newFakeEnv(envRepoText, envLiveText)
+	s, loc := toggleLive(t, f)
+
+	runs := send(s, keyPress('y'))
+	if len(runs) != 1 {
+		t.Fatalf("run requests = %d, want 1", len(runs))
+	}
+	_, end := runWork(runs[0])
+
+	if end.err != nil || len(f.ran) != 1 || len(f.ran[0].Steps) != 2 {
+		t.Fatalf("err=%v plans=%v, want one plan with a backup and a write", end.err, f.ran)
+	}
+	if _, ok := f.ran[0].Steps[0].(plan.BackupStep); !ok {
+		t.Errorf("first step = %T, want the backup", f.ran[0].Steps[0])
+	}
+	write, ok := f.ran[0].Steps[1].(plan.WriteFileStep)
+	if !ok || write.Path != loc.DestPath || !strings.Contains(string(write.Content), envLiveOffLine) {
+		t.Errorf("second step = %+v, want the live copy written with the line commented", f.ran[0].Steps[1])
+	}
+}
+
+func TestEnvToggleReportsAFailingRun(t *testing.T) {
+	f := newFakeEnv(envRepoText, envLiveText)
+	f.runErr = errors.New("backup failed")
+	s, _ := toggleLive(t, f)
+
+	runs := send(s, keyPress('y'))
+	if len(runs) != 1 {
+		t.Fatalf("run requests = %d, want 1", len(runs))
+	}
+	_, end := runWork(runs[0])
+
+	if !errors.Is(end.err, f.runErr) {
+		t.Errorf("run error = %v, want %v", end.err, f.runErr)
+	}
+}
 
 // openEnv builds the Env screen as the shell does and enters it; the source popup is open and nothing is read.
 func openEnv(t *testing.T, f *fakeEnv, deps Deps) (*Env, envvars.Locations) {
@@ -90,6 +209,28 @@ func TestEnvChosenSourceDrivesThePathAndTheList(t *testing.T) {
 				t.Errorf("commented hl.env line listed = %v, want %v:\n%s", listed, tc.commentedListed, view)
 			}
 		})
+	}
+}
+
+func TestEnvRendersATableWithOnAndOffRowsAndDuplicates(t *testing.T) {
+	const repo = "hl.env(\"A\", \"one\")\n-- hl.env(\"A\", \"two\")\nhl.env(\"B\", \"three\")\n"
+	f := newFakeEnv(repo, envLiveText)
+	s, _ := openEnv(t, f, Deps{})
+
+	chooseRepo(s)
+	send(s, keyPress('J'))
+
+	view := viewOf(s)
+	for _, want := range []string{"Name", "Value", "State", "one", "two", "three", "on", "off"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("view lacks %q:\n%s", want, view)
+		}
+	}
+	if len(s.vars) != 3 || s.cursor != 2 || s.vars[1].Line != 1 || !s.vars[1].Off {
+		t.Errorf("vars = %+v cursor = %d, want the duplicate kept by line with J clamped to the last row", s.vars, s.cursor)
+	}
+	if !claims(s.Keys(), "J") {
+		t.Error("J is not listed in the Env keys")
 	}
 }
 
