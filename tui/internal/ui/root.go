@@ -144,6 +144,13 @@ func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return r, s.openMode(msg.direction, msg.entries)
 		}
 		return r, nil
+	case viewDriftMsg:
+		if s, i, ok := sectionOf[*Sync](r); ok && r.run == nil {
+			r.selectSection(i)
+			r.focus = focusPanel
+			return r, s.openDriftView(msg.entry, msg.result)
+		}
+		return r, nil
 	case returnToDashboardMsg:
 		if _, i, ok := sectionOf[*Dashboard](r); ok {
 			r.selectSection(i)

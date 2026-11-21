@@ -33,6 +33,7 @@ type resolverDeps struct {
 	editReqs  []cfgsync.EditRequest
 	editRes   cfgsync.EditResult
 	editErr   error
+	planErr   error
 	applied   cfgsync.SyncPlan
 	appliedBy cfgsync.Selection
 
@@ -51,7 +52,7 @@ func (f *resolverDeps) deps() Deps {
 }
 
 func (f *resolverDeps) PlanSync(context.Context, plan.Direction, []manifest.ResolvedEntry) (cfgsync.SyncPlan, error) {
-	return f.plan, nil
+	return f.plan, f.planErr
 }
 
 func (f *resolverDeps) ReadSide(path string) (cfgsync.Side, error) {

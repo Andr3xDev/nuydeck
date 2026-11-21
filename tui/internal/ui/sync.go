@@ -3,6 +3,7 @@ package ui
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -33,6 +35,8 @@ type Sync struct {
 	pick  *choicePick // the open Normal/Hard popup, nil when closed
 	dir   plan.Direction
 	scope []manifest.ResolvedEntry // the entries the open popup will plan; empty means every managed entry
+
+	viewOnly bool // the open flow only shows a drift; leaving it returns to the Dashboard
 }
 
 func newSync(svc *shell) *Sync { return &Sync{svc: svc} }
@@ -58,6 +62,7 @@ func (s *Sync) CapturesText() bool {
 
 // openMode asks Normal or Hard for the scope; without a hard planner there is nothing to ask.
 func (s *Sync) openMode(dir plan.Direction, scope []manifest.ResolvedEntry) tea.Cmd {
+	s.viewOnly = false
 	if s.svc.PlanSync == nil || s.svc.PlanHard == nil {
 		return s.startPlan(dir, scope)
 	}
@@ -136,9 +141,64 @@ func (s *Sync) startPlan(dir plan.Direction, scope []manifest.ResolvedEntry) tea
 	return s.flow.start()
 }
 
+// openDriftView lists what differs for one entry in the direction drift measures (repo -> PC); nothing can be applied from it.
+func (s *Sync) openDriftView(e manifest.ResolvedEntry, r drift.DriftResult) tea.Cmd {
+	if s.svc.PlanSync == nil {
+		return nil
+	}
+	title := "drift · " + sanitizeLine(fmt.Sprintf("%s:%s", e.Root, e.Path))
+	s.pick, s.viewOnly = nil, true
+	s.flow = newFlow(s.svc, flowSource{
+		Title: title,
+		Plan: func(ctx context.Context, _ []string) (staged, error) {
+			p, err := s.svc.PlanSync(ctx, plan.Push, []manifest.ResolvedEntry{e})
+			if err != nil {
+				// Push plans repo -> PC, so an entry only on the PC has no source to plan from.
+				if r.Missing == drift.MissingInRepo {
+					return nil, errors.New(driftReason(r))
+				}
+				return nil, err
+			}
+			st := newSyncStaged(s.svc, p, &syncApply{})
+			st.readOnly, st.viewOnly = true, true
+			st.emptyText = driftReason(r)
+			return driftViewStaged{st}, nil
+		},
+	})
+	return s.flow.start()
+}
+
+// driftReason is the one-line cause of a row's drift, shown when there is no plan to list.
+func driftReason(r drift.DriftResult) string {
+	switch {
+	case r.State == drift.DriftError && r.Err != nil:
+		return "drift check failed: " + sanitizeLine(strings.Join(strings.Fields(r.Err.Error()), " "))
+	case r.State == drift.DriftError:
+		return "drift check failed"
+	case r.Missing == drift.MissingInRepo:
+		return "only on this PC: not in the repo"
+	case r.Missing == drift.MissingOnPC:
+		return "not on this PC yet: everything would be created"
+	}
+	return "drift is only in excluded files"
+}
+
+// driftViewStaged is a syncStaged that never applies: it only lists items and opens their diffs.
+type driftViewStaged struct{ *syncStaged }
+
+func (driftViewStaged) CanApply() bool { return false }
+
+func (v driftViewStaged) Keys() []key.Binding {
+	if v.sub != subNone {
+		return v.syncStaged.Keys()
+	}
+	return append(v.svc.keys.move(), v.svc.keys.Diff)
+}
+
 func (s *Sync) Update(msg tea.Msg) (screen, tea.Cmd) {
 	switch msg := msg.(type) {
 	case runClosed, applyDoneMsg:
+		s.viewOnly = false
 		if s.flow.active() {
 			s.flow.reset()
 		}
@@ -150,7 +210,12 @@ func (s *Sync) Update(msg tea.Msg) (screen, tea.Cmd) {
 		keys := s.svc.keys
 		switch {
 		case s.flow.active():
-			return s, s.flow.Update(msg)
+			cmd := s.flow.Update(msg)
+			if s.viewOnly && !s.flow.active() {
+				s.viewOnly = false
+				return s, func() tea.Msg { return returnToDashboardMsg{} }
+			}
+			return s, cmd
 		case s.pick != nil:
 			return s, s.updatePick(msg)
 		case key.Matches(msg, keys.Pull):
@@ -289,7 +354,9 @@ type syncStaged struct {
 	res       cfgsync.Resolutions // edits the owner accepted; only selected items reach the apply
 	cursor    int
 	confirmed *syncApply
-	readOnly  bool // a hard run lists its items without a choice per item
+	readOnly  bool   // a hard run lists its items without a choice per item
+	viewOnly  bool   // a drift view lists its items with no marker at all
+	emptyText string // what an empty list says instead of "Nothing to sync."
 
 	sides       map[cfgsync.ItemKey]*sideState
 	diffWanted  bool // the owner asked for the diff of the item under the cursor before its sides were read
@@ -414,7 +481,7 @@ func (st *syncStaged) View(th theme, w, h int) []string {
 	}
 	lines := []string{th.title.Render(truncate(header, w))}
 	if len(st.syncPlan.Items) == 0 {
-		return append(lines, styled(th.muted, wrap("Nothing to sync.", w))...)
+		return append(lines, styled(th.muted, wrap(cmp.Or(st.emptyText, "Nothing to sync."), w))...)
 	}
 	var popup []string
 	if st.sub == subResult {
@@ -434,6 +501,8 @@ func (st *syncStaged) marker(it cfgsync.PlanItem) string {
 	k := it.Key()
 	_, edited := st.res[k]
 	switch {
+	case st.viewOnly:
+		return ""
 	case it.Blocked, st.readOnly && !st.sel[k]:
 		return "[-]"
 	case st.readOnly && it.Change.Type == plan.Delete:
@@ -454,7 +523,8 @@ func (st *syncStaged) marker(it cfgsync.PlanItem) string {
 
 // row is the plan item list row; narrow panels drop the repo and PC times.
 func (st *syncStaged) row(it cfgsync.PlanItem, w int) listRow {
-	line := fmt.Sprintf("%s %s %s:%s", st.marker(it), changeLabel(it.Change.Type), it.Change.Entry.Root, it.Key().Path)
+	label := strings.TrimSpace(st.marker(it) + " " + changeLabel(it.Change.Type))
+	line := fmt.Sprintf("%s %s:%s", label, it.Change.Entry.Root, it.Key().Path)
 	if s := st.sides[it.Key()]; s != nil && !s.loaded {
 		line += "  loading"
 	}

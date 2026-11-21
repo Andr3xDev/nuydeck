@@ -34,6 +34,14 @@ type startSyncMsg struct {
 	entries   []manifest.ResolvedEntry
 }
 
+// viewDriftMsg asks the root to open a read-only view of one entry's drift.
+type viewDriftMsg struct {
+	entry  manifest.ResolvedEntry
+	result drift.DriftResult
+}
+
+const noDriftText = "no drift to view"
+
 // Dashboard lists drift per managed entry, computed in the background.
 type Dashboard struct {
 	ctx        context.Context
@@ -50,6 +58,7 @@ type Dashboard struct {
 	running    bool
 	cancel     context.CancelFunc
 	stream     <-chan drift.DriftResult
+	notice     string
 }
 
 type dashboardInfo struct {
@@ -74,7 +83,14 @@ func (d *Dashboard) Title() string  { return "Dashboard" }
 func (d *Dashboard) Enter() tea.Cmd { return nil }
 
 func (d *Dashboard) Keys() []key.Binding {
-	return append(d.keys.move(), d.keys.Refresh, d.keys.Pull, d.keys.Push)
+	return append(d.keys.move(), d.keys.Refresh, described(d.keys.Diff, "view drift"), d.keys.Pull, d.keys.Push)
+}
+
+func (d *Dashboard) Notices() []string {
+	if d.notice == "" {
+		return nil
+	}
+	return []string{d.notice}
 }
 
 // start cancels any prior run, bumps the generation and begins a new drift stream.
@@ -136,9 +152,12 @@ func (d *Dashboard) Update(msg tea.Msg) (screen, tea.Cmd) {
 		d.spinner, cmd = d.spinner.Update(msg)
 		return d, cmd
 	case tea.KeyPressMsg:
+		d.notice = ""
 		switch {
 		case key.Matches(msg, d.keys.Refresh):
 			return d, d.start()
+		case key.Matches(msg, d.keys.Diff):
+			return d, d.requestDriftView()
 		case d.keys.step(msg) != 0:
 			d.cursor = moveCursor(d.cursor, d.keys.step(msg), len(d.entries))
 		case key.Matches(msg, d.keys.Pull):
@@ -173,6 +192,24 @@ func (d *Dashboard) requestSync(dir plan.Direction) tea.Cmd {
 	}
 	msg := startSyncMsg{direction: dir, entries: []manifest.ResolvedEntry{d.entries[d.cursor]}}
 	return func() tea.Msg { return msg }
+}
+
+// requestDriftView opens the drift of the entry under the cursor, or says there is none.
+func (d *Dashboard) requestDriftView() tea.Cmd {
+	if d.cursor >= len(d.entries) {
+		return nil
+	}
+	e := d.entries[d.cursor]
+	r := d.results[e.Entry]
+	switch r.State {
+	case drift.DriftDrifted:
+		return func() tea.Msg { return viewDriftMsg{entry: e, result: r} }
+	case drift.DriftError:
+		d.notice = driftReason(r)
+	default:
+		d.notice = noDriftText
+	}
+	return nil
 }
 
 func (d *Dashboard) View(width, height int) string {

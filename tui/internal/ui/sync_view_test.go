@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
@@ -154,6 +156,106 @@ func TestSyncHardListShowsItemsOpensTheDiffAndStillConfirms(t *testing.T) {
 	d.must(t, "the confirm", inStage(s, stageConfirm))
 	if f.applyCalls.Load() != 0 || !strings.Contains(d.view(), "Hard reinstall") {
 		t.Errorf("the hard confirm must show before anything is written:\n%s", d.view())
+	}
+}
+
+// driftViewRoot is a Dashboard on a drifted entry (or an in-sync one) backed by the resolver deps' plan.
+func driftViewRoot(t *testing.T, f *resolverDeps, result drift.DriftResult) (*driver, *Dashboard, *Sync) {
+	t.Helper()
+	deps := f.deps()
+	deps.Entries = []manifest.ResolvedEntry{hyprEntry()}
+	root := NewRoot("", false, deps)
+	root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	dash, _, _ := sectionOf[*Dashboard](root)
+	s, _, _ := sectionOf[*Sync](root)
+	root.focus = focusPanel
+	result.Entry = hyprEntry()
+	dash.results[hyprEntry().Entry] = result
+	return newDriver(t, root), dash, s
+}
+
+func TestDashboardVOpensAReadOnlyDriftViewThatNeverApplies(t *testing.T) {
+	f := newResolverDeps(plan.Push, resolverItem("a.conf", plan.Update), resolverItem("new.conf", plan.Create), resolverItem("extra", plan.Delete))
+	f.withText("a.conf", "old\n", "new\n")
+	d, _, s := driftViewRoot(t, f, drift.DriftResult{State: drift.DriftDrifted})
+
+	d.press(keyPress('v'))
+	d.must(t, "the drift list", inStage(s, stagePreview))
+	view := d.view()
+	for _, want := range []string{"drift · config:hypr", "update home:a.conf", "create home:new.conf", "delete home:extra"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("drift view lacks %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "[x]") || strings.Contains(view, "[ ]") {
+		t.Errorf("drift view shows a choice marker:\n%s", view)
+	}
+
+	d.press(keyPress(tea.KeySpace))
+	d.press(keyEnter)
+	d.press(keyPress('y'))
+	d.settle()
+	if s.flow.stage != stagePreview || d.root.run != nil {
+		t.Fatalf("the drift view must not confirm or run: stage=%v", s.flow.stage)
+	}
+
+	d.mustLoad(t)
+	d.press(keyPress('v'))
+	d.mustShow(t, "destination")
+	d.press(keyEsc)
+	d.must(t, "the list back", inStage(s, stagePreview))
+
+	d.press(keyEsc)
+	d.must(t, "the dashboard", func() bool { return strings.Contains(d.view(), "Last sync") })
+	if f.applyCalls.Load() != 0 {
+		t.Error("a drift view must never apply")
+	}
+}
+
+func TestDashboardVOnACleanRowSaysThereIsNoDrift(t *testing.T) {
+	d, dash, s := driftViewRoot(t, newResolverDeps(plan.Push), drift.DriftResult{State: drift.DriftInSync})
+
+	d.press(keyPress('v'))
+	d.settle()
+
+	if s.flow.active() || !strings.Contains(d.view(), noDriftText) || len(dash.Notices()) != 1 {
+		t.Errorf("v on an in-sync row must only show the notice:\n%s", d.view())
+	}
+}
+
+func TestDashboardVOnAFailedRowNamesTheDriftError(t *testing.T) {
+	d, dash, s := driftViewRoot(t, newResolverDeps(plan.Push), drift.DriftResult{State: drift.DriftError, Err: errors.New("boom")})
+
+	d.press(keyPress('v'))
+	d.settle()
+
+	if s.flow.active() || !strings.Contains(d.view(), "drift check failed: boom") || len(dash.Notices()) != 1 {
+		t.Errorf("v on an errored row must show the drift error as a notice:\n%s", d.view())
+	}
+}
+
+func TestDriftViewExplainsAnEmptyPlanOrAPlannerError(t *testing.T) {
+	planErr := newResolverDeps(plan.Push)
+	planErr.planErr = errors.New("source missing")
+	tests := []struct {
+		name   string
+		f      *resolverDeps
+		result drift.DriftResult
+		want   string
+	}{
+		{"only on this PC", planErr, drift.DriftResult{State: drift.DriftDrifted, Missing: drift.MissingInRepo}, "only on this PC: not in the repo"},
+		{"not on this PC", newResolverDeps(plan.Push), drift.DriftResult{State: drift.DriftDrifted, Missing: drift.MissingOnPC}, "not on this PC yet"},
+		{"excluded files only", newResolverDeps(plan.Push), drift.DriftResult{State: drift.DriftDrifted}, "drift is only in excluded files"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d, _, _ := driftViewRoot(t, tt.f, tt.result)
+			d.press(keyPress('v'))
+			d.mustShow(t, tt.want)
+			if strings.Contains(d.view(), "source missing") || strings.Contains(d.view(), "Nothing to sync.") {
+				t.Errorf("drift view leaks the planner wording:\n%s", d.view())
+			}
+		})
 	}
 }
 
