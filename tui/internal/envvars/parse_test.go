@@ -55,16 +55,16 @@ func TestParseHlEnv_ListsOnlyWellFormedCalls(t *testing.T) {
 	}
 }
 
-func TestParseHlEnv_RealRepoFileListsSeventeenVariables(t *testing.T) {
+func TestParseHlEnv_RealRepoFileListsEveryVariable(t *testing.T) {
 	data, err := os.ReadFile(repoEnvFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := envvars.ParseHlEnv(string(data))
-	if len(got) != 17 {
-		t.Fatalf("ParseHlEnv() listed %d variables, want 17: %+v", len(got), got)
+	if len(got) != 18 {
+		t.Fatalf("ParseHlEnv() listed %d variables, want 18: %+v", len(got), got)
 	}
-	want := envvars.Var{Name: "GDK_BACKEND", Value: "wayland,x11,*", Line: 32}
+	want := envvars.Var{Name: "GDK_BACKEND", Value: "wayland,x11,*", Line: 33}
 	if !slices.Contains(got, want) {
 		t.Errorf("ParseHlEnv() missing %+v", want)
 	}
