@@ -1,11 +1,14 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 const secretValue = "hunter2-sentinel"
@@ -39,7 +42,10 @@ func secretValues(d install.Draft) []string {
 }
 
 func TestInstallRetryReplansWithTheTypedSecrets(t *testing.T) {
-	f := &fakeInstaller{plan: onePlan()}
+	// A successful run resets the wizard, so only a failed one leaves a summary to retry from.
+	f := &fakeInstaller{plan: onePlan(), run: func(context.Context, chan<- plan.Event, <-chan bool) install.InstallResult {
+		return install.InstallResult{Err: errors.New("step failed")}
+	}}
 	root, in := newTestRoot(f, "TOKEN")
 	root.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	toSummaryWithSecret(t, in)

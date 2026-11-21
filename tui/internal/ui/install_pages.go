@@ -61,26 +61,80 @@ func (s *Install) toggleDriver(id string) {
 	s.draft.Drivers = append(slices.Clone(s.draft.Drivers), id)
 }
 
-// seedSelection builds the group rows and, once, preselects the minimal profile so custom starts from something usable.
-func (s *Install) seedSelection() {
-	if !s.seeded {
-		s.seeded = true
-		s.selected = install.DefaultSelection(s.draft.Profile, s.deps.Catalog)
-	}
-	pkgs := slices.Clone(s.deps.Catalog)
+// buildRows lists the catalog by group, then the packages installed as dependencies under a last group of their own.
+func buildRows(catalog []manifest.Package, dependencies map[string]bool) []selectionRow {
+	pkgs := slices.Clone(catalog)
 	sort.SliceStable(pkgs, func(i, j int) bool {
 		if pkgs[i].Group != pkgs[j].Group {
 			return pkgs[i].Group < pkgs[j].Group
 		}
 		return pkgs[i].Name < pkgs[j].Name
 	})
-	s.rows = s.rows[:0]
-	for i, p := range pkgs {
-		if i == 0 || p.Group != pkgs[i-1].Group {
-			s.rows = append(s.rows, selectionRow{group: p.Group})
+	var rows []selectionRow
+	var dependencyRows []selectionRow
+	for _, p := range pkgs {
+		if dependencies[p.Name] {
+			dependencyRows = append(dependencyRows, selectionRow{group: dependenciesHeader, name: p.Name})
+			continue
 		}
-		s.rows = append(s.rows, selectionRow{group: p.Group, name: p.Name})
+		if n := len(rows); n == 0 || rows[n-1].group != p.Group {
+			rows = append(rows, selectionRow{group: p.Group})
+		}
+		rows = append(rows, selectionRow{group: p.Group, name: p.Name})
 	}
+	if len(dependencyRows) > 0 {
+		sort.SliceStable(dependencyRows, func(i, j int) bool { return dependencyRows[i].name < dependencyRows[j].name })
+		rows = append(rows, selectionRow{group: dependenciesHeader})
+		rows = append(rows, dependencyRows...)
+	}
+	return withHeaderNames(rows)
+}
+
+// withHeaderNames fills each header's names with the packages under it.
+func withHeaderNames(rows []selectionRow) []selectionRow {
+	header := -1
+	for i, r := range rows {
+		if r.name == "" {
+			header = i
+			continue
+		}
+		rows[header].names = append(rows[header].names, r.name)
+	}
+	return rows
+}
+
+// seedSelection builds the group rows and, once, preselects the minimal profile so custom starts from something usable.
+func (s *Install) seedSelection() {
+	if !s.seeded {
+		s.seeded = true
+		s.selected = install.DefaultSelection(s.draft.Profile, s.deps.Catalog)
+	}
+	s.rows = buildRows(s.deps.Catalog, s.dependencies)
+}
+
+// loadDependencies probes once per wizard; a failed probe leaves the group out.
+func loadDependencies(probe func(context.Context) (map[string]bool, error)) tea.Cmd {
+	return func() tea.Msg {
+		set, _ := probe(context.Background())
+		return dependenciesMsg{set: set}
+	}
+}
+
+// applyDependencies rebuilds the rows around the late probe result, keeping the cursor on the same row.
+func (s *Install) applyDependencies(set map[string]bool) {
+	s.depsLoaded, s.dependencies = true, set
+	var current selectionRow
+	if s.cursor < len(s.rows) {
+		current = s.rows[s.cursor]
+	}
+	s.rows = buildRows(s.deps.Catalog, set)
+	for i, r := range s.rows {
+		if r.name == current.name && (r.name != "" || r.group == current.group) {
+			s.cursor = i
+			return
+		}
+	}
+	s.cursor = max(min(s.cursor, len(s.rows)-1), 0)
 }
 
 func (s *Install) selectionKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -90,6 +144,8 @@ func (s *Install) selectionKey(msg tea.KeyPressMsg) tea.Cmd {
 	case s.moveCursor(msg, len(s.rows)):
 	case key.Matches(msg, s.keys.Toggle) && s.cursor < len(s.rows):
 		s.toggleRow(s.rows[s.cursor])
+	case key.Matches(msg, s.keys.All):
+		s.toggleAll()
 	case key.Matches(msg, s.keys.Confirm):
 		return s.step(1)
 	}
@@ -101,21 +157,25 @@ func (s *Install) toggleRow(row selectionRow) {
 		s.selected[row.name] = !s.selected[row.name]
 		return
 	}
-	names := s.groupNames(row.group)
+	s.setAll(row.names)
+}
+
+func (s *Install) toggleAll() {
+	var names []string
+	for _, r := range s.rows {
+		if r.name != "" {
+			names = append(names, r.name)
+		}
+	}
+	s.setAll(names)
+}
+
+// setAll selects the names, or clears them when they are all selected already.
+func (s *Install) setAll(names []string) {
 	all := !slices.ContainsFunc(names, func(n string) bool { return !s.selected[n] })
 	for _, n := range names {
 		s.selected[n] = !all
 	}
-}
-
-func (s *Install) groupNames(group string) []string {
-	var names []string
-	for _, p := range s.deps.Catalog {
-		if p.Group == group {
-			names = append(names, p.Name)
-		}
-	}
-	return names
 }
 
 func (s *Install) enterSecrets() {
@@ -208,10 +268,10 @@ func (s *Install) summaryKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, s.keys.Back):
 		s.Cancel()
 		return s.step(-1)
-	case key.Matches(msg, s.keys.Up):
-		s.summary.ScrollUp(1)
-	case key.Matches(msg, s.keys.Down):
-		s.summary.ScrollDown(1)
+	case s.keys.step(msg) < 0:
+		s.summary.ScrollUp(-s.keys.step(msg))
+	case s.keys.step(msg) > 0:
+		s.summary.ScrollDown(s.keys.step(msg))
 	case key.Matches(msg, s.keys.Confirm) && s.canConfirm() && !s.started:
 		return s.startRun()
 	}

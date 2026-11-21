@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -293,5 +294,50 @@ func TestInstallSecretsPage(t *testing.T) {
 					in.page, in.draft.SkipSecrets, got, c.wantPage, c.wantSkipped, c.wantEntries)
 			}
 		})
+	}
+}
+
+// startedOnSummary confirms the run on the summary and leaves the wizard with a run in flight.
+func startedOnSummary(t *testing.T, f *fakeInstaller, secretNames ...string) *Install {
+	t.Helper()
+	_, in := newTestRoot(f, secretNames...)
+	toSummary(in)
+	if !isRunRequest(tap(in, specialKey(tea.KeyEnter))) || !in.started {
+		t.Fatal("confirm did not start a run")
+	}
+	return in
+}
+
+func TestInstallSuccessfulRunResetsTheWizardAndReturnsToTheDashboard(t *testing.T) {
+	in := startedOnSummary(t, &fakeInstaller{plan: onePlan()})
+
+	_, cmd := in.Update(runClosed{})
+
+	back := slices.ContainsFunc(collectMsgs(cmd), func(m tea.Msg) bool { _, ok := m.(returnToDashboardMsg); return ok })
+	if in.page != pageProfile || !back {
+		t.Errorf("page=%v returnToDashboard=%v, want the profile step and the return message", in.page, back)
+	}
+}
+
+func TestInstallEnterAfterASuccessfulRunStartsNoRun(t *testing.T) {
+	f := &fakeInstaller{plan: onePlan()}
+	in := startedOnSummary(t, f)
+	in.Update(runClosed{})
+
+	for range 4 {
+		if cmd := tap(in, specialKey(tea.KeyEnter)); isRunRequest(cmd) {
+			t.Fatalf("enter on page %v asked for a run after the install succeeded", in.page)
+		}
+	}
+}
+
+func TestInstallFailedRunKeepsTheSummaryAndDoesNotReturnToTheDashboard(t *testing.T) {
+	in := startedOnSummary(t, &fakeInstaller{plan: onePlan()})
+
+	_, cmd := in.Update(runClosed{err: errors.New("install failed")})
+
+	back := slices.ContainsFunc(collectMsgs(cmd), func(m tea.Msg) bool { _, ok := m.(returnToDashboardMsg); return ok })
+	if in.page != pageSummary || back {
+		t.Errorf("page=%v returnToDashboard=%v, want the summary kept and no return", in.page, back)
 	}
 }

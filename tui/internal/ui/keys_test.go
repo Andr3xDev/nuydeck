@@ -64,6 +64,41 @@ func TestNoScreenBindingCollidesWithAGlobalKey(t *testing.T) {
 	}
 }
 
+// Every list or scrolling stage must advertise J/K next to up/down; stages without a cursor are skipped with a reason.
+func TestKeyListsOfListStagesIncludeMove(t *testing.T) {
+	skipped := map[string]string{
+		"section Config":  "read-only values, no cursor",
+		"section Sync":    "pull/push launcher; its list is the preview stage",
+		"section Env":     "no list until a source is chosen",
+		"sync dialog":     "yes/no question, no list",
+		"install secrets": "text input, no list",
+	}
+	keyLists := map[string][]key.Binding{}
+	for name, s := range keyedStages(t) {
+		keyLists[name] = s.Keys()
+	}
+	keyLists["install selection"] = toSelection(t).Keys()
+	_, summary := newTestRoot(&fakeInstaller{plan: onePlan()})
+	toSummary(summary)
+	keyLists["install summary"] = summary.Keys()
+	h := newTestFlow(t, withExtra("", ""), false)
+	planned(h.f)
+	keyLists["flow body"] = h.f.Keys()
+	keyLists["run pane"] = newRun(runRequest{}, func() {}).keys(newKeyMap())
+
+	move := newKeyMap().move()
+	for name, keys := range keyLists {
+		if _, ok := skipped[name]; ok {
+			continue
+		}
+		for _, want := range move {
+			if !slices.ContainsFunc(keys, func(b key.Binding) bool { return slices.Equal(b.Keys(), want.Keys()) }) {
+				t.Errorf("%s: Keys() lacks %v", name, want.Keys())
+			}
+		}
+	}
+}
+
 func TestKeyMapStep(t *testing.T) {
 	k := newKeyMap()
 	cases := []struct {

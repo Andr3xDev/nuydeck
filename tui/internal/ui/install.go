@@ -40,9 +40,15 @@ type installPlanMsg struct {
 	err  error
 }
 
+// dependenciesHeader is the group of packages installed as dependencies, listed after the catalog groups.
+const dependenciesHeader = "Dependencies"
+
+type dependenciesMsg struct{ set map[string]bool }
+
 type selectionRow struct {
 	group string
-	name  string // empty for a group header
+	name  string   // empty for a group header
+	names []string // a header's own members
 }
 
 // Install is the guided install wizard: profile, hardware, selection, secrets, summary. The run belongs to the shell.
@@ -64,9 +70,11 @@ type Install struct {
 	hwLoaded  bool
 	detected  bool
 
-	selected map[string]bool
-	seeded   bool
-	rows     []selectionRow
+	selected     map[string]bool
+	seeded       bool
+	rows         []selectionRow
+	dependencies map[string]bool
+	depsLoaded   bool
 
 	secretIdx    int
 	secretInput  textinput.Model
@@ -79,15 +87,22 @@ type Install struct {
 }
 
 func newInstall(svc *shell) *Install {
+	s := &Install{ctx: svc.ctx, deps: svc.Install, keys: svc.keys, th: svc.th}
+	s.resetWizard()
+	return s
+}
+
+// resetWizard returns the wizard to a fresh profile step, dropping the draft and its secrets.
+func (s *Install) resetWizard() {
 	input := textinput.New()
 	input.EchoMode = textinput.EchoNone
 	summary := viewport.New()
 	summary.SoftWrap = true
-	return &Install{
-		ctx:         svc.ctx,
-		deps:        svc.Install,
-		keys:        svc.keys,
-		th:          svc.th,
+	*s = Install{
+		ctx:         s.ctx,
+		deps:        s.deps,
+		keys:        s.keys,
+		th:          s.th,
 		draft:       install.Draft{Profile: manifest.ProfileMinimal},
 		secretInput: input,
 		summary:     summary,
@@ -101,9 +116,11 @@ func (s *Install) Enter() tea.Cmd { return nil }
 func (s *Install) Keys() []key.Binding {
 	switch s.page {
 	case pageProfile:
-		return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Confirm}
-	case pageHardware, pageSelection:
-		return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Toggle, s.keys.Confirm, s.keys.Back}
+		return append(s.keys.move(), s.keys.Confirm)
+	case pageHardware:
+		return append(s.keys.move(), s.keys.Toggle, s.keys.Confirm, s.keys.Back)
+	case pageSelection:
+		return append(s.keys.move(), s.keys.Toggle, s.keys.All, s.keys.Confirm, s.keys.Back)
 	case pageSecrets:
 		keys := []key.Binding{s.keys.Confirm, s.keys.Back}
 		if s.secretPrompting() {
@@ -111,7 +128,7 @@ func (s *Install) Keys() []key.Binding {
 		}
 		return keys
 	}
-	return []key.Binding{s.keys.Up, s.keys.Down, s.keys.Confirm, s.keys.Back}
+	return append(s.keys.move(), s.keys.Confirm, s.keys.Back)
 }
 
 // CapturesText reports whether printable keys belong to the hidden input, so the shell must not act on them.
@@ -156,7 +173,14 @@ func (s *Install) Update(msg tea.Msg) (screen, tea.Cmd) {
 			s.planning, s.plan, s.planErr = false, msg.plan, msg.err
 			s.showSummary()
 		}
+	case dependenciesMsg:
+		s.applyDependencies(msg.set)
 	case runClosed:
+		if s.started && msg.err == nil {
+			s.Cancel()
+			s.resetWizard()
+			return s, func() tea.Msg { return returnToDashboardMsg{} }
+		}
 		if s.started {
 			s.started = false
 			return s, s.startPlan()
@@ -183,15 +207,9 @@ func (s *Install) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // moveCursor applies up and down over n rows and reports whether the key was a move.
 func (s *Install) moveCursor(msg tea.KeyPressMsg, n int) bool {
-	switch {
-	case key.Matches(msg, s.keys.Up):
-		s.cursor = max(s.cursor-1, 0)
-	case key.Matches(msg, s.keys.Down):
-		s.cursor = max(min(s.cursor+1, n-1), 0)
-	default:
-		return false
-	}
-	return true
+	delta := s.keys.step(msg)
+	s.cursor = moveCursor(s.cursor, delta, n)
+	return delta != 0
 }
 
 // skipsPage reports pages the flow passes through: no custom selection, no secret names.
@@ -234,6 +252,9 @@ func (s *Install) enterPage() tea.Cmd {
 		}
 	case pageSelection:
 		s.seedSelection()
+		if !s.depsLoaded && s.deps.Dependencies != nil {
+			return loadDependencies(s.deps.Dependencies)
+		}
 	case pageSecrets:
 		s.enterSecrets()
 	case pageSummary:
