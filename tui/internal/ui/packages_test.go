@@ -35,9 +35,9 @@ func TestPackagesAddFormRejectsEmptySource(t *testing.T) {
 	p, _, _ := sectionOf[*Packages](NewRoot("", false, Deps{Packages: f.deps()}))
 	p.Update(unregisteredMsg{names: f.names})
 
-	p.Update(keyPress('a'))
+	p.Update(keyPress('m'))
 	if p.form == nil {
-		t.Fatal("a did not open the add form")
+		t.Fatal("m did not open the add form")
 	}
 	_, cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 

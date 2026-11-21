@@ -20,7 +20,14 @@ type keyMap struct {
 	Edit, Diff               key.Binding
 	Start, Stop, Restart     key.Binding
 	Mask, Unmask, Logs, Link key.Binding
+	JumpUp, JumpDown         key.Binding
+	Filter, Snapshot         key.Binding
+	Restore, Install         key.Binding
+	Uninstall                key.Binding
 }
+
+// jumpRows is how many rows K and J move the cursor at once.
+const jumpRows = 5
 
 func newKeyMap() keyMap {
 	return keyMap{
@@ -40,8 +47,15 @@ func newKeyMap() keyMap {
 		Pull:        key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "pull")),
 		Push:        key.NewBinding(key.WithKeys("P"), key.WithHelp("P", "push")),
 		Delete:      key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete backup")),
-		Add:         key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add package")),
-		Ignore:      key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "ignore package")),
+		Add:         key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "add package")),
+		Ignore:      key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "ignore package")),
+		JumpUp:      key.NewBinding(key.WithKeys("K", "shift+k"), key.WithHelp("K", "jump up")),
+		JumpDown:    key.NewBinding(key.WithKeys("J", "shift+j"), key.WithHelp("J", "jump down")),
+		Filter:      key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "filter")),
+		Snapshot:    key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "snapshot")),
+		Restore:     key.NewBinding(key.WithKeys("enter", "r"), key.WithHelp("enter", "restore")),
+		Install:     key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "install")),
+		Uninstall:   key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "uninstall")),
 		SkipSecrets: key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "skip secrets file")),
 		CancelRun:   key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "cancel")),
 		Edit:        key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
@@ -56,8 +70,8 @@ func newKeyMap() keyMap {
 	}
 }
 
-// step is the cursor delta a movement key asks for, or 0 for any other key.
-func (k keyMap) step(msg tea.KeyPressMsg) int {
+// arrow is the one-row cursor delta of an up/down key, or 0 for any other key (J and K included).
+func (k keyMap) arrow(msg tea.KeyPressMsg) int {
 	switch {
 	case key.Matches(msg, k.Up):
 		return -1
@@ -65,6 +79,30 @@ func (k keyMap) step(msg tea.KeyPressMsg) int {
 		return 1
 	}
 	return 0
+}
+
+// move lists the cursor-movement bindings for a screen's Keys().
+func (k keyMap) move() []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.JumpUp, k.JumpDown}
+}
+
+// step is the cursor delta a movement key asks for, or 0 for any other key.
+func (k keyMap) step(msg tea.KeyPressMsg) int {
+	if delta := k.arrow(msg); delta != 0 {
+		return delta
+	}
+	switch {
+	case key.Matches(msg, k.JumpUp):
+		return -jumpRows
+	case key.Matches(msg, k.JumpDown):
+		return jumpRows
+	}
+	return 0
+}
+
+// moveCursor applies a step to a cursor over n rows, staying inside the list.
+func moveCursor(cursor, delta, n int) int {
+	return max(min(cursor+delta, n-1), 0)
 }
 
 // described returns b with another help text, for keys whose meaning depends on the stage.

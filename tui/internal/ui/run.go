@@ -54,7 +54,10 @@ const (
 )
 
 // runClosed tells every screen the output pane was dismissed.
-type runClosed struct{}
+type runClosed struct{ err error }
+
+// returnToDashboardMsg sends the shell back to the dashboard.
+type returnToDashboardMsg struct{}
 
 type (
 	runEventMsg struct{ event plan.Event }

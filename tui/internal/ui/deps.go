@@ -37,12 +37,23 @@ type Deps struct {
 	// ReadSide reads one end of a plan item for the resolver's row state and diff view.
 	ReadSide func(path string) (cfgsync.Side, error)
 	Edit     func(ctx context.Context, req cfgsync.EditRequest) (cfgsync.EditResult, error)
+	// RunPlan executes a confirmed plan, reporting each step to emit.
+	RunPlan          func(ctx context.Context, p plan.Plan, emit func(plan.Event)) error
+	PlanManualBackup func(ctx context.Context, entries []manifest.ResolvedEntry) (plan.Plan, error)
 
+	Config     ConfigDeps
 	Install    InstallDeps
 	Packages   PackagesDeps
 	Services   ServicesDeps
 	Env        EnvDeps
 	References ReferencesDeps
+}
+
+// ConfigDeps is what the Config section needs besides the shell.
+type ConfigDeps struct {
+	RepoPath   string
+	BackupsDir string
+	PlanUpdate func() plan.Plan
 }
 
 // ServicesDeps is what the Services section needs besides the shell. Err replaces only that section.
@@ -77,6 +88,8 @@ type InstallDeps struct {
 	DetectGPUs func(ctx context.Context) ([]install.PCIDevice, error)
 	// PathKind checks whether a path exists without opening it.
 	PathKind func(path string) (plan.NodeKind, error)
+	// Dependencies reports the installed packages marked as dependencies.
+	Dependencies func(ctx context.Context) (map[string]bool, error)
 	// Preview renders a planned step as a dry run; the summary shows its detail.
 	Preview     func(ctx context.Context, step plan.Step) plan.StepResult
 	SecretsPath string

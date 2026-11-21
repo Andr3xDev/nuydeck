@@ -27,6 +27,8 @@ func directionLabel(d plan.Direction) string {
 		return "Pull: PC -> repo"
 	case plan.Restore:
 		return "Restore"
+	case plan.Manual:
+		return "Manual"
 	}
 	return "Push: repo -> PC"
 }

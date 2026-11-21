@@ -151,7 +151,7 @@ func TestPackagesFormTitleKeepsTheSpaceBeforeThePackageName(t *testing.T) {
 	f := &fakePackagesDeps{names: []string{"htop"}}
 	p, _, _ := sectionOf[*Packages](NewRoot("", false, Deps{Packages: f.deps()}))
 	p.Update(unregisteredMsg{names: f.names})
-	p.Update(keyPress('a'))
+	p.Update(keyPress('m'))
 
 	if view := ansi.Strip(p.View(100, 30)); !strings.Contains(view, "Add htop to the catalog") {
 		t.Errorf("form title wrong:\n%s", view)
