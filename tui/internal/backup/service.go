@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
@@ -36,7 +37,7 @@ func (s *Service) PlanManual(_ context.Context, entries []manifest.ResolvedEntry
 	for _, e := range entries {
 		kind, err := s.Inspector.PathKind(e.DestPath)
 		if err != nil {
-			return plan.Plan{}, err
+			return plan.Plan{}, fmt.Errorf("inspect %s: %w", e.DestPath, err)
 		}
 		if kind == plan.KindNone {
 			continue
