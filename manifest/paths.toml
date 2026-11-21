@@ -156,3 +156,15 @@ pattern = "nuydeck/theme/"
 [[exclude]]
 root = "config"
 pattern = "nvim/lazy-lock.json"
+
+[[exclude]]
+root = "fonts"
+pattern = "Geist/.uuid"
+
+[[exclude]]
+root = "fonts"
+pattern = "Geist/static/.uuid"
+
+[[exclude]]
+root = "fonts"
+pattern = "soulmaze/.uuid"
