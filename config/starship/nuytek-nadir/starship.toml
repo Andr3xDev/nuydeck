@@ -1,0 +1,105 @@
+#-------------------------------------------------------------------------------------
+#                                                            
+#       ,---.   ,--.                        ,--.     ,--.        
+#     "   .-",-"  "-. ,--,--.,--.--. ,---. |  ,---. `--" ,---.  
+#     `.  `-."-.  .-"" ,-.  ||  .--"(  .-" |  .-.  |,--.| .-. | 
+#     .-"    | |  |  \ "-"  ||  |   .-"  `)|  | |  ||  || "-" " 
+#     `-----"  `--"   `--`--"`--"   `----" `--" `--"`--"|  |-"  
+#                                                       `--"    
+#             _______
+#　　　　　 /  ＞　　フ     
+#　　　　　| 　_　 _ l      RESUME: Custom pront for terminals and complement
+#　 　　　／` ミ＿xノ               because i use OhMyZsh.
+#　　 　 /　　　 　 |
+#　　　 /　 ヽ　　 ﾉ
+#　 　 │　　|　|　|         AUTHOR:  Andr3xDev
+#　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
+#　| (￣ヽ＿_ヽ_)__)
+#　＼二つ
+#-------------------------------------------------------------------------------------
+
+
+#-------------------------------------------------------------------------------------
+#   Format
+#-------------------------------------------------------------------------------------
+
+format = """
+$line_break \
+$directory\
+$git_branch\
+$git_status\
+$cmd_duration\
+$docker\
+$aws\
+$status
+[ └─➤ ](main-fg)"""
+
+#--- properties ---#
+add_newline = true 
+continuation_prompt = "▶▶ "
+
+
+#-------------------------------------------------------------------------------------
+#   Palette
+#-------------------------------------------------------------------------------------
+
+palette = "nuytek"
+
+[palettes.nuytek]
+background = "#151515"
+surface = "#232323"
+text = "#E9EDEB"
+main-fg = "#5AE2DD"
+support-fg = "#A6D5F2"
+error = "#EF616D"
+
+
+#-------------------------------------------------------------------------------------
+#   Elements
+#-------------------------------------------------------------------------------------
+
+[directory]
+truncation_length = 3
+fish_style_pwd_dir_length = 3
+truncate_to_repo = true
+home_symbol = " ~"
+read_only = "  "
+format = "[](fg:main-fg)[◤](fg:main-fg bg:surface)[  ](bold fg:text bg:surface)[$path](bold fg:text bg:surface)[$read_only ](bold fg:text bg:surface)[◤](fg:surface)"
+
+[git_branch]
+format = "[](fg:main-fg)[◤](fg:main-fg bg:surface)[  ](bold fg:text bg:surface)[$branch](bold fg:text bg:surface)"
+truncation_symbol = "…/"
+
+[git_status]
+format = "[ $all_status$ahead_behind ](bold fg:support-fg bg:surface)[◤](fg:surface)"
+stashed = " "
+ahead = " ↑"
+behind = " ↓"
+diverged = " ↕"
+conflicted = " "
+untracked = " ?"
+staged = " +"
+modified = " !"
+renamed = " »"
+deleted = " ✘"
+
+[cmd_duration]
+min_time = 0
+format = "[](fg:main-fg)[◤](fg:main-fg bg:surface)[ ⏱  ](bold fg:text bg:surface)[$duration ](bold fg:text bg:surface)[◤](fg:surface)"
+show_milliseconds = true
+
+[status]
+disabled = false
+format = "[](fg:error)[◤](fg:error bg:surface)[ ✘ ](bold fg:error bg:surface)[◤](fg:surface)"
+
+
+#-------------------------------------------------------------------------------------
+#   Extra Elements
+#-------------------------------------------------------------------------------------
+
+[line_break]
+disabled = false
+
+[aws]
+symbol = " "
+format = "[](fg:main-fg)[◤](fg:main-fg bg:surface)[ $symbol](bold fg:text bg:surface)[◤](bold fg:surface)"
