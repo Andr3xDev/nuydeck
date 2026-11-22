@@ -44,7 +44,7 @@ func (r Runner) runCommand(ctx context.Context, s plan.CommandStep, progress fun
 		return r.runInteractive(ctx, s, argv)
 	}
 
-	stdout, stderr := plan.NewLineWriter(progress), plan.NewLineWriter(progress)
+	stdout, stderr := newLineWriter(progress), newLineWriter(progress)
 	res, err := r.exec(ctx, execx.Options{Stdout: stdout, Stderr: stderr, Dir: s.Dir}, argv[0], argv[1:]...)
 	stdout.Flush()
 	stderr.Flush()

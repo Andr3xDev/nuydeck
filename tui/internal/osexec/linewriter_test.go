@@ -1,16 +1,18 @@
-package plan
+package osexec
 
 import (
 	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 func collectLines(t *testing.T, chunks ...string) []string {
 	t.Helper()
 	var lines []string
-	w := NewLineWriter(func(p StepProgress) { lines = append(lines, p.Line) })
+	w := newLineWriter(func(p plan.StepProgress) { lines = append(lines, p.Line) })
 	for _, c := range chunks {
 		if _, err := w.Write([]byte(c)); err != nil {
 			t.Fatal(err)
@@ -49,7 +51,7 @@ func TestLineWriterSplitsAndSanitizes(t *testing.T) {
 
 func TestLineWriterHoldsPartialLineUntilTerminated(t *testing.T) {
 	var lines []string
-	w := NewLineWriter(func(p StepProgress) { lines = append(lines, p.Line) })
+	w := newLineWriter(func(p plan.StepProgress) { lines = append(lines, p.Line) })
 
 	if _, err := w.Write([]byte("no newline yet")); err != nil {
 		t.Fatal(err)
@@ -86,7 +88,7 @@ func TestLineWriterCapsAtRuneBoundary(t *testing.T) {
 
 func TestLineWriterDiscardsRestOfUnterminatedRunawayLine(t *testing.T) {
 	var lines []string
-	w := NewLineWriter(func(p StepProgress) { lines = append(lines, p.Line) })
+	w := newLineWriter(func(p plan.StepProgress) { lines = append(lines, p.Line) })
 	chunk := []byte(strings.Repeat("a", 1000))
 
 	for range 20 {
@@ -111,7 +113,7 @@ func TestLineWriterDiscardsRestOfUnterminatedRunawayLine(t *testing.T) {
 }
 
 func TestLineWriterNilProgressIsNoop(t *testing.T) {
-	w := NewLineWriter(nil)
+	w := newLineWriter(nil)
 
 	if _, err := w.Write([]byte("x\ny")); err != nil {
 		t.Fatal(err)

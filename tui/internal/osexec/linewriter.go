@@ -1,10 +1,12 @@
-package plan
+package osexec
 
 import (
 	"bytes"
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
 
 // lineByteCap bounds one emitted line so a runaway process cannot flood the UI.
@@ -18,24 +20,24 @@ const rawBufferCap = 4 * lineByteCap
 // charset designators and other two-byte ESC sequences.
 var ansiEscape = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][A-Za-z0-9]|\x1b[@-Z\\-_]`)
 
-// LineWriter turns raw process output into sanitized StepProgress lines.
+// lineWriter turns raw process output into sanitized plan.StepProgress lines.
 // It is not safe for concurrent use; use one writer per stream.
-type LineWriter struct {
-	progress    func(StepProgress)
+type lineWriter struct {
+	progress    func(plan.StepProgress)
 	buf         []byte
 	discardRest bool
 }
 
-// NewLineWriter returns a writer that reports lines to progress, which may be nil.
-func NewLineWriter(progress func(StepProgress)) *LineWriter {
+// newLineWriter returns a writer that reports lines to progress, which may be nil.
+func newLineWriter(progress func(plan.StepProgress)) *lineWriter {
 	if progress == nil {
-		progress = func(StepProgress) {}
+		progress = func(plan.StepProgress) {}
 	}
-	return &LineWriter{progress: progress}
+	return &lineWriter{progress: progress}
 }
 
 // Write splits on \n and \r, holding the trailing partial line until it ends.
-func (w *LineWriter) Write(p []byte) (int, error) {
+func (w *lineWriter) Write(p []byte) (int, error) {
 	n := len(p)
 	for len(p) > 0 {
 		i := bytes.IndexAny(p, "\r\n")
@@ -51,12 +53,12 @@ func (w *LineWriter) Write(p []byte) (int, error) {
 }
 
 // Flush emits the held partial line, if any.
-func (w *LineWriter) Flush() {
+func (w *lineWriter) Flush() {
 	w.endLine()
 	w.buf = nil
 }
 
-func (w *LineWriter) hold(b []byte) {
+func (w *lineWriter) hold(b []byte) {
 	if w.discardRest {
 		return
 	}
@@ -68,7 +70,7 @@ func (w *LineWriter) hold(b []byte) {
 	}
 }
 
-func (w *LineWriter) endLine() {
+func (w *lineWriter) endLine() {
 	if !w.discardRest {
 		w.emit(w.buf)
 	}
@@ -76,7 +78,7 @@ func (w *LineWriter) endLine() {
 	w.discardRest = false
 }
 
-func (w *LineWriter) emit(raw []byte) {
+func (w *lineWriter) emit(raw []byte) {
 	line := strings.Map(func(r rune) rune {
 		if r < ' ' || r == 0x7f {
 			return -1
@@ -93,5 +95,5 @@ func (w *LineWriter) emit(raw []byte) {
 		}
 		line = line[:cut]
 	}
-	w.progress(StepProgress{Line: line})
+	w.progress(plan.StepProgress{Line: line})
 }
