@@ -56,16 +56,6 @@ func isQuit(cmd tea.Cmd) bool {
 	return ok
 }
 
-var (
-	keyTab   = tea.KeyPressMsg{Code: tea.KeyTab}
-	keyEsc   = tea.KeyPressMsg{Code: tea.KeyEscape}
-	keyEnter = tea.KeyPressMsg{Code: tea.KeyEnter}
-	keyRight = tea.KeyPressMsg{Code: tea.KeyRight}
-	keyDown  = tea.KeyPressMsg{Code: tea.KeyDown}
-	keyUp    = tea.KeyPressMsg{Code: tea.KeyUp}
-	keyCtrlC = tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
-)
-
 func probeKeys() []key.Binding {
 	return []key.Binding{bindingFor("up", "k"), bindingFor("down", "j"), bindingFor("enter", "right", "l"), bindingFor("x")}
 }

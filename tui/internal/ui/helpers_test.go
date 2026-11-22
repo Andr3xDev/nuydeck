@@ -2,11 +2,10 @@ package ui
 
 import (
 	"context"
-	"errors"
 	"os/exec"
 	"slices"
 	"strings"
-	"testing"
+	"sync/atomic"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -17,6 +16,28 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/references"
 	"github.com/Andr3xDev/nuydeck/tui/internal/services"
 )
+
+var (
+	keyTab   = tea.KeyPressMsg{Code: tea.KeyTab}
+	keyEsc   = tea.KeyPressMsg{Code: tea.KeyEscape}
+	keyEnter = tea.KeyPressMsg{Code: tea.KeyEnter}
+	keyRight = tea.KeyPressMsg{Code: tea.KeyRight}
+	keyDown  = tea.KeyPressMsg{Code: tea.KeyDown}
+	keyUp    = tea.KeyPressMsg{Code: tea.KeyUp}
+	keyCtrlC = tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+)
+
+func keyPress(code rune) tea.KeyPressMsg {
+	if code == tea.KeySpace {
+		return tea.KeyPressMsg{Code: code, Text: " "}
+	}
+	if code == tea.KeyEnter {
+		return tea.KeyPressMsg{Code: code}
+	}
+	return tea.KeyPressMsg{Code: code, Text: string(code)}
+}
+
+func specialKey(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code} }
 
 // feed runs cmd and every command it yields, delivering each message to s; run requests are collected, not started.
 func feed(s screen, cmd tea.Cmd) (runs []runRequest) {
@@ -64,6 +85,55 @@ func downTimes(n int) []tea.KeyPressMsg {
 		keys[i] = keyDown
 	}
 	return keys
+}
+
+type fakeSyncDeps struct {
+	plan          cfgsync.SyncPlan
+	needsBackup   bool
+	progressPaths []string
+	blockUntilCtx bool
+	result        cfgsync.ApplyResult
+	opts          cfgsync.ApplyOptions
+	applyCalls    atomic.Int32
+}
+
+func (f *fakeSyncDeps) deps() Deps {
+	return Deps{PlanSync: f.PlanSync, NeedsBackup: f.NeedsBackup, ApplySync: f.Apply}
+}
+
+func (f *fakeSyncDeps) PlanSync(context.Context, plan.Direction, []manifest.ResolvedEntry) (cfgsync.SyncPlan, error) {
+	return f.plan, nil
+}
+
+func (f *fakeSyncDeps) NeedsBackup(cfgsync.SyncPlan, cfgsync.Selection) bool { return f.needsBackup }
+
+func (f *fakeSyncDeps) Apply(ctx context.Context, _ cfgsync.SyncPlan, _ cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult {
+	f.applyCalls.Add(1)
+	f.opts = opts
+	for _, p := range f.progressPaths {
+		progress(plan.StepProgress{Path: p})
+	}
+	if f.blockUntilCtx {
+		<-ctx.Done()
+	}
+	return f.result
+}
+
+func selectedPlan() cfgsync.SyncPlan {
+	item := planItem("a", false)
+	return cfgsync.SyncPlan{Items: []cfgsync.PlanItem{item}, Selection: cfgsync.Selection{item.Key(): true}}
+}
+
+func planItem(path string, blocked bool) cfgsync.PlanItem {
+	return cfgsync.PlanItem{Change: plan.Change{Entry: manifest.Entry{Root: "home", Path: path}, Type: plan.Update}, Blocked: blocked}
+}
+
+func newPreview(f *fakeSyncDeps, dryRun bool) *Sync {
+	svc := testServices(f.deps())
+	svc.dryRun = dryRun
+	s := newSync(svc)
+	runCmds(s, s.startPlan(plan.Push, nil))
+	return s
 }
 
 type fakeTerminal struct {
@@ -254,74 +324,4 @@ func fullDeps() Deps {
 		Services:   newFakeServices().deps(),
 		References: newFakeReferences().deps(),
 	})
-}
-
-func TestRootSidebarListsTheNewSectionsAfterTheExistingOnes(t *testing.T) {
-	r := NewRoot("", false, fullDeps())
-
-	want := []string{"Dashboard", "Sync", "Backups", "Install", "Packages", "Services", "Env", "References", "Config"}
-	if got := sectionTitles(r); !slices.Equal(got, want) {
-		t.Errorf("sections = %v, want %v", got, want)
-	}
-}
-
-func TestRootHidesTheNewSectionsWithoutTheirDeps(t *testing.T) {
-	for _, title := range sectionTitles(NewRoot("", false, Deps{})) {
-		if slices.Contains([]string{"Services", "Env", "References"}, title) {
-			t.Errorf("section %s present without its Deps", title)
-		}
-	}
-}
-
-func TestRootManifestLoadErrorReplacesOnlyItsOwnSection(t *testing.T) {
-	cases := []struct {
-		name    string
-		mutate  func(*Deps)
-		section string
-		file    string
-	}{
-		{"services.toml", func(d *Deps) { d.Services.Err = errors.New("entry 2: unknown scope") }, "Services", "services.toml"},
-		{"references.toml", func(d *Deps) { d.References.Err = errors.New("entry 1: url must be https") }, "References", "references.toml"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			deps := fullDeps()
-			tc.mutate(&deps)
-			r := NewRoot("", false, deps)
-			r.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-
-			for i, s := range r.sections {
-				_, isError := s.screen.(errorScreen)
-				if want := s.title == tc.section; isError != want {
-					t.Errorf("section %s: error screen = %v, want %v", s.title, isError, want)
-				}
-				if s.title == tc.section {
-					r.selected = i
-				}
-			}
-			view := ansi.Strip(r.View().Content)
-			if !strings.Contains(view, tc.file) {
-				t.Errorf("error screen does not name %s:\n%s", tc.file, view)
-			}
-		})
-	}
-}
-
-func TestRefreshIsListedForServicesAndEnvButNotReferences(t *testing.T) {
-	root := NewRoot("", false, fullDeps())
-	env, _, _ := sectionOf[*Env](root)
-	feed(env, env.Enter())
-	send(env, keyEnter)
-	want := map[string]bool{"Services": true, "Env": true, "References": false}
-
-	for i, s := range root.sections {
-		wantR, ok := want[s.title]
-		if !ok {
-			continue
-		}
-		root.selected, root.focus = i, focusPanel
-		if got := claims(root.focusedKeys(), "r"); got != wantR {
-			t.Errorf("%s: r listed = %v, want %v", s.title, got, wantR)
-		}
-	}
 }

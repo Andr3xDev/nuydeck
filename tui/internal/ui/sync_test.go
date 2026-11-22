@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,46 +11,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
-	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 )
-
-type fakeSyncDeps struct {
-	plan          cfgsync.SyncPlan
-	needsBackup   bool
-	progressPaths []string
-	blockUntilCtx bool
-	result        cfgsync.ApplyResult
-	opts          cfgsync.ApplyOptions
-	applyCalls    atomic.Int32
-}
-
-func (f *fakeSyncDeps) deps() Deps {
-	return Deps{PlanSync: f.PlanSync, NeedsBackup: f.NeedsBackup, ApplySync: f.Apply}
-}
-
-func (f *fakeSyncDeps) PlanSync(context.Context, plan.Direction, []manifest.ResolvedEntry) (cfgsync.SyncPlan, error) {
-	return f.plan, nil
-}
-
-func (f *fakeSyncDeps) NeedsBackup(cfgsync.SyncPlan, cfgsync.Selection) bool { return f.needsBackup }
-
-func (f *fakeSyncDeps) Apply(ctx context.Context, _ cfgsync.SyncPlan, _ cfgsync.Selection, opts cfgsync.ApplyOptions, progress func(plan.StepProgress)) cfgsync.ApplyResult {
-	f.applyCalls.Add(1)
-	f.opts = opts
-	for _, p := range f.progressPaths {
-		progress(plan.StepProgress{Path: p})
-	}
-	if f.blockUntilCtx {
-		<-ctx.Done()
-	}
-	return f.result
-}
-
-func selectedPlan() cfgsync.SyncPlan {
-	item := planItem("a", false)
-	return cfgsync.SyncPlan{Items: []cfgsync.PlanItem{item}, Selection: cfgsync.Selection{item.Key(): true}}
-}
 
 // runCmds feeds every command result back into the screen until no command is left.
 func runCmds(s *Sync, cmd tea.Cmd) {
@@ -61,18 +22,6 @@ func runCmds(s *Sync, cmd tea.Cmd) {
 }
 
 func stagedOf(s *Sync) *syncStaged { return s.flow.st.(*syncStaged) }
-
-func planItem(path string, blocked bool) cfgsync.PlanItem {
-	return cfgsync.PlanItem{Change: plan.Change{Entry: manifest.Entry{Root: "home", Path: path}, Type: plan.Update}, Blocked: blocked}
-}
-
-func newPreview(f *fakeSyncDeps, dryRun bool) *Sync {
-	svc := testServices(f.deps())
-	svc.dryRun = dryRun
-	s := newSync(svc)
-	runCmds(s, s.startPlan(plan.Push, nil))
-	return s
-}
 
 // confirmedRequest accepts the preview and the confirm (the plan must need no backup) and returns the run the flow asks for.
 func confirmedRequest(t *testing.T, s *Sync) runRequest {
@@ -89,16 +38,6 @@ func confirmedRequest(t *testing.T, s *Sync) runRequest {
 func runWork(req runRequest) (lines []string, end runEnd) {
 	end = req.work(context.Background(), func(e plan.Event) { lines = append(lines, e.Line) })
 	return lines, end
-}
-
-func keyPress(code rune) tea.KeyPressMsg {
-	if code == tea.KeySpace {
-		return tea.KeyPressMsg{Code: code, Text: " "}
-	}
-	if code == tea.KeyEnter {
-		return tea.KeyPressMsg{Code: code}
-	}
-	return tea.KeyPressMsg{Code: code, Text: string(code)}
 }
 
 func TestSyncPreviewExposesPlanNoticesToTheBand(t *testing.T) {

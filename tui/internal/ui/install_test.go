@@ -55,8 +55,6 @@ func newTestRoot(f *fakeInstaller, secretNames ...string) (*Root, *Install) {
 	return root, in
 }
 
-func specialKey(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code} }
-
 // settle feeds command results back until no command is left; only for commands that return at once.
 func settle(in *Install, cmd tea.Cmd) {
 	for cmd != nil {
