@@ -16,6 +16,7 @@ const (
 	internalPrefix = modulePath + "/internal/"
 	cmdPrefix      = modulePath + "/cmd"
 	uiPackage      = "ui"
+	kitPackage     = "ui/kit"
 )
 
 var adapterPackages = []string{"execx", "rsync", "osexec", "osfs", "gitx", "sysx", "dryrun"}
@@ -81,6 +82,10 @@ func TestViolation(t *testing.T) {
 		{"allowed adapter edge", "rsync", internalPrefix + "execx", false},
 		{"allowed domain edge", "cfgsync", internalPrefix + "plan", false},
 		{"ui to domain", "ui", internalPrefix + "install", false},
+		{"kit to domain", kitPackage, internalPrefix + "plan", true},
+		{"kit to ui", kitPackage, internalPrefix + "ui", true},
+		{"ui to kit", "ui", internalPrefix + "ui/kit", false},
+		{"domain to kit", "plan", internalPrefix + "ui/kit", true},
 		{"standard library", "execx", "os/exec", false},
 	}
 	for _, tc := range cases {
@@ -104,7 +109,7 @@ func TestInternalPackages_RespectLayerImportRules(t *testing.T) {
 			t.Errorf("parse %s: %v", path, err)
 			return nil
 		}
-		pkg := strings.SplitN(filepath.ToSlash(path), "/", 2)[0]
+		pkg := packageOf(filepath.ToSlash(path))
 		for _, imp := range file.Imports {
 			importPath := strings.Trim(imp.Path.Value, `"`)
 			if reason := violation(pkg, importPath); reason != "" {
@@ -121,6 +126,15 @@ func TestInternalPackages_RespectLayerImportRules(t *testing.T) {
 	}
 }
 
+// packageOf maps a path relative to internal/ to its layer package; ui/kit is its own package, not part of ui.
+func packageOf(relPath string) string {
+	if relPath == kitPackage || strings.HasPrefix(relPath, kitPackage+"/") {
+		return kitPackage
+	}
+	first, _, _ := strings.Cut(relPath, "/")
+	return first
+}
+
 func violation(pkg, importPath string) string {
 	if importPath == cmdPrefix || strings.HasPrefix(importPath, cmdPrefix+"/") {
 		return "internal packages never import cmd"
@@ -131,7 +145,13 @@ func violation(pkg, importPath string) string {
 		}
 		return ""
 	}
-	target, _, _ := strings.Cut(strings.TrimPrefix(importPath, internalPrefix), "/")
+	target := packageOf(strings.TrimPrefix(importPath, internalPrefix))
+	if pkg == kitPackage {
+		return "kit imports nothing inside the module"
+	}
+	if target == kitPackage && pkg != uiPackage {
+		return "only ui may import ui/kit"
+	}
 	pkgIsAdapter := slices.Contains(adapterPackages, pkg)
 	targetIsAdapter := slices.Contains(adapterPackages, target)
 
