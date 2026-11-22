@@ -1,5 +1,11 @@
 package ui
 
+const (
+	catalogFiles   = "manifest/packages.toml, hardware.toml or secrets.toml"
+	servicesFile   = "manifest/services.toml"
+	referencesFile = "manifest/references.toml"
+)
+
 // sectionSpec describes one sidebar section; the registry order is the sidebar order.
 type sectionSpec struct {
 	title   string
