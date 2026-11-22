@@ -2,22 +2,29 @@
 
 # ---------------------------------------------------------------------------
 # GTK Theme Switcher
-# Applies the given GTK theme variant to the running session
+# Applies the active GTK theme variant to the running session
+# Theme name comes from ~/.config/nuydeck/theme/name (default nuytek)
+# Variant comes from $1 or ~/.config/nuydeck/theme/variant
 # ---------------------------------------------------------------------------
 
-source "${HOME}/.config/scripts/logger.sh"
-log INFO "-------------------------------"
-log INFO "Applying theme: ${1}"
+THEME_NAME="$(cat "$HOME/.config/nuydeck/theme/name" 2>/dev/null)"
+THEME_NAME="${THEME_NAME:-nuytek}"
+VARIANT="${1:-$(cat "$HOME/.config/nuydeck/theme/variant" 2>/dev/null)}"
+FLAVOR="${THEME_NAME}-${VARIANT}"
 
-case "$1" in
-    "abysal-obsidian")
+source "${HOME}/.config/nuydeck/lib/logger.sh"
+log INFO "-------------------------------"
+log INFO "Applying theme: ${FLAVOR}"
+
+case "${FLAVOR}" in
+    "nuytek-nadir")
         GTK_THEME="Abysal-Obsidian"
         ICON_THEME="Papirus-Dark"
         COLOR_SCHEME="prefer-dark"
         CURSOR="phinger-cursors-light"
         CURSOR_SIZE=25
         ;;
-    "abysal-marble")
+    "nuytek-zenit")
         GTK_THEME="Abysal-Marble"
         ICON_THEME="Papirus-Light"
         COLOR_SCHEME="prefer-light"
@@ -25,7 +32,7 @@ case "$1" in
         CURSOR_SIZE=25
         ;;
     *)
-        log ERROR "Invalid theme: ${1}"
+        log ERROR "Invalid theme: ${FLAVOR}"
         exit 1
         ;;
 esac
@@ -77,12 +84,14 @@ pkill -HUP xsettingsd || xsettingsd &
 
 # GTK 4 config
 rm -rf "$HOME/.config/gtk-4.0"
-# (Validación recomendada: Solo enlazar si existe)
-if [ -d "/usr/share/themes/$GTK_THEME/gtk-4.0" ]; then
-    ln -sf "/usr/share/themes/$GTK_THEME/gtk-4.0" "$HOME/.config/gtk-4.0"
-fi
+for THEMES_DIR in "$HOME/.themes" "/usr/share/themes"; do
+    if [ -d "$THEMES_DIR/$GTK_THEME/gtk-4.0" ]; then
+        ln -sfn "$(realpath --relative-to="$HOME/.config" "$THEMES_DIR/$GTK_THEME/gtk-4.0")" "$HOME/.config/gtk-4.0"
+        break
+    fi
+done
 
 # hyprland cursor
 hyprctl setcursor "$CURSOR" "$CURSOR_SIZE"
 
-log SUCCESS "Theme applied successfully: ${1}"
+log SUCCESS "Theme applied successfully: ${FLAVOR}"

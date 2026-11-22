@@ -8,9 +8,12 @@
 ---@field protected monitor_priority_list string[]
 local hyprsplit = {
     ---@class Hyprsplit.Config
+    ---@field reveal_animation? { speed: number, bezier: string } fade used while revealing swapped workspaces; needs restore_animations
+    ---@field restore_animations? fun() re-applies the user's animations once the reveal fade is done
+    ---@field num_workspaces? integer
+    ---@field force_monitor_priority? boolean
     _config = {
         num_workspaces = 10,
-        persistent_workspaces = false,
         force_monitor_priority = false,
     },
     monitor_priority_list = {},
@@ -74,7 +77,6 @@ function MonitorRange:new(monitor)
                 end
             end
 
-            -- sort into alphabetical order by name
             table.sort(unmappedMonitors, function(a, b)
                 return a.name < b.name
             end)
@@ -83,7 +85,6 @@ function MonitorRange:new(monitor)
                 if monitor == m then
                     base = i - 1 + #hyprsplit.monitor_priority_list
                     log("auto assigning base %d to monitor %s", base, monitor.name)
-                    -- notify_error("auto assigning base %d to monitor %s", base, monitor.name)
                 end
             end
         end
@@ -183,7 +184,6 @@ function hyprsplit.get_workspace_string(workspace_str)
         for i = range.min, range.max do
             local ws = hl.get_workspace(i)
             if ws == nil or ws.windows == 0 then
-                notify_error("empty %d", i)
                 return tostring(i)
             end
         end
@@ -191,7 +191,6 @@ function hyprsplit.get_workspace_string(workspace_str)
         log("no empty workspace on monitor")
         return tostring(active_monitor.active_workspace.id)
     else
-        -- no change
         return workspace_str
     end
 
@@ -214,8 +213,7 @@ function hyprsplit.dsp.focus(args)
         return function()
             local ws_string = hyprsplit.get_workspace_string(workspace_arg)
             local ws = hl.get_workspace(ws_string)
-            -- if workspace exists, check that it is on the correct monitor.
-            -- if not on the correct monitor just recheck all workspaces
+            -- A workspace in this monitor's range that lives on another monitor means assignments drifted; resync before focusing.
             if ws then
                 local active_monitor = hl.get_active_monitor()
                 if active_monitor then
@@ -257,37 +255,302 @@ function hyprsplit.dsp.window.move(args)
     end
 end
 
+---@param window HL.Window
+---@return boolean
+local function is_master(window)
+    return window.layout ~= nil and window.layout.is_master == true
+end
+
+-- Mapped windows ordered for moving: tiled stack top to bottom (assumes master orientation left),
+-- then the master, then floating. Empirically the only order that keeps the stack intact;
+-- moves lose the master itself, so promote_master restores it.
+---@param workspace HL.Workspace
+---@return HL.Window[]
+function hyprsplit.windows_for_move(workspace)
+    local sorted = {}
+    for _, window in ipairs(hl.get_workspace_windows(workspace)) do
+        if window.mapped then
+            table.insert(sorted, window)
+        end
+    end
+    table.sort(sorted, function(a, b)
+        if a.floating ~= b.floating then
+            return not a.floating
+        end
+        if is_master(a) ~= is_master(b) then
+            return is_master(b)
+        end
+        if a.at.x ~= b.at.x then
+            return a.at.x < b.at.x
+        end
+        return a.at.y < b.at.y
+    end)
+    return sorted
+end
+
+---@param workspace HL.Workspace
+---@return HL.Window|nil
+function hyprsplit.get_master(workspace)
+    for _, window in ipairs(hl.get_workspace_windows(workspace)) do
+        if window.mapped and not window.floating and is_master(window) then
+            return window
+        end
+    end
+    return nil
+end
+
+-- Focuses the window, so callers must restore focus/visible workspaces afterwards.
+---@param window HL.Window
+function hyprsplit.promote_master(window)
+    if not window.mapped or window.floating or window.fullscreen ~= 0 or is_master(window) then
+        return
+    end
+    hl.dispatch(hl.dsp.focus({ window = window }))
+    hl.dispatch(hl.dsp.layout("swapwithmaster ignoremaster"))
+end
+
+-- Nearest empty workspace above the visible one (else the highest empty below), so the
+-- reveal slides the same way every time.
+---@param monitor HL.Monitor
+---@param visible_id integer
+---@param excluded_id integer|nil
+---@return integer|nil
+local function find_transition_workspace(monitor, visible_id, excluded_id)
+    local range = MonitorRange:new(monitor)
+    local below = nil
+    for id = range.min, range.max do
+        local ws = hl.get_workspace(id)
+        if id ~= visible_id and id ~= excluded_id and (ws == nil or ws.windows == 0) then
+            if id > visible_id then
+                return id
+            end
+            below = id
+        end
+    end
+    return below
+end
+
+-- Hyprland animation speed unit is 100ms; the margin covers frame and timer jitter.
+local ANIMATION_SPEED_UNIT_MS = 100
+local REVEAL_RESTORE_MARGIN_MS = 400
+local animation_restore_timer = nil
+
+-- Swaps the workspace slide for the configured reveal fade. hl.get_config has no getter
+-- for animation leaves, so the original is restored through the restore_animations
+-- callback, delayed so the in-flight fade keeps its style.
+local function apply_reveal_animation()
+    local reveal = hyprsplit._config.reveal_animation
+    local restore = hyprsplit._config.restore_animations
+    if not (reveal and restore) then
+        return
+    end
+    if animation_restore_timer then
+        animation_restore_timer:set_enabled(false)
+    end
+    hl.animation({ leaf = "workspaces", enabled = true, speed = reveal.speed, bezier = reveal.bezier, style = "fade" })
+    animation_restore_timer = hl.timer(function()
+        local ok, err = pcall(restore)
+        if not ok then
+            notify_error("restore_animations: %s", tostring(err))
+        end
+    end, {
+        timeout = reveal.speed * ANIMATION_SPEED_UNIT_MS + REVEAL_RESTORE_MARGIN_MS,
+        type = "oneshot",
+    })
+end
+
+---@param label string
+---@param fn function
+local function attempt(label, fn)
+    local ok, err = pcall(fn)
+    if not ok then
+        notify_error("with_workspace_transition %s: %s", label, tostring(err))
+    end
+end
+
+-- Runs fn with animations off while each monitor is parked on an empty workspace (if it
+-- has one), then refocuses each monitor's reveal workspace with a fade so the swap reads
+-- as a switch. Focus, cursor warping and animations are restored even if fn throws.
+---@param monitors HL.Monitor[]
+---@param fn function
+---@param reveal_ids table<integer, integer>|nil monitor.id -> workspace to reveal; defaults to the originally visible one
+---@param excluded_id integer|nil workspace never used as the parking workspace
+function hyprsplit.with_workspace_transition(monitors, fn, reveal_ids, excluded_id)
+    local cursor_no_warps_orig = hl.get_config("cursor.no_warps")
+    local animations_enabled_orig = hl.get_config("animations.enabled")
+    local orig_focused_mon = hl.get_active_monitor()
+
+    local visible_ids = {}
+    for _, monitor in ipairs(monitors) do
+        visible_ids[monitor.id] = monitor.active_workspace.id
+    end
+
+    attempt("run", function()
+        hl.config({ cursor = { no_warps = true }, animations = { enabled = false } })
+        for _, monitor in ipairs(monitors) do
+            local temp_id = find_transition_workspace(monitor, visible_ids[monitor.id], excluded_id)
+            if temp_id then
+                hl.dispatch(hl.dsp.focus({ monitor = monitor }))
+                hl.dispatch(hl.dsp.focus({ workspace = temp_id, on_current_monitor = true }))
+            end
+        end
+        fn()
+    end)
+
+    attempt("animations", function()
+        hl.config({ animations = { enabled = animations_enabled_orig } })
+        if animations_enabled_orig then
+            apply_reveal_animation()
+        end
+    end)
+    attempt("reveal", function()
+        for _, monitor in ipairs(monitors) do
+            hl.dispatch(hl.dsp.focus({ monitor = monitor }))
+            hl.dispatch(hl.dsp.focus({
+                workspace = (reveal_ids and reveal_ids[monitor.id]) or visible_ids[monitor.id],
+                on_current_monitor = true,
+            }))
+        end
+        if orig_focused_mon then
+            hl.dispatch(hl.dsp.focus({ monitor = orig_focused_mon }))
+        end
+    end)
+    attempt("cursor", function()
+        hl.config({ cursor = { no_warps = cursor_no_warps_orig } })
+    end)
+end
+
+-- Pins the monitor's workspace ids to it so workspaces recreated after being emptied land
+-- on the owning monitor.
+---@param monitor HL.Monitor
+function hyprsplit.pin_workspaces(monitor)
+    local range = MonitorRange:new(monitor)
+    if range.base < 0 then
+        return
+    end
+    for id = range.min, range.max do
+        hl.workspace_rule({
+            workspace = tostring(id),
+            monitor = monitor.name,
+        })
+    end
+end
+
+---Moves every plan's windows to its target workspace, then restores each plan's master.
+---@param plans { windows: HL.Window[], master: HL.Window|nil, target_id: integer }[]
+function hyprsplit.move_and_promote(plans)
+    for _, plan in ipairs(plans) do
+        for _, window in ipairs(plan.windows) do
+            hl.dispatch(hl.dsp.window.move({
+                workspace = plan.target_id,
+                window = window,
+                follow = false,
+            }))
+        end
+    end
+    for _, plan in ipairs(plans) do
+        if plan.master then
+            hyprsplit.promote_master(plan.master)
+        end
+    end
+end
+
+---@param selector1 HL.MonitorSelector
+---@param selector2 HL.MonitorSelector
+---@return HL.Monitor|nil
+---@return HL.Monitor|nil
+function hyprsplit.resolve_swap_monitors(selector1, selector2)
+    local monitor1 = hl.get_monitor(selector1)
+    local monitor2 = hl.get_monitor(selector2)
+    if
+        not monitor1 or monitor1.is_mirror or monitor1.id == -1
+        or not monitor2 or monitor2.is_mirror or monitor2.id == -1
+    then
+        notify_error("could not resolve swap monitors")
+        return nil, nil
+    end
+    if monitor1.id == monitor2.id then
+        log("swap monitors are the same, skipping")
+        return nil, nil
+    end
+    return monitor1, monitor2
+end
+
 ---@param args table args.monitor1 and args.monitor2 are required as strings
 ---@return function
 function hyprsplit.dsp.workspace.swap_monitors(args)
-    if not type(args.monitor1) == "string" or not type(args.monitor2) == "string" then
+    if type(args.monitor1) ~= "string" or type(args.monitor2) ~= "string" then
         return function()
             notify_error("swap_monitors: monitor1 and monitor2 of type string are both required")
         end
     end
     return function()
-        local monitor1 = hl.get_monitor(args.monitor1)
-        local monitor2 = hl.get_monitor(args.monitor2)
-
-        if monitor1 and monitor2 then
-            local windows1 = hl.get_workspace_windows(monitor1.active_workspace)
-            local windows2 = hl.get_workspace_windows(monitor2.active_workspace)
-
-            for _, window in ipairs(windows1) do
-                hl.dispatch(hl.dsp.window.move({
-                    workspace = monitor2.active_workspace,
-                    window = window,
-                    follow = true,
-                }))
-            end
-            for _, window in ipairs(windows2) do
-                hl.dispatch(hl.dsp.window.move({
-                    workspace = monitor1.active_workspace,
-                    window = window,
-                    follow = true,
-                }))
-            end
+        local monitor1, monitor2 = hyprsplit.resolve_swap_monitors(args.monitor1, args.monitor2)
+        if not monitor1 or not monitor2 then
+            return
         end
+
+        -- Emptied hidden workspaces are destroyed (stale objects), so move by id and
+        -- pin the ids for when the move recreates them.
+        hyprsplit.pin_workspaces(monitor1)
+        hyprsplit.pin_workspaces(monitor2)
+
+        local plans = {}
+        for _, pair in ipairs({ { monitor1, monitor2 }, { monitor2, monitor1 } }) do
+            local source, destination = pair[1], pair[2]
+            table.insert(plans, {
+                windows = hyprsplit.windows_for_move(source.active_workspace),
+                master = hyprsplit.get_master(source.active_workspace),
+                target_id = destination.active_workspace.id,
+            })
+        end
+
+        hyprsplit.with_workspace_transition({ monitor1, monitor2 }, function()
+            hyprsplit.move_and_promote(plans)
+        end)
+    end
+end
+
+---@param args table args.workspace is required
+---@return function
+function hyprsplit.dsp.workspace.swap_with(args)
+    if args.workspace == nil then
+        notify_error("dsp.workspace.swap_with: args.workspace is nil")
+        return function() end
+    end
+    return function()
+        local monitor = hl.get_active_monitor()
+        local target_id = tonumber(hyprsplit.get_workspace_string(tostring(args.workspace)))
+        if not monitor or not monitor.active_workspace or math.type(target_id) ~= "integer" then
+            notify_error("swap_with: could not resolve monitor or workspace")
+            return
+        end
+        local visible = monitor.active_workspace
+        if target_id == visible.id then
+            return
+        end
+
+        hyprsplit.pin_workspaces(monitor)
+
+        -- The target may not exist yet: nil yields an empty plan.
+        local target = hl.get_workspace(target_id)
+        local plans = {
+            {
+                windows = hyprsplit.windows_for_move(visible),
+                master = hyprsplit.get_master(visible),
+                target_id = target_id,
+            },
+            {
+                windows = target and hyprsplit.windows_for_move(target) or {},
+                master = target and hyprsplit.get_master(target) or nil,
+                target_id = visible.id,
+            },
+        }
+
+        -- Never park on the target: an empty target used as parking stays alive and breaks the empty-N swap.
+        hyprsplit.with_workspace_transition({ monitor }, function()
+            hyprsplit.move_and_promote(plans)
+        end, nil, target_id)
     end
 end
 
@@ -332,9 +595,7 @@ function hyprsplit.ensure_good_workspaces()
     local cursor_no_warps_orig = hl.get_config("cursor.no_warps")
     hl.config({ cursor = { no_warps = true } })
 
-    -- something funky seems to be happening with the active workspaces
-    -- and i don't feel like debugging it properly.
-    -- so i'm just gonna use this jank as a workaround for now
+    -- Active workspaces drift during the moves below (root cause not found); snapshot them first and refocus explicitly afterwards.
     local orig_focused_mon = hl.get_active_monitor()
     local monitors_active_workspaces = {}
 
@@ -380,15 +641,7 @@ function hyprsplit.ensure_good_workspaces()
                 end
             end
 
-            if hyprsplit._config.persistent_workspaces then
-                for i = range.min, range.max do
-                    hl.workspace_rule({
-                        workspace = tostring(i),
-                        persistent = true,
-                        monitor = m.name,
-                    })
-                end
-            end
+            hyprsplit.pin_workspaces(m)
         end
     end
 
@@ -419,8 +672,22 @@ function hyprsplit.config(config)
         config.num_workspaces,
         math.type(config.num_workspaces) == "integer" and config.num_workspaces >= 1
     )
-    load_config_value("persistent_workspaces", config.persistent_workspaces)
     load_config_value("force_monitor_priority", config.force_monitor_priority)
+
+    local reveal = config.reveal_animation
+    load_config_value(
+        "reveal_animation",
+        reveal,
+        type(reveal) == "table"
+            and type(reveal.speed) == "number"
+            and reveal.speed > 0
+            and type(reveal.bezier) == "string"
+    )
+    load_config_value(
+        "restore_animations",
+        config.restore_animations,
+        type(config.restore_animations) == "function"
+    )
 end
 
 ---@param key string
@@ -429,7 +696,7 @@ function hyprsplit.get_config(key)
     return hyprsplit._config[key]
 end
 
----@param priority table array of monitor strings
+---@param priority string[]
 function hyprsplit.monitor_priority(priority)
     for _, monitor in ipairs(priority) do
         if type(monitor) == "string" then
@@ -447,7 +714,6 @@ hl.on("monitor.added", function(monitor)
     local cursor_no_warps_orig = hl.get_config("cursor.no_warps")
     hl.config({ cursor = { no_warps = true } })
 
-    -- change to first workspace on the new monitor
     local orig_focused_mon = hl.get_active_monitor()
     hl.dispatch(hl.dsp.focus({ monitor = monitor }))
     local range = MonitorRange:new(monitor)
@@ -457,18 +723,6 @@ hl.on("monitor.added", function(monitor)
     hl.config({ cursor = { no_warps = cursor_no_warps_orig } })
 
     hyprsplit.ensure_good_workspaces()
-end)
-
-hl.on("monitor.removed", function(monitor)
-    if hyprsplit._config.persistent_workspaces then
-        local range = MonitorRange:new(monitor)
-        for i = range.min, range.max do
-            hl.workspace_rule({
-                workspace = tostring(i),
-                persistent = false,
-            })
-        end
-    end
 end)
 
 return hyprsplit

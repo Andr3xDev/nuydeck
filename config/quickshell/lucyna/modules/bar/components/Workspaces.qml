@@ -3,74 +3,126 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
 import "../../../core/theme" as Theme
-import "../../../core/components"
+import "../../../core/animations" as Animations
 
 /*!
-    A dynamic widget for displaying and switching between Hyprland workspaces.
-    This component renders a horizontal row of workspace indicators
-    based on the Hyprland workspaces.
+    Hyprland workspace indicators for this screen's monitor; click activates.
 */
 Item {
+    id: root
     implicitWidth: workspaceRow.implicitWidth
     width: implicitWidth
     Layout.fillHeight: true
 
-    // multi-monitor values to render property
     property var screen: null
     property string monitorName: screen ? screen.name : ""
     property int numWorkspaces: 10
 
-    /*!
-        Normalized local ID from real hyprsplit ID
-     */
-    function localId(workspaceId) {
-        return ((workspaceId - 1) % numWorkspaces) + 1;
-    }
+    property int lastFocusedId: 0
+    Component.onCompleted: if (Hyprland.focusedWorkspace) lastFocusedId = Hyprland.focusedWorkspace.id
 
-    /*!
-        Returns the accent color for a workspace state (focused > active),
-        or fallback when inactive. Used for both text and border coloring.
-    */
-    function workspaceColor(workspace, fallback) {
-        if (workspace.focused) return Theme.Tokens.color.accent;
-        if (workspace.active)  return Theme.Tokens.color.accent;
-        return fallback;
-    }
+    readonly property int cellHeight: 25
+    readonly property int indicatorSize: 8
+    readonly property int indicatorActiveWidth: 20
 
-    // Show workspaces
     RowLayout {
         id: workspaceRow
         anchors.centerIn: parent
+        spacing: Theme.Tokens.space.md
 
         Repeater {
             model: Hyprland.workspaces
-            delegate: Rectangle {
-                // Hide special workspaces
+            delegate: Item {
                 visible: modelData.id > 0 && modelData.monitor !== null && modelData.monitor.name === monitorName
 
-                // Collapse non visible items
-                width: visible ? 25 : 0
-                height: visible ? 25 : 0
+                // Cell follows the animated indicator so the visible gap between
+                // indicators stays constant (= RowLayout spacing) in every state.
+                implicitWidth: visible ? workspaceDot.width : 0
+                implicitHeight: visible ? cellHeight : 0
 
-                color: Theme.Tokens.color.bg
                 Layout.alignment: Qt.AlignVCenter
 
-                // Workspace indicator: dot for inactive, pill for focused/active
+                readonly property bool isActive: modelData.focused || modelData.active
+
                 Rectangle {
                     id: workspaceDot
                     anchors.centerIn: parent
-                    width: (modelData.focused || modelData.active) ? 20 : 8
-                    height: 8
+                    width: isActive ? indicatorActiveWidth : indicatorSize
+                    height: indicatorSize
                     radius: height / 2
-                    color: workspaceColor(modelData, Theme.Tokens.color.textMuted)
+                    // Sequence drives a separate property so the color binding is never overwritten.
+                    property color focusSequenceColor: Theme.Tokens.color.accent
+                    // Single flag gates both the color source and the Behavior, so their
+                    // evaluation order cannot cause a stray fade when the sequence starts.
+                    property bool sequencing: false
+                    property color sweepColor: Theme.Tokens.color.accent
+                    property real sweepProgress: 0
+                    property bool sweepFromRight: false
+                    property bool sweepReversed: false
+                    color: sequencing
+                        ? focusSequenceColor
+                        : (isActive ? Theme.Tokens.color.accent : Theme.Tokens.color.textMuted)
 
-                    Behavior on width { NumberAnimation { duration: Theme.Tokens.motion.fast } }
-                    Behavior on color { ColorAnimation { duration: Theme.Tokens.motion.fast } }
+                    Behavior on width { Animations.MotionAnimation { role: "stateFast" } }
+                    Behavior on color {
+                        enabled: !workspaceDot.sequencing
+                        Animations.MotionColorAnimation { role: "stateFast" }
+                    }
+
+                    Connections {
+                        target: modelData
+                        function onFocusedChanged() {
+                            if (modelData.focused) {
+                                // Start from the displayed color so an already-accent pill does not dip to gray.
+                                workspaceDot.focusSequenceColor = workspaceDot.color;
+                                workspaceDot.sweepReversed = modelData.id < root.lastFocusedId;
+                                root.lastFocusedId = modelData.id;
+                                workspaceDot.sequencing = true;
+                                focusSequence.start();
+                            } else {
+                                focusSequence.stop();
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        x: workspaceDot.sweepFromRight ? workspaceDot.width - width : 0
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: workspaceDot.sweepProgress * workspaceDot.width
+                        radius: workspaceDot.radius
+                        color: workspaceDot.sweepColor
+                    }
+
+                    SequentialAnimation {
+                        id: focusSequence
+                        onRunningChanged: if (!running) {
+                            workspaceDot.sweepProgress = 0;
+                            workspaceDot.sequencing = false;
+                        }
+
+                        PropertyAction { target: workspaceDot; property: "sweepFromRight"; value: workspaceDot.sweepReversed }
+                        PropertyAction { target: workspaceDot; property: "sweepColor"; value: Theme.Tokens.color.aquamarine }
+                        Animations.MotionAnimation { target: workspaceDot; property: "sweepProgress"; from: 0; to: 1; role: "stateMedium" }
+                        ScriptAction { script: { workspaceDot.focusSequenceColor = workspaceDot.sweepColor; workspaceDot.sweepProgress = 0; } }
+
+                        PropertyAction { target: workspaceDot; property: "sweepFromRight"; value: !workspaceDot.sweepReversed }
+                        PropertyAction { target: workspaceDot; property: "sweepColor"; value: Theme.Tokens.color.textMuted }
+                        Animations.MotionAnimation { target: workspaceDot; property: "sweepProgress"; from: 0; to: 1; role: "stateMedium" }
+                        ScriptAction { script: { workspaceDot.focusSequenceColor = workspaceDot.sweepColor; workspaceDot.sweepProgress = 0; } }
+
+                        PropertyAction { target: workspaceDot; property: "sweepFromRight"; value: workspaceDot.sweepReversed }
+                        PropertyAction { target: workspaceDot; property: "sweepColor"; value: Theme.Tokens.color.accent }
+                        Animations.MotionAnimation { target: workspaceDot; property: "sweepProgress"; from: 0; to: 1; role: "stateSettle" }
+                        ScriptAction { script: { workspaceDot.focusSequenceColor = workspaceDot.sweepColor; workspaceDot.sweepProgress = 0; } }
+                    }
                 }
 
-                // Clickable
-                HoverScale {
+                Animations.HoverScale {
                     anchors.fill: parent
+                    // Extend the hit area across the inter-indicator gap
+                    anchors.leftMargin: -workspaceRow.spacing / 2
+                    anchors.rightMargin: -workspaceRow.spacing / 2
                     target: workspaceDot
                     cursorShape: Qt.PointingHandCursor
                     onClicked: modelData.activate()

@@ -6,8 +6,8 @@ Personal reference for setting up Unified Kernel Images with systemd-boot, dual 
 
 - systemd-boot already installed as bootloader (`bootctl install`)
 - EFI partition mounted (commonly at `/efi`)
-- `linux-zen` + `linux-zen-headers` installed (optional block in `scripts/install-personal.sh`)
-- nvidia-open-dkms + nvidia-utils + lib32-nvidia-utils + libva-nvidia-driver + lib32-mesa installed (GPU driver block in scripts/install-personal.sh — nvidia-open-dkms chosen over classic nvidia-dkms: NVIDIA officially recommends open kernel modules for Turing-and-later GPUs, and the -dkms variant is required specifically because this setup dual-boots linux + linux-zen — a plain nvidia-open build only targets one kernel ABI)
+- `linux-zen` + `linux-zen-headers` installed (optional packages in `manifest/packages.toml`, installed through the TUI)
+- nvidia-open-dkms + nvidia-utils + lib32-nvidia-utils + libva-nvidia-driver + lib32-mesa installed (GPU driver packages in `manifest/packages.toml` — nvidia-open-dkms chosen over classic nvidia-dkms: NVIDIA officially recommends open kernel modules for Turing-and-later GPUs, and the -dkms variant is required specifically because this setup dual-boots linux + linux-zen — a plain nvidia-open build only targets one kernel ABI)
 
 ## 1. Install systemd-ukify
 
@@ -103,7 +103,7 @@ Reboot and confirm both kernel entries show up in the systemd-boot menu.
 - Any kernel, NVIDIA driver, or microcode (`intel-ucode`) update changes initramfs contents — the `.efi` MUST be regenerated (`mkinitcpio -P`), unlike classic setups where the loader just picks up a new initramfs file automatically. If something fails to boot right after an update, this is the first thing to check.
 - Keep `default_uki`/`fallback_uki` names distinct per kernel (`arch-linux*` vs `arch-linux-zen*`) or one will silently overwrite the other.
 - Secure Boot (if enabled): a UKI with an embedded `.cmdline` ignores kernel command-line args passed at the bootloader level — pass any needed params via the preset's `.cmdline` file instead.
-- Laptop suspend/resume: this repo's scripts/enable-services.sh enables nvidia-suspend.service, nvidia-hibernate.service, and nvidia-resume.service automatically when nvidia-open-dkms is installed — needed to avoid black-screen-after-resume issues common with NVIDIA laptops.
+- Laptop suspend/resume: the nuydeck TUI (Services phase, `manifest/services.toml`) enables nvidia-suspend.service, nvidia-hibernate.service, and nvidia-resume.service automatically when nvidia-open-dkms is installed — needed to avoid black-screen-after-resume issues common with NVIDIA laptops.
 
 ## Hyprland env vars for NVIDIA
 

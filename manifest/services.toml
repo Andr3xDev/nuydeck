@@ -1,0 +1,57 @@
+version = 1
+
+[[service]]
+unit = "ly@tty1.service"
+scope = "system"
+source = "package"
+critical = true
+description = "display manager"
+
+[[service]]
+unit = "NetworkManager.service"
+scope = "system"
+source = "package"
+critical = true
+description = "network manager"
+
+[[service]]
+unit = "bluetooth.service"
+scope = "system"
+source = "package"
+description = "bluetooth"
+
+[[service]]
+unit = "docker.service"
+scope = "system"
+source = "package"
+description = "docker daemon"
+
+[[service]]
+unit = "nvidia-suspend.service"
+scope = "system"
+source = "package"
+description = "nvidia suspend"
+
+[[service]]
+unit = "nvidia-hibernate.service"
+scope = "system"
+source = "package"
+description = "nvidia hibernate"
+
+[[service]]
+unit = "nvidia-resume.service"
+scope = "system"
+source = "package"
+description = "nvidia resume"
+
+[[service]]
+unit = "lucyna-clipboard-wipe.service"
+scope = "user"
+source = "custom"
+description = "clipboard wipe"
+
+[[service]]
+unit = "lucyna-clipboard-wipe.timer"
+scope = "user"
+source = "custom"
+description = "clipboard wipe schedule"

@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# Nuytek Zenit
+# Ghostty terminal color scheme for the Nuytek Zenit theme
+# ---------------------------------------------------------------------------
+
+# General stuff — Nuytek Zenit
+background = #F3F4F4
+foreground = #16211E
+cursor-color = #0B726D
+cursor-text = #F3F4F4
+selection-background = #DFF3F1
+selection-foreground = #16211E
+
+# Negro / gris — neutros
+palette = 0 = #FAFAFA
+palette = 8 = #5E6D67
+
+# Rojo — semáforo (error)
+palette = 1 = #C23B46
+palette = 9 = #C23B46
+
+# Verde — semáforo (éxito)
+palette = 2 = #0E7A4C
+palette = 10 = #0E7A4C
+
+# Amarillo/naranja — semáforo (warning/peligro)
+palette = 3 = #8A7C12
+palette = 11 = #8A7C12
+
+# Azul → slot que `ls`/LS_COLORS usa para directorios
+palette = 4 = #0B726D
+palette = 12 = #0B726D
+
+# Magenta → slot que ya usas para comandos (zsh-syntax-highlighting)
+palette = 5 = #146496
+palette = 13 = #0B726D
+
+# Cian — identidad terciaria, uso raro
+palette = 6 = #146496
+palette = 14 = #146496
+
+# Blanco
+palette = 7 = #4B5A54
+palette = 15 = #16211E

@@ -27,66 +27,38 @@ local function notify_error(formatString, ...)
     })
 end
 
----For workspace slots where one side exists and the other does not, pins the
----missing workspace to the correct monitor via workspace_rule so that when
----window.move triggers its creation, it lands on the right monitor.
----No focus changes — no visible side effects.
----@param range1   table
----@param range2   table
----@param monitor1 HL.Monitor
----@param monitor2 HL.Monitor
----@param num_ws   integer
-local function pin_missing_workspaces(range1, range2, monitor1, monitor2, num_ws)
-    for i = 0, num_ws - 1 do
-        local ws1_id = range1.min + i
-        local ws2_id = range2.min + i
-        local ws1    = hl.get_workspace(ws1_id)
-        local ws2    = hl.get_workspace(ws2_id)
-
-        if ws1 and not ws2 then
-            hl.workspace_rule({ workspace = tostring(ws2_id), monitor = monitor2.name })
-        elseif ws2 and not ws1 then
-            hl.workspace_rule({ workspace = tostring(ws1_id), monitor = monitor1.name })
-        end
-    end
-end
-
 ---Reads the complete set of window moves needed for the swap without writing
 ---anything. Separating read from write prevents live-reference issues.
----@param range1 table
----@param range2 table
+---@param range1 Hyprsplit.MonitorRange
+---@param range2 Hyprsplit.MonitorRange
 ---@param num_ws integer
----@return { window: HL.Window, target: integer }[]
+---@return { windows: HL.Window[], master: HL.Window|nil, target_id: integer }[] plans
+---@return integer window_count
 local function build_move_plan(range1, range2, num_ws)
-    local plan = {}
+    local plans        = {}
+    local window_count = 0
+
+    ---@param ws HL.Workspace|nil
+    ---@param target_id integer
+    local function plan_workspace(ws, target_id)
+        if not ws then
+            return
+        end
+        local windows = hs.windows_for_move(ws)
+        window_count = window_count + #windows
+        table.insert(plans, { windows = windows, master = hs.get_master(ws), target_id = target_id })
+    end
 
     for i = 0, num_ws - 1 do
         local ws1_id = range1.min + i
         local ws2_id = range2.min + i
-        local ws1    = hl.get_workspace(ws1_id)
-        local ws2    = hl.get_workspace(ws2_id)
-
-        if ws1 then
-            for _, win in ipairs(hl.get_workspace_windows(ws1)) do
-                if win.mapped then
-                    table.insert(plan, { window = win, target = ws2_id })
-                end
-            end
-        end
-
-        if ws2 then
-            for _, win in ipairs(hl.get_workspace_windows(ws2)) do
-                if win.mapped then
-                    table.insert(plan, { window = win, target = ws1_id })
-                end
-            end
-        end
+        plan_workspace(hl.get_workspace(ws1_id), ws2_id)
+        plan_workspace(hl.get_workspace(ws2_id), ws1_id)
     end
 
-    return plan
+    return plans, window_count
 end
 
----Swaps window content between two monitors across all hyprsplit workspace pairs.
 ---@param monitor1 HL.Monitor
 ---@param monitor2 HL.Monitor
 local function swap_decks(monitor1, monitor2)
@@ -94,21 +66,18 @@ local function swap_decks(monitor1, monitor2)
     local range2 = hs.MonitorRange:new(monitor2)
     local num_ws = hs.get_config("num_workspaces")
 
-    -- Phase 1: guarantee missing target workspaces go to the right monitor on creation.
-    pin_missing_workspaces(range1, range2, monitor1, monitor2, num_ws)
+    -- Emptied workspaces are destroyed; pinned ids are recreated on their monitor.
+    hs.pin_workspaces(monitor1)
+    hs.pin_workspaces(monitor2)
 
-    -- Phase 2: read complete state — no writes yet.
-    local plan = build_move_plan(range1, range2, num_ws)
+    local plans, window_count = build_move_plan(range1, range2, num_ws)
 
-    log("swap: %s <-> %s (%d windows)", monitor1.name, monitor2.name, #plan)
+    log("swap: %s <-> %s (%d windows)", monitor1.name, monitor2.name, window_count)
 
-    -- Phase 3: execute all moves.
-    for _, entry in ipairs(plan) do
-        hl.dispatch(hl.dsp.window.move({ workspace = entry.target, window = entry.window, follow = false }))
-    end
+    -- Promoting focuses windows on hidden workspaces; the caller restores the visible workspaces.
+    hs.move_and_promote(plans)
 end
 
----Swap the entire workspace deck between two monitors.
 ---@param args table  { monitor1: HL.MonitorSelector, monitor2: HL.MonitorSelector }
 ---@return function
 function hyprswap.dsp.swap(args)
@@ -118,62 +87,30 @@ function hyprswap.dsp.swap(args)
     end
 
     return function()
-        local cursor_no_warps_orig    = hl.get_config("cursor.no_warps")
-        local animations_enabled_orig = hl.get_config("animations.enabled")
-        hl.config({ cursor = { no_warps = true }, animations = { enabled = false } })
-
-        local function restore_configs()
-            hl.config({
-                cursor     = { no_warps = cursor_no_warps_orig },
-                animations = { enabled  = animations_enabled_orig },
-            })
-        end
-
-        local monitor1 = hl.get_monitor(args.monitor1)
-        local monitor2 = hl.get_monitor(args.monitor2)
-
-        if monitor1 == nil or monitor1.is_mirror or monitor1.id == -1
-        or monitor2 == nil or monitor2.is_mirror or monitor2.id == -1 then
-            notify_error("dsp.swap: could not resolve monitor1 or monitor2")
-            restore_configs()
+        local monitor1, monitor2 = hs.resolve_swap_monitors(args.monitor1, args.monitor2)
+        if not monitor1 or not monitor2 then
             return
         end
 
-        if monitor1.id == monitor2.id then
-            log("dsp.swap: both monitors are the same, skipping")
-            restore_configs()
-            return
-        end
-
-        local orig_focused  = hl.get_active_monitor()
-
-        -- Identify the other monitor relative to the user and snapshot its
-        -- active workspace before any state changes.
+        -- The focused monitor reveals the slot the other monitor had visible (same
+        -- slot offset, own range base); the other monitor keeps its visible workspace.
+        local reveal_ids = nil
+        local orig_focused = hl.get_active_monitor()
         local other_monitor = orig_focused and (
             (orig_focused.id == monitor1.id and monitor2) or
             (orig_focused.id == monitor2.id and monitor1)
         ) or nil
-        local active_other  = other_monitor
-            and other_monitor.active_workspace
-            and other_monitor.active_workspace.id
-
-        swap_decks(monitor1, monitor2)
-
-        -- Restore animations before focus so the workspace reveal animates.
-        restore_configs()
-
-        if orig_focused then
-            hl.dispatch(hl.dsp.focus({ monitor = orig_focused }))
-
-            -- Focus the workspace that corresponds to what was active on the
-            -- other monitor: same slot offset, different range base.
-            if active_other and other_monitor then
-                local range_orig  = hs.MonitorRange:new(orig_focused)
-                local range_other = hs.MonitorRange:new(other_monitor)
-                local target_ws   = range_orig.min + (active_other - range_other.min)
-                hl.dispatch(hl.dsp.focus({ workspace = target_ws, on_current_monitor = true }))
-            end
+        if other_monitor then
+            local range_orig  = hs.MonitorRange:new(orig_focused)
+            local range_other = hs.MonitorRange:new(other_monitor)
+            reveal_ids = {
+                [orig_focused.id] = range_orig.min + (other_monitor.active_workspace.id - range_other.min),
+            }
         end
+
+        hs.with_workspace_transition({ monitor1, monitor2 }, function()
+            swap_decks(monitor1, monitor2)
+        end, reveal_ids)
     end
 end
 

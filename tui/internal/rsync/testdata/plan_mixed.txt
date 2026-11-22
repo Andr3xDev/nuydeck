@@ -1,0 +1,12 @@
+*deleting   gone/inner/f.txt
+*deleting   gone/inner/
+*deleting   gone/
+*deleting   only.txt
+cL+++++++++ lnk -> upd.txt
+cLc.T...... lnk2 -> new2
+.f...p..... mode.sh
+>f+++++++++ new.txt
+>f+++++++++ tab	name.txt
+>fc.T...... upd.txt
+>f+++++++++ we ird#.txt
+>f+++++++++ sub/n.txt

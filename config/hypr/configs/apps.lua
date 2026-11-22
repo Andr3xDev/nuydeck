@@ -13,7 +13,7 @@
 --　　 　 /　　　 　 |
 --　　　 /　 ヽ　　 ﾉ
 --　 　 │　　|　|　|         AUTHOR:  Andr3xDev
---　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/hypr-abysal
+--　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
 --　| (￣ヽ＿_ヽ_)__)
 --　＼二つ
 -----------------------------------------------------------------------------------
@@ -51,16 +51,20 @@ return {
 	network        = "ghostty --class=nmtui -e nmtui",
 	fetch          = "ghostty --class=fastfetch -e zsh -c 'fastfetch; read '''",
 
-	-- screenshots & pickers
-	picker         = "hyprpicker",
-    printer_simple = "sh -c \"grim -g '$(slurp -b 00000050)' - | wl-copy && notify-send 'Screenshot' 'Copied to clipboard'\"",
-    printer_save   = "sh -c \"grim -g '$(slurp -b 00000050)' ~/media/screenshots/$(date '+%m%d-%Hh-%Mm-%Ss').png && notify-send 'Screenshot' 'Saved in media directory'\"",
-    printer_edit   = "sh -c \"grim -g '$(slurp -b 00000050)' -t ppm - | satty --filename -\"",
+	-- panels
+    screenshot_panel   = "quickshell --config lucyna ipc call panel toggle screenshot",
+    cursor_tools_panel = "quickshell --config lucyna ipc call panel toggle cursor-tools",
 
-	-- quickshell elements
-	menu           = "quickshell ipc --config lucyna call toggleLauncher handle",
+    -- launchers
 	powermenu      = "quickshell ipc --config lucyna call togglePower handle",
+
+	-- shell basics
+	menu           = "quickshell --config lucyna ipc call panel toggle launcher",
+	toggle_bar     = "quickshell --config lucyna ipc call panel toggle bar-$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')",
+	test           = "qs -c lucyna ipc call panel toggle testPanel",
 	clipboard      = "quickshell ipc --config lucyna call toggleClip handle",
-	calendar       = "quickshell ipc --config lucyna call toggleCalendar handle",
-	reload         = "killall quickshell && quickshell --config lucyna",
+	calendar       = "quickshell --config lucyna ipc call panel toggle calendar",
+
+    -- general
+	reload         = "killall quickshell && quickshell --config lucyna && hyprctl reload",
 }

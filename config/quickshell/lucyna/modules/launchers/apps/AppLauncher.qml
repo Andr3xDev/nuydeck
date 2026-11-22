@@ -1,288 +1,157 @@
-import "../../../core/components"
-import "../../../core/services" as Services
+import "../../../core/components/panel"
+import "../../../core/components/atomic"
+import "../../../core/components/input"
+import "../../../core/animations" as Animations
+import "../../../core/services/panel" as Services
 import "../../../core/theme" as Theme
 import QtQuick
 import QtQuick.Controls
 import Quickshell
-import Quickshell.Io
-import Quickshell.Wayland
 import Quickshell.Widgets
 import "state"
 
 /*!
-    Full-screen app launcher overlay. Shows most-used apps by default
-    and filters in real time as the user types.
+    AppLauncher — search-and-launch panel hanging from the bar.
+    Toggle: qs -c lucyna ipc call panel toggle launcher
 */
-PanelWindow {
+PanelBase {
     id: root
-
-    // ── Layout constants ─────────────────────────────────
     readonly property int itemCount: 3
-    readonly property int itemHeight: 48
-    readonly property int searchH: 44
+    readonly property int itemHeight: Theme.Tokens.comp.clip.rowH
+    readonly property int searchH: Theme.Tokens.comp.searchField.height
     readonly property int pad: Theme.Tokens.space.md
+    readonly property int iconSize: 23
+    readonly property int emptyStateSpacing: 10
     readonly property int cardW: 380
-    readonly property int cardH: searchH + (itemHeight * itemCount) + (pad * 3) + 8
+    readonly property int cardH: searchH + (itemHeight * itemCount) + (pad * 3) + Theme.Tokens.space.sm
 
-    // ── Public API ───────────────────────────────────────
-    function toggle() {
-        if (root.visible) close();
-        else open();
+    name: "launcher"
+    placement: PanelPlacement {
+        type: Services.PanelRules.Type.BarAttached
+        shape: Services.PanelRules.Shape.Wide
+        size: Qt.size(root.cardW, root.cardH)
     }
-
-    function open() {
-        root.screen = Services.ScreenService.focusedScreen();
+    focusTarget: root.contentItem ? root.contentItem.searchField : null
+    onShown: {
         AppLauncherState.query = "";
-        root.visible = true;
+        if (root.contentItem)
+            root.contentItem.searchField.clear();
+    }
+    // Drop text focus before the keyboard mode drops, or Qt warns on text-input disable.
+    onHiding: {
+        if (root.contentItem)
+            root.contentItem.searchField.focus = false;
     }
 
-    function close() {
-        AppLauncherState.query = "";
-        root.visible = false;
-        searchInput.clear();
-    }
+    contentComponent: Component {
+        Item {
+            id: card
+            property alias searchField: searchInput.input
+            implicitWidth: root.cardW
+            implicitHeight: root.cardH
+            width: root.cardW
+            height: root.cardH
 
-    // ── Visibility ───────────────────────────────────────
-    color: "transparent" // layer-shell root — must not paint, real card bg is the Rectangle below
-    visible: false
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "appLauncher"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
-    exclusionMode: ExclusionMode.Ignore
-    onVisibleChanged: {
-        if (visible) {
-            searchInput.forceActiveFocus();
-        }
-    }
-
-    anchors {
-        top: true
-        bottom: true
-        left: true
-        right: true
-    }
-
-    // ── IPC — external keybind (Hyprland) ────────────────
-    IpcHandler {
-        function handle() {
-            root.toggle();
-        }
-
-        target: "toggleLauncher"
-    }
-
-    // ── Background overlay ───────────────────────────────
-    DarkOverlay {
-        visible: root.visible
-        onClicked: root.close()
-    }
-
-    // ── Card ─────────────────────────────────────────────
-    Rectangle {
-        id: card
-
-        width: root.cardW
-        height: root.cardH
-        anchors.centerIn: parent
-        color: Theme.Tokens.color.bg
-        radius: Theme.Tokens.radius.md
-        border.width: 1
-        border.color: Theme.Tokens.color.border
-        opacity: root.visible ? 1 : 0
-        scale: root.visible ? 1 : 0.97
-
-        MouseArea {
-            anchors.fill: parent
-        }
-
-        Column {
-            spacing: Theme.Tokens.space.sm
-
-            anchors {
-                fill: parent
-                margins: root.pad
+            ModalKeymap {
+                id: keymap
+                enabled: root.open
+                useBase: true
+                axis: "vertical"
+                shiftOnly: true
+                modifierPolicy: "fallback"
+                passThroughUnmapped: true
+                readonly property var handlers: ({
+                    moveDown: () => appList.incrementCurrentIndex(),
+                    moveUp: () => appList.decrementCurrentIndex(),
+                    activate: () => appList.launchCurrent(),
+                    cancel: () => root.hide()
+                })
+                onActionTriggered: action => keymap.handlerFor(handlers, action)?.()
             }
 
-            // Search field
-            TextField {
-                id: searchInput
+            Column {
+                spacing: Theme.Tokens.space.sm
+                anchors { fill: parent; margins: root.pad }
 
-                width: parent.width
-                height: root.searchH
-                placeholderText: "Only Binary..."
-                placeholderTextColor: Theme.Tokens.color.textMuted
-                color: Theme.Tokens.color.textPrimary
-                font.pixelSize: Theme.Tokens.text.lg
-                font.letterSpacing: 0.3
-                leftPadding: 34
-                rightPadding: root.pad
-                topPadding: 10
-                bottomPadding: 10
-                onTextChanged: AppLauncherState.query = text
-                Keys.onEscapePressed: root.close()
-                Keys.onDownPressed: appList.incrementCurrentIndex()
-                Keys.onUpPressed: appList.decrementCurrentIndex()
-                Keys.onReturnPressed: appList.launchCurrent()
+                SearchField {
+                    id: searchInput
+                    width: parent.width
+                    placeholder: "Only Binary..."
+                    onTextChanged: { AppLauncherState.query = text; appList.currentIndex = 0; }
+                    onKeyPressed: event => keymap.handleKey(event)
+                }
 
-                background: Rectangle {
-                    color: Theme.Tokens.color.bgElevated
-                    radius: Theme.Tokens.radius.lg
-                    border.width: 1
-                    border.color: searchInput.activeFocus ? Theme.Tokens.color.accent : Theme.Tokens.color.border
-
-                    Text {
-                        text: " 󰍉 "
-                        font.family: Theme.Tokens.text.iconFont
-                        font.pixelSize: Theme.Tokens.text.xl
-                        color: Theme.Tokens.color.accent
-
-                        anchors {
-                            verticalCenter: parent.verticalCenter
-                            left: parent.left
-                            leftMargin: 10
-                        }
+                ListView {
+                    id: appList
+                    property point lastCursor: Qt.point(-1, -1)
+                    function launchCurrent() { if (currentItem) { const entry = currentItem.entry; root.hideIfAutoCloses(); AppLauncherState.launch(entry); } }
+                    width: parent.width
+                    height: root.itemHeight * root.itemCount
+                    clip: true
+                    model: AppLauncherState.filteredApps
+                    currentIndex: 0
+                    keyNavigationWraps: true
+                    highlightRangeMode: ListView.ApplyRange
+                    preferredHighlightBegin: 0
+                    preferredHighlightEnd: height
+                    highlightMoveDuration: Theme.Tokens.motion.role.stateFast.duration
+                    // Rows can arrive after creation (DesktopEntries fills late) and would shift currentIndex off the top.
+                    onCountChanged: { currentIndex = 0; positionViewAtBeginning(); }
+                    highlight: Rectangle {
+                        radius: Theme.Tokens.radius.lg
+                        color: Theme.Tokens.color.surface
                     }
-                }
-            }
-
-            // App list
-            ListView {
-                id: appList
-
-                function launchCurrent() {
-                    if (currentItem) {
-                        const entry = currentItem.entry;
-                        root.close();
-                        AppLauncherState.launch(entry);
-                    }
-                }
-
-                width: parent.width
-                height: root.itemHeight * root.itemCount
-                clip: true
-                model: root.visible ? AppLauncherState.filteredApps : null
-                currentIndex: 0
-                keyNavigationWraps: true
-                highlightRangeMode: ListView.ApplyRange
-                preferredHighlightBegin: 0
-                preferredHighlightEnd: height
-                highlightMoveDuration: 100
-                onModelChanged: {
-                    currentIndex = 0;
-                    positionViewAtBeginning();
-                }
-
-                highlight: Rectangle {
-                    radius: Theme.Tokens.radius.lg
-                    color: Theme.Tokens.color.bgElevated
-
-                    Behavior on y {
-                        NumberAnimation {
-                            duration: Theme.Tokens.motion.fast
-                            easing.type: Theme.Tokens.motion.ease
-                        }
-                    }
-                }
-
-                delegate: Item {
-                    id: delegateRoot
-
-                    readonly property bool isCurrent: appList.currentIndex === index
-                    property var entry: modelData
-
-                    width: appList.width
-                    height: root.itemHeight
-
-                    Row {
-                        spacing: Theme.Tokens.space.md
-                        scale: delegateRoot.isCurrent ? 1.1 : 1
-                        transformOrigin: Item.Left
-
-                        anchors {
-                            verticalCenter: parent.verticalCenter
-                            left: parent.left
-                            leftMargin: root.pad
-                        }
-
-                        IconImage {
-                            width: 23
-                            height: 23
-                            anchors.verticalCenter: parent.verticalCenter
-                            source: Quickshell.iconPath(modelData.icon)
-                        }
-
-                        Text {
-                            text: modelData.name
-                            color: delegateRoot.isCurrent ? Theme.Tokens.color.textPrimary : Theme.Tokens.color.textMuted
-                            font.pixelSize: Theme.Tokens.text.lg
-                            font.letterSpacing: 0.2
-                            height: root.itemHeight
-                            verticalAlignment: Text.AlignVCenter
-
-                            Behavior on color {
-                                ColorAnimation { duration: Theme.Tokens.motion.fast }
+                    delegate: Item {
+                        id: delegateRoot
+                        readonly property bool isCurrent: appList.currentIndex === index
+                        property var entry: modelData
+                        width: appList.width
+                        height: root.itemHeight
+                        Row {
+                            spacing: Theme.Tokens.space.md
+                            scale: delegateRoot.isCurrent ? Theme.Tokens.comp.clip.selectedScale : 1
+                            transformOrigin: Item.Left
+                            anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: root.pad }
+                            IconImage { width: root.iconSize; height: root.iconSize; anchors.verticalCenter: parent.verticalCenter; source: Quickshell.iconPath(modelData.icon) }
+                            QsText {
+                                text: modelData.name
+                                role: "title"
+                                color: delegateRoot.isCurrent ? Theme.Tokens.color.textPrimary : Theme.Tokens.color.textMuted
+                                font.letterSpacing: 0.2
+                                height: root.itemHeight
+                                verticalAlignment: Text.AlignVCenter
+                                Behavior on color { Animations.MotionColorAnimation { role: "effectsEnter" } }
                             }
+                            Behavior on scale { Animations.MotionAnimation { role: "stateFast" } }
                         }
-
-                        Behavior on scale {
-                            NumberAnimation {
-                                duration: Theme.Tokens.motion.fast
-                                easing.type: Theme.Tokens.motion.ease
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onEntered: appList.lastCursor = mapToItem(null, mouseX, mouseY)
+                            onPositionChanged: selectOnCursorMove()
+                            function selectOnCursorMove() {
+                                const p = mapToItem(null, mouseX, mouseY);
+                                if (p.x !== appList.lastCursor.x || p.y !== appList.lastCursor.y) {
+                                    appList.lastCursor = p;
+                                    appList.currentIndex = index;
+                                }
                             }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onEntered: appList.currentIndex = index
-                        onClicked: {
-                            const app = modelData;
-                            root.close();
-                            AppLauncherState.launch(app);
+                            onClicked: { const app = modelData; root.hideIfAutoCloses(); AppLauncherState.launch(app); }
                         }
                     }
                 }
             }
-        }
 
-        // Empty-state quote — visible when no results
-        Column {
-            anchors.centerIn: parent
-            anchors.verticalCenterOffset: 10
-            width: parent.width - (root.pad * 4)
-            spacing: 10
-            visible: appList.count === 0
-
-            Text {
-                text: "\"We all make choices, but in the end... our choices make us\""
-                color: Theme.Tokens.color.textMuted
-                font.pixelSize: Theme.Tokens.text.md
-                font.italic: true
-                horizontalAlignment: Text.AlignHCenter
-                width: parent.width
-                wrapMode: Text.WordWrap
-            }
-
-            Text {
-                text: "Andrew Ryan"
-                color: Theme.Tokens.color.textMuted
-                font.pixelSize: Theme.Tokens.text.sm
-                horizontalAlignment: Text.AlignHCenter
-                width: parent.width
-            }
-
-            Text {
-                text: "BioShock"
-                color: Theme.Tokens.color.textMuted
-                font.pixelSize: Theme.Tokens.text.sm
-                font.italic: true
-                horizontalAlignment: Text.AlignHCenter
-                width: parent.width
+            Column {
+                anchors.centerIn: parent
+                anchors.verticalCenterOffset: root.emptyStateSpacing
+                width: parent.width - (root.pad * 4)
+                spacing: root.emptyStateSpacing
+                visible: appList.count === 0
+                QsText { text: "\"We all make choices, but in the end... our choices make us\""; role: "subtitle"; muted: true; font.italic: true; horizontalAlignment: Text.AlignHCenter; width: parent.width; wrapMode: Text.WordWrap }
+                QsText { text: "Andrew Ryan"; role: "body"; muted: true; horizontalAlignment: Text.AlignHCenter; width: parent.width }
+                QsText { text: "BioShock"; role: "body"; muted: true; font.italic: true; horizontalAlignment: Text.AlignHCenter; width: parent.width }
             }
         }
-
-        Behavior on opacity { NumberAnimation { duration: Theme.Tokens.motion.fast; easing.type: Theme.Tokens.motion.ease } }
-        Behavior on scale   { NumberAnimation { duration: Theme.Tokens.motion.fast; easing.type: Theme.Tokens.motion.ease } }
     }
 }

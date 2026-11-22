@@ -1,194 +1,169 @@
 import QtQuick
-import QtQuick.Controls
-import Quickshell.Io
+import QtQuick.Layouts
+import "../../../../core/components/atomic"
+import "../../../../core/animations" as Animations
 import "../../../../core/theme" as Theme
+import "../state"
 
 /*!
-    Virtualised list of clipboard entries.
-    Mouse hover and keyboard navigation share a single currentIndex.
+    ClipList — one list for History, collection and entry rows.
+
+    `model` is ClipboardState.rows ({ kind, title, subtitle, masked, imageId });
+    `currentIndex` is ClipboardState.selectedIndex. Selection is never owned by the
+    ListView: its own currentIndex drifts when rows arrive after creation, so it is
+    re-synced from `currentIndex` (which also slides the highlight) and the view is scrolled explicitly.
+    Thumbnails come straight from ClipboardHistory (ClipboardState only decodes the selected row).
 */
-ListView {
+Item {
     id: root
 
-    property var clipState: null
+    property var model
+    property int currentIndex: 0
 
-    clip: true
-    keyNavigationWraps: true
-    highlightMoveDuration: 80
-    currentIndex: 0
-    model: clipState ? clipState.filtered : null
-    onModelChanged: currentIndex = 0
+    readonly property real _subtitleShare: 0.4
+    readonly property string iconSearch:     "\uf002"
+    readonly property string iconCollection: "\uf07c"
+    readonly property string textNoResults:    "No results"
+    readonly property string textNoEntries:    "Empty collection"
+    readonly property string textNoCollections: "No collections"
+    readonly property string textNoHistory:    "No history"
+    readonly property bool _favorites: ClipboardState.section === ClipboardState.sectionFavorites
+    readonly property var _empty: {
+        if (ClipboardState.filter !== "")
+            return { icon: iconSearch, text: textNoResults };
+        if (!_favorites)
+            return { icon: ClipboardState.iconHistory, text: textNoHistory };
+        if (ClipboardState.collection !== "")
+            return { icon: iconCollection, text: textNoEntries };
+        return { icon: ClipboardState.iconFavorites, text: textNoCollections };
+    }
 
-    delegate: Item {
-        id: row
+    onCurrentIndexChanged: view._syncCurrent()
 
-        required property int    index
-        required property string clipId
-        required property string preview
-        required property string type
-        required property string rawLine
+    ListView {
+        id: view
+        anchors.fill: parent
+        clip: true
+        model: root.model
+        interactive: false
+        highlightMoveDuration: Theme.Tokens.motion.role.stateFast.duration
+        highlightResizeDuration: 0
 
-        readonly property bool isCurrent: root.currentIndex === row.index
+        function _syncCurrent() {
+            currentIndex = root.currentIndex;
+            positionViewAtIndex(root.currentIndex, ListView.Contain);
+        }
 
-        width:  root.width
-        height: Theme.Tokens.comp.clip.rowH
+        onCountChanged: _syncCurrent()
+        onHeightChanged: positionViewAtIndex(root.currentIndex, ListView.Contain)
 
-        // ── Selected background ───────────────────────────
-        Rectangle {
-            anchors.fill: parent
+        highlight: Rectangle {
             radius: Theme.Tokens.radius.lg
-            color:  row.isCurrent ? Theme.Tokens.color.bgElevated : Theme.Tokens.color.bg
+            color: Theme.Tokens.color.surface
         }
 
-        // ── Accent bar ────────────────────────────────────
-        Rectangle {
-            width:  3
-            height: parent.height - 12
-            anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 2 }
-            radius:  2
-            color:   Theme.Tokens.color.accent
-            visible: row.isCurrent
-        }
+        delegate: Item {
+            id: rowItem
+            required property var modelData
+            required property int index
+            readonly property bool selected: index === root.currentIndex
+            readonly property string imageUrl: modelData.imageId !== ""
+                ? ClipboardHistory.decodedPath(modelData.imageId) : ""
 
-        // ── Content area ──────────────────────────────────
-        Item {
-            anchors {
-                fill:        parent
-                leftMargin:  row.isCurrent ? 14 : 10
-                rightMargin: row.isCurrent ? 40 : 12
+            readonly property bool isEntry: modelData.kind === ClipboardState.kindEntry
+
+            width: view.width
+            height: isEntry ? Theme.Tokens.comp.clip.rowTallH : Theme.Tokens.comp.clip.rowH
+
+            Component.onCompleted: {
+                if (modelData.imageId !== "")
+                    ClipboardHistory.requestDecode(modelData.imageId);
             }
 
-            Behavior on anchors.rightMargin { NumberAnimation { duration: Theme.Tokens.motion.fast; easing.type: Theme.Tokens.motion.ease } }
-            Behavior on anchors.leftMargin  { NumberAnimation { duration: Theme.Tokens.motion.fast; easing.type: Theme.Tokens.motion.ease } }
-
-            // Text entry
-            Text {
-                anchors.fill: parent
-                visible:           row.type !== "image"
-                text:              row.preview
-                color:             row.isCurrent
-                    ? Theme.Tokens.color.textPrimary
-                    : Theme.Tokens.color.textMuted
-                font.pixelSize:    Theme.Tokens.text.md
-                elide:             Text.ElideRight
-                verticalAlignment: Text.AlignVCenter
-
-                Behavior on color { ColorAnimation { duration: Theme.Tokens.motion.fast } }
-            }
-
-            // Image entry
-            Row {
-                id: _imgRow
+            RowLayout {
+                id: row
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: Theme.Tokens.comp.clip.pad
+                anchors.rightMargin: Theme.Tokens.comp.clip.pad
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Theme.Tokens.space.sm
-                visible: row.type === "image"
 
-                property bool ready: false
+                // Only this leading content scales; the trailing subtitle keeps its position.
+                Item {
+                    id: lead
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: leadContent.implicitHeight
 
-                Component.onCompleted: {
-                    if (row.type === "image") _decode()
+                    ColumnLayout {
+                        id: leadContent
+                        // Pre-shrunk so the scaled content still ends at the lead's right edge.
+                        width: lead.width / Theme.Tokens.comp.clip.selectedScale
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 0
+                        scale: rowItem.selected ? Theme.Tokens.comp.clip.selectedScale : 1
+                        transformOrigin: Item.Left
+
+                        Behavior on scale {
+                            Animations.MotionAnimation { role: "stateFast" }
+                        }
+
+                        Image {
+                            visible: rowItem.imageUrl !== ""
+                            Layout.preferredWidth: Theme.Tokens.comp.clip.rowH - 2 * Theme.Tokens.space.sm
+                            Layout.preferredHeight: Layout.preferredWidth
+                            source: rowItem.imageUrl
+                            sourceSize.width: Layout.preferredWidth
+                            sourceSize.height: Layout.preferredHeight
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
+                        }
+
+                        QsText {
+                            Layout.fillWidth: true
+                            visible: rowItem.imageUrl === ""
+                            role: "title"
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                            textFormat: Text.PlainText
+                            text: rowItem.modelData.title
+                            color: rowItem.selected ? Theme.Tokens.color.textPrimary : Theme.Tokens.color.textSecondary
+
+                            Behavior on color {
+                                Animations.MotionColorAnimation { role: "stateFast" }
+                            }
+                        }
+
+                        QsText {
+                            Layout.fillWidth: true
+                            visible: rowItem.isEntry
+                            role: "subtitle"
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                            textFormat: Text.PlainText
+                            text: rowItem.modelData.subtitle
+                            color: Theme.Tokens.color.textMuted
+                        }
+                    }
                 }
 
-                function _decode() {
-                    if (_imgProc.running) return
-                    _imgProc.command = ["sh", "-c",
-                        "cliphist decode " + row.clipId + " > /tmp/qs_clip_" + row.clipId]
-                    _imgProc.running = true
+                QsText {
+                    Layout.maximumWidth: row.width * root._subtitleShare
+                    visible: !rowItem.isEntry && text !== ""
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                    textFormat: Text.PlainText
+                    text: rowItem.modelData.subtitle
+                    color: Theme.Tokens.color.textMuted
                 }
-
-                Process {
-                    id: _imgProc
-                    running: false
-                    onExited: _imgRow.ready = true
-                }
-
-                Image {
-                    width: 36; height: 36
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible:  _imgRow.ready
-                    fillMode: Image.PreserveAspectFit
-                    source:   _imgRow.ready ? ("file:///tmp/qs_clip_" + row.clipId) : ""
-                    cache:    false
-                }
-
-                Text {
-                    visible:           !_imgRow.ready
-                    text:              "󰋩"
-                    font.family:       Theme.Tokens.text.iconFont
-                    font.pixelSize:    Theme.Tokens.text.iconLg
-                    color:             Theme.Tokens.color.accent
-                    verticalAlignment: Text.AlignVCenter
-                    height:            Theme.Tokens.comp.clip.rowH
-                }
-
-                Text {
-                    text:              "Imagen"
-                    color:             row.isCurrent
-                        ? Theme.Tokens.color.textPrimary
-                        : Theme.Tokens.color.textMuted
-                    font.pixelSize:    Theme.Tokens.text.md
-                    font.italic:       !_imgRow.ready
-                    verticalAlignment: Text.AlignVCenter
-                    height:            Theme.Tokens.comp.clip.rowH
-                }
-            }
-        }
-
-        // ── ✕ delete button ───────────────────────────────
-        Rectangle {
-            z:       1
-            visible: row.isCurrent
-            width:   24
-            height:  24
-            anchors { right: parent.right; rightMargin: 8; verticalCenter: parent.verticalCenter }
-            radius: Theme.Tokens.radius.lg
-            color:  _xHover.containsMouse
-                ? Theme.Tokens.color.accentSurface
-                : Theme.Tokens.color.bgElevated
-
-            Behavior on color { ColorAnimation { duration: Theme.Tokens.motion.fast } }
-
-            Text {
-                anchors.centerIn: parent
-                text:           "✕"
-                color:          Theme.Tokens.color.accent
-                font.pixelSize: Theme.Tokens.text.md
-                font.bold:      true
-            }
-
-            MouseArea {
-                id: _xHover
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape:  Qt.PointingHandCursor
-                onClicked: mouse => {
-                    mouse.accepted = true
-                    if (root.clipState)
-                        root.clipState.deleteEntry(row.rawLine, row.clipId)
-                }
-            }
-        }
-
-        // ── Main interaction ──────────────────────────────
-        MouseArea {
-            z:            0
-            anchors.fill: parent
-            hoverEnabled: true
-            onEntered: root.currentIndex = row.index
-            onClicked: {
-                if (root.clipState)
-                    root.clipState.paste(row.clipId)
             }
         }
     }
 
-    ScrollBar.vertical: ScrollBar {
-        policy: ScrollBar.AsNeeded
-        visible: root.contentHeight > root.height
-        contentItem: Rectangle {
-            implicitWidth: 4
-            radius: 2
-            color: Theme.Tokens.color.accent
-        }
+    QsEmptyState {
+        anchors.centerIn: parent
+        visible: ClipboardState.rowCount === 0
+        icon: root._empty.icon
+        text: root._empty.text
     }
 }

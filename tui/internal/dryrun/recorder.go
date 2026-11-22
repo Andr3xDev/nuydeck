@@ -1,0 +1,85 @@
+package dryrun
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+)
+
+// Recorder is a plan.Runner that renders what each Step would do and performs no I/O.
+type Recorder struct{}
+
+func (Recorder) Run(_ context.Context, s plan.Step, _ func(plan.StepProgress)) plan.StepResult {
+	return plan.StepResult{Status: plan.StepWouldApply, Detail: render(s)}
+}
+
+func renderCommand(s plan.CommandStep) string {
+	argv := s.Argv
+	if s.Sudo {
+		argv = append([]string{"sudo"}, argv...)
+	}
+	if s.Dir != "" {
+		return fmt.Sprintf("would run (in %s) %s", s.Dir, strings.Join(argv, " "))
+	}
+	return "would run " + strings.Join(argv, " ")
+}
+
+func render(s plan.Step) string {
+	switch s := s.(type) {
+	case plan.CopyStep:
+		return fmt.Sprintf("would copy %s -> %s: %s", s.Src, s.Dst, strings.Join(s.Paths, ", "))
+	case plan.DeleteStep:
+		return "would delete " + s.Path
+	case plan.BackupStep:
+		paths := make([]string, len(s.Files))
+		for i, f := range s.Files {
+			paths[i] = string(f.Root) + "/" + f.Path
+		}
+		return "would back up " + strings.Join(paths, ", ")
+	case plan.DeleteBackupStep:
+		return "would delete backup " + s.Dir
+	case plan.SaveStateStep:
+		if len(s.State.IgnoredPackages) == 0 {
+			return "would save state"
+		}
+		return "would save state; ignored_packages: " + strings.Join(s.State.IgnoredPackages, ", ")
+	case plan.CommandStep:
+		return renderCommand(s)
+	case plan.ServiceActionStep:
+		cmd, err := s.Command()
+		if err != nil {
+			return "would refuse: " + err.Error()
+		}
+		return renderCommand(cmd)
+	case plan.ConfirmStep:
+		return "would ask: " + s.Prompt
+	case plan.WriteFileStep:
+		detail := fmt.Sprintf("would write %s (%d bytes)", s.Path, len(s.Content))
+		if s.Privileged {
+			detail += " with sudo"
+		}
+		if s.BackupTo != "" {
+			detail += ", backup to " + s.BackupTo
+		}
+		return detail
+	case plan.SymlinkStep:
+		return fmt.Sprintf("would link %s -> %s", s.Path, s.Target)
+	case plan.WriteSecretsStep:
+		if len(s.Entries) == 0 {
+			return fmt.Sprintf("would create empty %s (mode 600)", s.Path)
+		}
+		names := make([]string, len(s.Entries))
+		for i, e := range s.Entries {
+			names[i] = e.Name
+		}
+		return fmt.Sprintf("would create %s with variables: %s", s.Path, strings.Join(names, ", "))
+	case plan.AppendPackageStep:
+		return fmt.Sprintf("would append package %s (%s) to %s", s.Entry.Name, s.Entry.Source, s.Path)
+	case plan.AppendLogStep:
+		return "would append log entry: " + s.Entry.Op
+	default:
+		return fmt.Sprintf("would run %T", s)
+	}
+}

@@ -13,7 +13,7 @@
 --　　 　 /　　　 　 |
 --　　　 /　 ヽ　　 ﾉ
 --　 　 │　　|　|　|         AUTHOR:  Andr3xDev
---　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/hypr-abysal
+--　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
 --　| (￣ヽ＿_ヽ_)__)
 --　＼二つ
 -----------------------------------------------------------------------------------
@@ -35,7 +35,6 @@ hl.bind(mainmod .. " + SHIFT + F",      hl.dsp.window.fullscreen())
 
 ----- reload secction -----
 hl.bind(mainmod .. " + R",         hl.dsp.exec_cmd(apps.reload))
-hl.bind(mainmod .. " + SHIFT + R", hl.dsp.exec_cmd("hyprctl reload"))
 
 ----- unbind default floating toggle -----
 hl.unbind("CTRL_L + RETURN")
@@ -92,8 +91,14 @@ hl.define_submap("apps", function()
 	hl.bind("return", hl.dsp.submap("reset"))
 end)
 
+---------------------------------------------------------------------------------
+--- Quickshell elements
+---------------------------------------------------------------------------------
+
 ----- quickshell -----
 hl.bind(mainmod .. " + SPACE",     hl.dsp.exec_cmd(apps.menu))
+hl.bind(mainmod .. " + B",         hl.dsp.exec_cmd(apps.toggle_bar))
+hl.bind(mainmod .. " + SHIFT + B", hl.dsp.exec_cmd(apps.test))
 hl.bind(mainmod .. " + BACKSPACE", hl.dsp.exec_cmd(apps.powermenu))
 
 -- DEPRECATED
@@ -104,33 +109,8 @@ hl.bind("SUPER + Y", hl.dsp.exec_cmd("quickshell ipc --config lucyna call themeL
 --- Screenshots & Pickers
 ---------------------------------------------------------------------------------
 
-hl.bind(mainmod .. " + T", hl.dsp.submap("screenshots"))
-
-hl.define_submap("screenshots", function()
-	hl.bind("T", function()
-		hl.dispatch(hl.dsp.exec_cmd(apps.printer_simple))
-		hl.dispatch(hl.dsp.submap("reset"))
-	end)
-
-	hl.bind("S", function()
-		hl.dispatch(hl.dsp.exec_cmd(apps.printer_save))
-		hl.dispatch(hl.dsp.submap("reset"))
-	end)
-
-	hl.bind("E", function()
-		hl.dispatch(hl.dsp.exec_cmd(apps.printer_edit))
-		hl.dispatch(hl.dsp.submap("reset"))
-	end)
-
-	hl.bind("P", function()
-		hl.dispatch(hl.dsp.exec_cmd(apps.picker))
-		hl.dispatch(hl.dsp.submap("reset"))
-	end)
-
-	hl.bind("escape", hl.dsp.submap("reset"))
-	hl.bind("space",  hl.dsp.submap("reset"))
-	hl.bind("return", hl.dsp.submap("reset"))
-end)
+hl.bind(mainmod .. " + T", hl.dsp.exec_cmd(apps.screenshot_panel))
+hl.bind(mainmod .. " + C", hl.dsp.exec_cmd(apps.cursor_tools_panel))
 
 
 ---------------------------------------------------------------------------------
@@ -155,6 +135,7 @@ hl.bind("XF86AudioMute",        hl.dsp.exec_cmd("pactl set-sink-mute @DEFAULT_SI
 ---------------------------------------------------------------------------------
 
 hl.bind(mainmod .. " + V", hl.dsp.window.float({ action = "toggle" }))
+hl.bind(mainmod .. " + M", hl.dsp.layout("swapwithmaster master"))
 
 
 ---------------------------------------------------------------------------------
@@ -202,11 +183,19 @@ hl.bind("SUPER + mouse:273", hl.dsp.window.resize(), { mouse = true })
 
 local hs = require("lib.hyprsplit")
 
-hs.config({ num_workspaces = 10 })
+hs.config({
+    num_workspaces = 10,
+    reveal_animation = { speed = 3, bezier = "expressiveEffectsDefault" },
+    restore_animations = function()
+        package.loaded["configs.animations"] = nil
+        require("configs.animations")
+    end,
+})
 for i = 1, 10 do
     local key = i % 10
     hl.bind(mainmod .. " + " .. key,         hs.dsp.focus({ workspace = i }))
     hl.bind(mainmod .. " + SHIFT + " .. key, hs.dsp.window.move({ workspace = i, follow = true }))
+    hl.bind(mainmod .. " + CTRL + " .. key,  hs.dsp.workspace.swap_with({ workspace = i }))
 end
 
 hl.bind("SUPER + " .. "g", hs.dsp.grab_rogue_windows())

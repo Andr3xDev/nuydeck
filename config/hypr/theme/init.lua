@@ -5,7 +5,7 @@
 
 local HOME         = os.getenv("HOME")
 local STATE_FILE   = HOME .. "/.config/hypr/theme/state.lua"
-local DEFAULT      = "abysal-obsidian"
+local DEFAULT      = "nuytek-nadir"
 
 local theme_name = DEFAULT
 

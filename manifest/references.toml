@@ -1,0 +1,6 @@
+version = 1
+
+[[reference]]
+name = "arch-linux"
+description = "Arch Linux (placeholder)"
+url = "https://archlinux.org"

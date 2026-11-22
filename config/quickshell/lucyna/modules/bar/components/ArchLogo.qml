@@ -1,20 +1,17 @@
 import QtQuick
 import "../../../core/theme" as Theme
+import "../../../core/components/atomic"
 
-/*!
-    Arch Linux logo icon
-*/
 Item {
     id: root
     implicitWidth: logoText.implicitWidth
     implicitHeight: parent.height
-    
-    Text {
+
+    QsText {
         id: logoText
         anchors.centerIn: parent
-        text: " 󰣇 "
+        text: "󰣇"
+        role: "icon"
         color: Theme.Tokens.color.accent
-        font.pixelSize: Theme.Tokens.text.lg
-        font.family: Theme.Tokens.text.iconFont
     }
 }

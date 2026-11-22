@@ -1,22 +1,21 @@
 import QtQuick
 import QtQuick.Layouts
 import "../../../core/theme" as Theme
-import "../../../core/services" as Services
-import "../../../core/components"
+import "../../../core/services/system" as Services
+import "../layout"
+import "../../../core/components/atomic"
+import "../../../core/animations" as Animations
 
 /*!
-    Group of indicators to know the status of the temp in PC's components
+    CPU and GPU temperature readouts, colored by severity.
 */
 ExpandableRow {
     id: root
 
-    /*!
-        Return color to indicate warning levels
-    */
     function getTempColor(temp) {
         if (temp >= 80) return Theme.Tokens.severity("critical")
         if (temp >= 70) return Theme.Tokens.severity("warn")
-        return Theme.Tokens.hue.aquamarine.fill
+        return Theme.Tokens.color.aquamarine
     }
     
     RowLayout {
@@ -26,44 +25,40 @@ ExpandableRow {
         opacity: root.expanded ? 1 : 0
         
         Behavior on opacity {
-            NumberAnimation { duration: Theme.Tokens.motion.standard }
+            Animations.MotionAnimation { role: "stateStandard" }
         }
         
-        // CPU Temperature
         RowLayout {
             visible: Services.TemperatureService.cpuTemp > 0
             spacing: Theme.Tokens.space.xs
             
-            Text {
+            QsText {
                 text: "󰍛"
+                role: "icon"
                 color: root.getTempColor(Services.TemperatureService.cpuTemp)
-                font.pixelSize: Theme.Tokens.text.icon
-                font.family: Theme.Tokens.text.iconFont
             }
-            
-            Text {
+
+            QsText {
                 text: `${Math.round(Services.TemperatureService.cpuTemp)}°`
+                role: "mono"
                 color: Theme.Tokens.color.textPrimary
-                font.pixelSize: Theme.Tokens.text.sm
             }
         }
         
-        // GPU Temperature
         RowLayout {
             visible: Services.TemperatureService.hasGPU
             spacing: Theme.Tokens.space.xs
             
-            Text {
+            QsText {
                 text: "󰾲"
+                role: "icon"
                 color: root.getTempColor(Services.TemperatureService.gpuTemp)
-                font.pixelSize: Theme.Tokens.text.icon
-                font.family: Theme.Tokens.text.iconFont
             }
-            
-            Text {
+
+            QsText {
                 text: `${Math.round(Services.TemperatureService.gpuTemp)}°`
+                role: "mono"
                 color: Theme.Tokens.color.textPrimary
-                font.pixelSize: Theme.Tokens.text.sm
             }
         }
     }

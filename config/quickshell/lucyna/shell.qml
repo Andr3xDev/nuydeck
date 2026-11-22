@@ -1,3 +1,4 @@
+//@ pragma ShellId lucyna
 //--------------------------------------------------------------------------------
 //                                                                  
 //                                                   
@@ -9,84 +10,135 @@
 //                                             `---'                     
 //              _______
 //　　　　　  /  ＞　　フ     
-//　　　　　 | 　_　 _ l      RESUME: QuickShell system config, includes bars,
+//　　　　　 | 　_　 _ l      SUMMARY: QuickShell system config, includes bars,
 //　 　　　 ／` ミ＿xノ               launchers, widgets & more.
 //　　 　  /　　　 　 |
 //　　　  /　 ヽ　　 ﾉ
 //　  　 │　　|　|　|         AUTHOR:  Andr3xDev
-//　 ／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/hypr-abysal
+//　 ／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/lucyna
 //　| (￣ヽ＿_ヽ_)__)
 //　＼二つ
 //--------------------------------------------------------------------------------
 
 
 import Quickshell
+import "core/components/surface"
 import "modules/bar"
-import "modules/launchers/theme"
 import "modules/launchers/apps"
 import "modules/launchers/power"
+import "modules/screenshot"
+import "modules/cursortools"
+import "modules/osd"
+import "legacy/theme"
 import "modules/launchers/clipboard"
 import "modules/calendar"
-import "modules/indicators/components"
-import "modules/monitors"
+import "legacy/monitors"
+import QtQuick
 
 /*!
-    Composition Root — zero logic.
-    This file only instantiates modules. All behavior lives inside them.
+    Composition root: instantiates the per-screen surfaces and every module.
+    The only logic is the screen filter isExcluded().
 */
 ShellRoot {
 
+    // Top-layer surface per screen hosting the bar and every panel. Hyprland's
+    // no_anim layer_rule applies (windows_rules.lua, "quickshell elements").
+    // barItem puts the bar's region in the input mask.
+    Variants {
+        id: quickshellTopHosts
+        model: Quickshell.screens.filter(scr => !isExcluded(scr.name))
+
+        QuickshellTop {
+            property var modelData
+            screen: modelData
+            barItem: barInstance
+
+            Bar {
+                id: barInstance
+                screen: modelData
+            }
+        }
+    }
+
+    // Reserves the bar's exclusive zone independent of quickshell-top's
+    // visibility (fullscreen-hide).
     Variants {
         model: Quickshell.screens.filter(scr => !isExcluded(scr.name))
 
-        Bar {
+        QuickshellExclusion {
             property var modelData
             screen: modelData
         }
     }
 
-    // Theme Launcher - Toggle via: qs ipc call themeLauncher.toggle
+    // Overlay-layer surface per screen, mapped only while its hosted content
+    // (the OSD) is active.
+    Variants {
+        id: quickshellOverlayHosts
+        model: Quickshell.screens.filter(scr => !isExcluded(scr.name))
+
+        QuickshellOverlay {
+            property var modelData
+            screen: modelData
+        }
+    }
+
+    // Panels below open on whichever screen's quickshell-top is focused at
+    // open() time. hosts is the QuickshellTop Variants' own instances.
+
+    // Toggle: qs -c lucyna ipc call themeLauncher toggle
     ThemeLauncher {
         id: themeLauncher
+        hosts: quickshellTopHosts.instances
         externalScriptPath: Quickshell.shellDir + "/scripts/apply-theme.sh"
     }
 
-    // App Launcher - Toggle with hyprctl dispatch
     AppLauncher {
         id: appLauncher
+        hosts: quickshellTopHosts.instances
     }
 
-    // Power Launcher - Toggle with hyprctl dispatch, opens on screen under cursor
     PowerLauncher {
         id: powerLauncher
+        hosts: quickshellTopHosts.instances
     }
 
-    // Clip Launcher - Toggle via: qs -c lucyna ipc --call toggleClip
-    ClipLauncher {
+    // Toggle: qs -c lucyna ipc call toggleClip handle
+    ClipboardPanel {
         id: clipLauncher
+        hosts: quickshellTopHosts.instances
     }
 
-    // Calendar - Toggle via: click on clock | qs ipc --config lucyna call toggleCalendar handle
-    CalendarWindow {
-        id: calendarWindow
+    ScreenshotPanel {
+        id: screenshotPanel
+        hosts: quickshellTopHosts.instances
     }
 
-    // Volume OSD
-    Volume {
-        id: volumeOsd
+    CursorToolsPanel {
+        id: cursorToolsPanel
+        hosts: quickshellTopHosts.instances
     }
 
-    // Monitor Manager - Toggle via: qs ipc call monitorManager.handle
+    CalendarPanel {
+        id: calendarPanel
+        hosts: quickshellTopHosts.instances
+    }
+
+    // OSD pill shown on the focused monitor. hosts are the QuickshellOverlay
+    // Variants' own instances.
+    Osd {
+        id: osd
+        hosts: quickshellOverlayHosts.instances
+    }
+
+    // Toggle: qs -c lucyna ipc call monitorManager handle
     MonitorManager {
         id: monitorManager
     }
 
-    //Screens excluded from bar rendering.
+    // Screens that get no shell surfaces (top, exclusion, overlay).
     function isExcluded(screenName) {
-        const excluded = [
-            //"HDMI-A-1",
-            //"DP-2",
-        ];
+        const excluded = [];
         return excluded.includes(screenName);
     }
 

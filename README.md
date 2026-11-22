@@ -236,7 +236,7 @@ wl-clipboard, cliphist, unzip, 7zip
 
 ### Prerequisites
 
-You only need **Git** installed on your Arch Linux system. The installation script will handle everything else automatically.
+You only need **Git** installed on your Arch Linux system. `bootstrap.sh` installs the rest and builds the `nuydeck` TUI.
 
 ```bash
 sudo pacman -S git
@@ -251,17 +251,16 @@ git clone https://github.com/Andr3xDev/hypr-abysal.git
 cd hypr-abysal
 ```
 
-2. **Run the installation script**
+2. **Run the bootstrap**
 
 ```bash
-./scripts/install.sh
+./bootstrap.sh
 ```
 
-3. **Follow the prompts**
+3. **Follow the TUI**
 
-    - Essential packages install automatically
-    - Optional components (GTK themes, GPU drivers, dev tools, Spotify, Steam) ask for confirmation
-    - Dotfiles are copied and Zsh is configured at the end
+    - Packages, configs, fonts and shell setup run as install phases
+    - Extras: docker group membership, `ttf-ms-fonts` (full profile only), Spotify with spicetify (after Spotify launches, the run pane asks "Did Spotify open?": `y`, `n` or `esc`) and the GTK theme built from `nuytek-theme`
 
 4. **Reboot and enjoy!**
 
@@ -269,11 +268,11 @@ cd hypr-abysal
 reboot
 ```
 
-After rebooting, select Hyprland from the Ly display manager.
+After rebooting, select Hyprland from the Ly display manager (`ly@tty1.service`).
 
 ### Manual Installation
 
-For advanced users who want more control, read through [`scripts/install.sh`](scripts/install.sh) and run the individual steps (`install-paru.sh`, `install-gtk.sh`, `install-os-config.sh`, `install-spotify.sh`, `configure-zsh.sh`) as needed, then copy the configs manually:
+For advanced users who prefer not to use the TUI, copy the configs manually:
 
 ```bash
 git clone https://github.com/Andr3xDev/hypr-abysal.git
@@ -291,14 +290,13 @@ sudo reboot
 
 ### Configuration Synchronization
 
-Requires `rsync`. Run from repository root:
+Requires `rsync`. Use the Sync and Backups sections of the `nuydeck` TUI to pull (`p`, `~/.config/` to `config/`) and push (`P`, `config/` to `~/.config/`) with a preview first.
 
-```bash
-./scripts/sync-config.sh pull  # ~/.config/ → config/
-./scripts/sync-config.sh push  # config/ → ~/.config/
-```
+### Services, Env and References
 
-> **Warning:** Uses `rsync --archive --delete`; destination becomes exact copy of source, and extra destination files are deleted. No backups are made. Script requires an interactive TTY and literal `yes` confirmation before syncing.
+-   **Services**: lists the managed systemd units with live status. Keys: `e` enable, `d` disable, `s` start, `x` stop, `R` restart, `m` mask, `u` unmask, `r` refresh, `L` logs in a pager (`journalctl`). Critical units such as `NetworkManager.service` and `ly@tty1.service` ask for an extra confirmation.
+-   **Env**: lists the `hl.env` variables of the Hyprland `configs/env_variables.lua`. Press `s` to open the source popup and pick the repo copy or the live copy, `e` to edit it in `$VISUAL` or `$EDITOR`, `r` to re-read it.
+-   **References**: lists the external links and their status. Press `o` to open the selected link with `xdg-open`.
 
 <br>
 <br>

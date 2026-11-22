@@ -1,0 +1,422 @@
+// Package ui: Bubble Tea presentation layer.
+package ui
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"time"
+
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
+)
+
+const dryRunBadge = "DRY-RUN"
+
+const (
+	sidebarMax     = 30 // sidebar block width cap, border included
+	minWidth       = 40
+	minHeight      = 8
+	noticeMaxLines = 2
+)
+
+// wideRowWidth is the panel width below which list rows drop their secondary columns.
+const wideRowWidth = 60
+
+// screenBox draws a screen's box; lines must fit kit.ContentWidth(width).
+func screenBox(th kit.Theme, title string, lines []string, width, height int) string {
+	return kit.RenderBox(th, title, lines, width, height, th.PanelFocused())
+}
+
+// innerHeight is the number of lines a screen can fill inside its box.
+func innerHeight(height int) int { return max(height-kit.BorderCells, 1) }
+
+// clip cuts already-styled lines to width cells.
+func clip(lines []string, width int) []string {
+	style := lipgloss.NewStyle().MaxWidth(max(width, 1))
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = style.Render(l)
+	}
+	return out
+}
+
+// styled applies a style to every line of text.
+func styled(style lipgloss.Style, lines []string) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = style.Render(l)
+	}
+	return out
+}
+
+type section struct {
+	title  string
+	screen screen
+	pinned bool // drawn on the bottom rows of the sidebar; pinned sections come last
+}
+
+// focus is the one pane that receives keys.
+type focus int
+
+const (
+	focusSidebar focus = iota
+	focusPanel
+)
+
+// Root is the top-level Bubble Tea model: sidebar, active panel and keybar.
+type Root struct {
+	width, height int
+	sections      []section
+	selected      int
+	focus         focus
+	showHelp      bool
+	dryRun        bool
+	svc           *shell
+	help          help.Model
+	cancel        context.CancelFunc
+	run           *run
+}
+
+// NewRoot builds the shell. variant is the raw theme variant string read by
+// the caller; unknown values fall back to Nadir. A manifest error leaves only
+// the error screen, so no sync, backup or restore action exists.
+func NewRoot(variant string, dryRun bool, deps Deps) *Root {
+	th := kit.ForVariant(variant)
+	h := help.New()
+	h.Styles = help.DefaultStyles(th.Dark)
+	ctx, cancel := context.WithCancel(context.Background())
+	svc := &shell{Deps: deps, ctx: ctx, dryRun: dryRun, th: th, keys: kit.NewKeyMap()}
+	r := &Root{dryRun: dryRun, svc: svc, help: h, cancel: cancel}
+	svc.running = func() bool { return r.run != nil }
+	svc.th.PanelHasFocus = r.panelFocused
+	for _, spec := range sectionSpecs {
+		if spec.enabled(deps) {
+			r.sections = append(r.sections, section{title: spec.title, screen: spec.build(svc), pinned: spec.pinned})
+		}
+	}
+	return r
+}
+
+// sectionOf finds the section holding a screen of type T.
+func sectionOf[T screen](r *Root) (found T, index int, ok bool) {
+	for i, s := range r.sections {
+		if t, is := s.screen.(T); is {
+			return t, i, true
+		}
+	}
+	return found, -1, false
+}
+
+// WaitInstall blocks after the program exits until a started run has finished its bookkeeping, up to timeout.
+func (r *Root) WaitInstall(timeout time.Duration) {
+	if r.run != nil && r.run.started.Load() {
+		select {
+		case <-r.run.finished:
+		case <-time.After(timeout):
+		}
+	}
+}
+
+func (r *Root) Init() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, s := range r.sections {
+		if i, ok := s.screen.(initer); ok {
+			cmds = append(cmds, i.Init())
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
+func (r *Root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		r.width, r.height = msg.Width, msg.Height
+		r.help.SetWidth(msg.Width)
+		return r, nil
+	case tea.KeyPressMsg:
+		return r.route(msg)
+	case startSyncMsg:
+		if s, i, ok := sectionOf[*Sync](r); ok && r.run == nil {
+			r.selectSection(i)
+			r.focus = focusPanel
+			return r, s.openMode(msg.direction, msg.entries)
+		}
+		return r, nil
+	case viewDriftMsg:
+		if s, i, ok := sectionOf[*Sync](r); ok && r.run == nil {
+			r.selectSection(i)
+			r.focus = focusPanel
+			return r, s.openDriftView(msg.entry, msg.result)
+		}
+		return r, nil
+	case returnToDashboardMsg:
+		if _, i, ok := sectionOf[*Dashboard](r); ok {
+			r.selectSection(i)
+			r.focus = focusSidebar
+			return r, r.active().Enter()
+		}
+		return r, nil
+	case execRequestMsg:
+		return r, tea.ExecProcess(msg.cmd, msg.finish)
+	case runRequest:
+		if r.run != nil {
+			return r, nil
+		}
+		workCtx, cancel := context.WithCancel(r.svc.ctx)
+		r.run = newRun(msg, cancel)
+		return r, r.run.start(r.svc.ctx, workCtx, msg.work)
+	case runEventMsg:
+		if r.run != nil {
+			r.run.add(msg.event)
+			return r, r.run.next()
+		}
+		return r, nil
+	case runDoneMsg:
+		if r.run == nil {
+			return r, nil
+		}
+		r.run.finish(msg.end)
+		if msg.end.msg != nil {
+			return r.broadcast(msg.end.msg)
+		}
+		return r, nil
+	}
+	return r.broadcast(msg)
+}
+
+// broadcast delivers background messages to every screen, since results and
+// ticks must land even while another section is selected.
+func (r *Root) broadcast(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmds := make([]tea.Cmd, len(r.sections))
+	for i := range r.sections {
+		r.sections[i].screen, cmds[i] = r.sections[i].screen.Update(msg)
+	}
+	return r, tea.Batch(cmds...)
+}
+
+// route sends a key to one place, in this order: help, run, text capture, global keys, focus.
+func (r *Root) route(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	keys := r.svc.keys
+	switch {
+	case r.showHelp && !key.Matches(msg, keys.Quit):
+		if key.Matches(msg, keys.Help, keys.Back) {
+			r.showHelp = false
+		}
+		return r, nil
+	case r.run != nil:
+		return r.routeRun(msg)
+	case r.focus == focusPanel && r.panelCapturesText() && msg.String() != "ctrl+c":
+		return r.forward(msg)
+	case key.Matches(msg, keys.Quit):
+		return r.quit()
+	case key.Matches(msg, keys.Help):
+		r.showHelp = true
+		return r, nil
+	case key.Matches(msg, keys.Focus):
+		r.toggleFocus()
+		return r, nil
+	case r.focus == focusSidebar:
+		return r.routeSidebar(msg)
+	}
+	return r.routePanel(msg)
+}
+
+func (r *Root) quit() (tea.Model, tea.Cmd) {
+	for _, s := range r.sections {
+		if c, ok := s.screen.(canceller); ok {
+			c.Cancel()
+		}
+		if l, ok := s.screen.(leaver); ok {
+			l.Leave()
+		}
+	}
+	r.cancel()
+	return r, tea.Quit
+}
+
+// routeRun keeps the output pane modal: a live run takes only scrolling, ctrl+c and the reboot enter; a finished one also esc and q.
+func (r *Root) routeRun(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	keys, run := r.svc.keys, r.run
+	ctrlC := msg.String() == "ctrl+c"
+	run.notice = false
+	switch {
+	case keys.Step(msg) != 0:
+		run.scrollBy(keys.Step(msg))
+	case run.done && key.Matches(msg, keys.Quit), ctrlC && run.awaitAck && run.question == "":
+		return r.quit()
+	case run.done && key.Matches(msg, keys.Back):
+		r.run = nil
+		return r.broadcast(runClosed{err: run.err})
+	case run.done:
+	case ctrlC:
+		run.cancel()
+	case run.awaitAck && run.question == "" && key.Matches(msg, keys.Confirm):
+		run.sendAnswer(true)
+	case run.awaitAck && run.question != "" && keys.Answer(msg, false) != kit.AnswerNone:
+		run.sendAnswer(keys.Answer(msg, false) == kit.AnswerYes)
+	default:
+		run.notice = true
+	}
+	return r, nil
+}
+
+// panelFocused is true while the panel has focus or the run pane, which is modal, is shown.
+func (r *Root) panelFocused() bool { return r.focus == focusPanel || r.run != nil }
+
+func (r *Root) toggleFocus() {
+	if r.focus == focusSidebar {
+		r.focus = focusPanel
+	} else {
+		r.focus = focusSidebar
+	}
+}
+
+func (r *Root) routeSidebar(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	keys := r.svc.keys
+	if key.Matches(msg, keys.Open) {
+		r.focus = focusPanel
+	} else if delta := keys.Arrow(msg); delta != 0 {
+		r.selectSection(max(min(r.selected+delta, len(r.sections)-1), 0))
+		return r, r.active().Enter()
+	}
+	return r, nil
+}
+
+// routePanel delivers only the keys the screen's current stage lists (a screen that refreshes lists r); esc goes back to the sidebar unless the stage claims it.
+func (r *Root) routePanel(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	keys := r.svc.keys
+	switch {
+	case key.Matches(msg, r.active().Keys()...):
+		return r.forward(msg)
+	case key.Matches(msg, keys.Back):
+		r.focus = focusSidebar
+	}
+	return r, nil
+}
+
+func (r *Root) active() screen { return r.sections[r.selected].screen }
+
+// selectSection moves the selection and lets the section being left clean up.
+func (r *Root) selectSection(i int) {
+	if i != r.selected {
+		if l, ok := r.active().(leaver); ok {
+			l.Leave()
+		}
+	}
+	r.selected = i
+}
+
+// panelCapturesText reports whether the active screen is reading typed text, so shell keys such as ? and q must reach it.
+func (r *Root) panelCapturesText() bool {
+	c, ok := r.active().(textCapturer)
+	return ok && c.CapturesText()
+}
+
+func (r *Root) forward(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := r.active().Update(msg)
+	r.sections[r.selected].screen = next
+	return r, cmd
+}
+
+func (r *Root) View() tea.View {
+	v := tea.NewView(r.render())
+	v.AltScreen = true
+	return v
+}
+
+func (r *Root) render() string {
+	if r.width <= 0 || r.height <= 0 {
+		return ""
+	}
+	if r.width < minWidth || r.height < minHeight {
+		return lipgloss.NewStyle().MaxWidth(r.width).Render("Terminal too small")
+	}
+	band := r.renderNoticeBand()
+	bodyHeight := r.height - 1 - len(band)
+	sidebarCells := min(sidebarMax, r.width*2/5)
+	panelWidth := r.width - sidebarCells
+
+	var panel string
+	if r.run != nil {
+		panel = r.run.view(r.svc.th, panelWidth, bodyHeight)
+	} else {
+		panel = r.active().View(panelWidth, bodyHeight)
+	}
+	panel = lipgloss.NewStyle().MaxWidth(panelWidth).MaxHeight(bodyHeight).Render(panel)
+	titles, pinned := make([]string, len(r.sections)), 0
+	for i, s := range r.sections {
+		titles[i] = s.title
+		if s.pinned {
+			pinned++
+		}
+	}
+	body := lipgloss.JoinHorizontal(lipgloss.Top, renderSidebar(r.svc.th, titles, r.selected, pinned, r.panelFocused(), sidebarCells, bodyHeight), panel)
+	if r.showHelp {
+		body = kit.OverlayCentered(body, kit.HelpPopup(r.svc.th, r.help, r.helpGroups(), r.width, bodyHeight), r.width, bodyHeight)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, slices.Concat([]string{body}, band, []string{r.renderKeybar()})...)
+}
+
+// renderNoticeBand wraps the state warning and the active screen's notices under the panel, cut to noticeMaxLines so the panel keeps its rows.
+func (r *Root) renderNoticeBand() []string {
+	texts := []string{r.svc.StateWarning}
+	if n, ok := r.active().(noticer); ok {
+		texts = append(texts, n.Notices()...)
+	}
+	var lines []string
+	for _, text := range texts {
+		if text != "" {
+			lines = append(lines, kit.Wrap(text, r.width)...)
+		}
+	}
+	if len(lines) > noticeMaxLines {
+		lines = append(lines[:noticeMaxLines-1], fmt.Sprintf("+%d more", len(lines)-noticeMaxLines+1))
+	}
+	return styled(r.svc.th.Warning, lines)
+}
+
+// focusedKeys are the bindings valid in the current focus; the keybar and help derive from them.
+func (r *Root) focusedKeys() []key.Binding {
+	if r.run != nil {
+		return r.run.keys(r.svc.keys)
+	}
+	if r.focus == focusSidebar {
+		return sidebarKeys(r.svc.keys)
+	}
+	return r.svc.keys.PanelKeys(r.active().Keys())
+}
+
+// helpGroups lists the focused keys, then the shell keys valid everywhere.
+func (r *Root) helpGroups() [][]key.Binding {
+	return [][]key.Binding{r.focusedKeys(), slices.Concat([]key.Binding{r.svc.keys.Focus}, pinnedKeys(r.svc.keys))}
+}
+
+// sidebarKeys are the keys valid at sidebar focus.
+func sidebarKeys(k kit.KeyMap) []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Open, k.Focus}
+}
+
+// pinnedKeys stay visible at the right of the keybar however many keys the focus has.
+func pinnedKeys(k kit.KeyMap) []key.Binding { return []key.Binding{k.Help, k.Quit} }
+
+// pinnedKeys are the right-hand keys: a live run answers neither ? nor q, a finished one only q.
+func (r *Root) pinnedKeys() []key.Binding {
+	switch {
+	case r.run == nil && r.focus == focusPanel && r.panelCapturesText():
+		return []key.Binding{kit.Described(r.svc.keys.CancelRun, "quit")}
+	case r.run == nil:
+		return pinnedKeys(r.svc.keys)
+	case r.run.done:
+		return []key.Binding{r.svc.keys.Quit}
+	}
+	return nil
+}
+
+func (r *Root) renderKeybar() string {
+	return keybar(r.svc.th, r.help, r.focusedKeys(), r.pinnedKeys(), r.dryRun, r.width)
+}

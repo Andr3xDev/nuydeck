@@ -1,0 +1,10 @@
+version = 1
+
+[roots]
+config = "~/.config"
+home   = "~"
+
+[[entry]]
+root = "config"
+colour = "x"
+path = "hypr"

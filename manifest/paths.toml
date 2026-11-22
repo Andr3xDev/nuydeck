@@ -1,0 +1,166 @@
+version = 1
+
+[roots]
+config = "~/.config"
+home   = "~"
+fonts  = "~/.local/share/fonts"
+themes = "~/.themes"
+
+# config root
+[[entry]]
+root = "config"
+path = "awww"
+
+[[entry]]
+root = "config"
+path = "btop"
+
+[[entry]]
+root = "config"
+path = "dunst"
+
+[[entry]]
+root = "config"
+path = "fastfetch"
+
+[[entry]]
+root = "config"
+path = "ghostty"
+
+[[entry]]
+root = "config"
+path = "gtk-3.0"
+
+[[entry]]
+root = "config"
+path = "hypr"
+
+[[entry]]
+root = "config"
+path = "kotofetch"
+
+[[entry]]
+root = "config"
+path = "lazygit"
+
+[[entry]]
+root = "config"
+path = "nvim"
+
+[[entry]]
+root = "config"
+path = "nwg-look"
+
+[[entry]]
+root = "config"
+path = "quickshell/lucyna"
+
+[[entry]]
+root = "config"
+path = "satty"
+
+[[entry]]
+root = "config"
+path = "starship"
+
+[[entry]]
+root = "config"
+path = "xsettingsd"
+
+[[entry]]
+root = "config"
+path = "yazi"
+
+[[entry]]
+root = "config"
+path = "wallpapers"
+
+[[entry]]
+root = "config"
+path = "systemd/user/lucyna-clipboard-wipe.service"
+
+[[entry]]
+root = "config"
+path = "systemd/user/lucyna-clipboard-wipe.timer"
+
+[[entry]]
+root = "config"
+path = "nuydeck/lib"
+
+[[entry]]
+root = "config"
+path = "nuydeck/scripts"
+
+[[entry]]
+root = "config"
+path = "git/ignore"
+
+# home root
+[[entry]]
+root = "home"
+path = ".zshrc"
+
+[[entry]]
+root = "home"
+path = ".gtkrc-2.0"
+
+[[entry]]
+root = "home"
+path = ".icons/default/index.theme"
+
+[[entry]]
+root = "home"
+path = ".local/bin/claude-out-context"
+
+[[entry]]
+root = "home"
+path = ".local/bin/codegraph-health"
+
+# fonts root
+[[entry]]
+root = "fonts"
+path = "Geist"
+
+[[entry]]
+root = "fonts"
+path = "soulmaze"
+
+[[exclude]]
+root = "config"
+pattern = "hypr/configs/monitors_generated.lua"
+
+[[exclude]]
+root = "config"
+pattern = "hypr/configs/gpu_env.lua"
+
+[[exclude]]
+root = "config"
+pattern = "quickshell/lucyna/legacy/monitors/data/identities.json"
+
+[[exclude]]
+root = "config"
+pattern = "systemd/user/*.wants/"
+
+[[exclude]]
+root = "config"
+pattern = "nuydeck/logs/"
+
+[[exclude]]
+root = "config"
+pattern = "nuydeck/theme/"
+
+[[exclude]]
+root = "config"
+pattern = "nvim/lazy-lock.json"
+
+[[exclude]]
+root = "fonts"
+pattern = "Geist/.uuid"
+
+[[exclude]]
+root = "fonts"
+pattern = "Geist/static/.uuid"
+
+[[exclude]]
+root = "fonts"
+pattern = "soulmaze/.uuid"

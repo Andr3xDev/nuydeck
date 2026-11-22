@@ -12,7 +12,7 @@
 #　　 　 /　　　 　 |
 #　　　 /　 ヽ　　 ﾉ
 #　 　 │　　|　|　|         AUTHOR:  Andr3xDev
-#　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/hypr-abysal
+#　／￣|　　 |　|　|        URL: https://github.com/Andr3xDev/nuydeck
 #　| (￣ヽ＿_ヽ_)__)
 #　＼二つ
 #--------------------------------------------------------------------------------
@@ -50,7 +50,7 @@ ueberzug_offset = [0, 0, 0, 0]
 edit = [
   { run = '${EDITOR:-nvim} %s', desc = "$EDITOR", for = "unix", block = true },
 ]
-open_browser = [{ run = 'firefox %s', desc = "Firefox", for = "linux" }]
+open_browser = [{ run = '$BROWSER %s', desc = "Browser", for = "linux" }]
 office = [
   { run = 'libreoffice %s', orphan = true, desc = "LibreOffice", for = "linux" },
 ]

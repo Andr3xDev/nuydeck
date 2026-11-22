@@ -11,7 +11,7 @@ return function(tokens)
     color.border_active = color.turquoise
     color.border_inactive = color.border
     color.border_urgent = color.red
-    color.shadow_active = "rgba(11111b70)"
+    color.shadow_active = "rgba(15151566)"
     color.shadow_inactive = "rgba(00000000)"
 
     color.lock_backsurface = color.bg

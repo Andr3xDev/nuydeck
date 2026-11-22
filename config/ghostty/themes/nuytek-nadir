@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# Nuytek Nadir
+# Ghostty terminal color scheme for the Nuytek Nadir theme
+# ---------------------------------------------------------------------------
+
+# General stuff — Nuytek Nadir
+background = #151515
+foreground = #E9EDEB
+cursor-color = #5AE2DD
+cursor-text = #151515
+selection-background = #143937
+selection-foreground = #E9EDEB
+
+# Negro / gris — neutros
+palette = 0 = #232323
+palette = 8 = #72837D
+
+# Rojo — semáforo (error)
+palette = 1 = #EF616D
+palette = 9 = #EF616D
+
+# Verde — semáforo (éxito)
+palette = 2 = #67E4B2
+palette = 10 = #67E4B2
+
+# Amarillo/naranja — semáforo (warning/peligro)
+palette = 3 = #ECEC8D
+palette = 11 = #ECEC8D
+
+# Azul → slot que `ls`/LS_COLORS usa para directorios
+palette = 4 = #5AE2DD
+palette = 12 = #5AE2DD
+
+# Magenta → slot que ya usas para comandos (zsh-syntax-highlighting)
+palette = 5 = #A6D5F2
+palette = 13 = #5AE2DD
+
+# Cian — identidad terciaria, uso raro
+palette = 6 = #A6D5F2
+palette = 14 = #A6D5F2
+
+# Blanco
+palette = 7 = #A7B4B0
+palette = 15 = #E9EDEB

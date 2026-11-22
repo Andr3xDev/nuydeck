@@ -2,113 +2,123 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "./primitives" as Primitives
+import "../persistence"
+import "./primitives/nuytek" as Primitives
 
 /*!
     ThemeManager — Singleton facade for the design token system.
 
     Single import point for all consumers. Manages the active theme,
-    persists the selection to disk, and exposes the active palette's
-    primitives via `p` for Tokens.qml to build the public token API on.
+    persists name and variant as plain-text files in the nuydeck theme
+    hub, and exposes the active palette's primitives via `p` for
+    Tokens.qml to build the public token API on.
 */
 QtObject {
     id: themeManager
 
-    // ── Active theme ──────────────────────────────────────
-    property string currentTheme: "abysal-obsidian"
-    property string _pendingSaveJson: ""
+    property string currentTheme: "nuytek"
+    property string currentVariant: "nadir"
 
-    readonly property var availableThemes: [
-        "abysal-obsidian"
-    ]
-
-    // ── Persistence ───────────────────────────────────────
-    readonly property string _dataFilePath:
-        Quickshell.shellDir + "/core/theme/data/theme.json"
-
-    readonly property string _loadScript:
-        "import sys,json,pathlib; p=pathlib.Path(sys.argv[1]); d={'theme':'abysal-obsidian'};\n" +
-        "try:\n" +
-        " s=p.read_text() if p.exists() else ''\n" +
-        " if s.strip():\n" +
-        "  raw=json.loads(s)\n" +
-        "  d['theme']=raw.get('theme','abysal-obsidian')\n" +
-        "except Exception:\n" +
-        " pass\n" +
-        "print(json.dumps(d))"
-
-    readonly property string _saveScript:
-        "import sys,os; p=sys.argv[1]; os.makedirs(os.path.dirname(p), exist_ok=True); open(p,'w').write(sys.argv[2])"
-
-    property Process _loadProc: Process {
-        running: false
-        command: ["python3", "-c", themeManager._loadScript, themeManager._dataFilePath]
-        stdout: SplitParser {
-            onRead: data => themeManager._loadPersistedTheme(data)
-        }
-    }
-
-    property Process _saveProc: Process {
-        running: false
-        onExited: {
-            if (themeManager._pendingSaveJson.length > 0) {
-                const nextJson = themeManager._pendingSaveJson
-                themeManager._pendingSaveJson = ""
-                themeManager._writePersistedTheme(nextJson)
+    readonly property var _themes: ({
+        nuytek: {
+            displayName: "Nuytek",
+            defaultVariant: "nadir",
+            variants: {
+                nadir: Primitives.Nadir,
+                zenit: Primitives.Zenit
             }
         }
+    })
+
+    readonly property var availableThemes: Object.keys(_themes)
+    readonly property var availableVariants: Object.keys((_themes[currentTheme] ? _themes[currentTheme].variants : undefined) ?? {})
+
+    // Emitted when every outstanding theme file write has finished (success, skipped or failure).
+    signal persisted()
+
+    // Theme hub shared with other tools (nuydeck scripts read these as plain text).
+    property string _stateDir: Quickshell.env("HOME") + "/.config/nuydeck/theme"
+
+    property bool _persistPending: false
+
+    property CoalescedWriter _nameWriter: CoalescedWriter {
+        path: themeManager._stateDir + "/name"
+        onDone: themeManager._onWriterSettled()
+        onFailed: reason => themeManager._onWriterFailed(reason)
+    }
+
+    property CoalescedWriter _variantWriter: CoalescedWriter {
+        path: themeManager._stateDir + "/variant"
+        onDone: themeManager._onWriterSettled()
+        onFailed: reason => themeManager._onWriterFailed(reason)
     }
 
     Component.onCompleted: _loadFromDisk()
 
+    // Own-property lookup: ids come from user-editable files, and plain indexing would match prototype keys ("constructor").
+    function _own(object, key) {
+        return Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined
+    }
+
     function _loadFromDisk() {
-        if (_loadProc.running) return
-        _loadProc.running = true
+        const storedTheme = _nameWriter.loadedText().trim()
+        const themeId = _own(_themes, storedTheme) ? storedTheme : "nuytek"
+        const variantId = _variantWriter.loadedText().trim()
+        currentTheme = themeId
+        currentVariant = _own(_themes[themeId].variants, variantId)
+            ? variantId
+            : _themes[themeId].defaultVariant
     }
 
-    function _loadPersistedTheme(text) {
-        if (!text || !text.trim()) return
-        try {
-            const data = JSON.parse(text)
-            const loaded = data.theme
-            if (loaded && availableThemes.includes(loaded))
-                currentTheme = loaded
-        } catch (e) {}
+    function _writeValue(writer, value) {
+        _persistPending = true
+        writer.write(value + "\n")
     }
 
-    function _writePersistedTheme(payloadJson) {
-        if (_saveProc.running) {
-            _pendingSaveJson = payloadJson
-            return
-        }
-        _saveProc.command = ["python3", "-c", _saveScript, _dataFilePath, payloadJson]
-        _saveProc.running = true
+    function _onWriterFailed(reason) {
+        console.warn("ThemeManager: " + reason)
+        _onWriterSettled()
     }
 
-    // ── Primitive resolution (layer 1 — new token system, additive) ───
-    readonly property var _primitivePalettes: ({
-        "abysal-obsidian": Primitives.Nerita
-    })
+    function _onWriterSettled() {
+        if (!_persistPending || !_nameWriter.idle || !_variantWriter.idle) return
+        _persistPending = false
+        persisted()
+    }
 
-    readonly property QtObject p: _primitivePalettes[currentTheme] ?? Primitives.Nerita
+    readonly property QtObject p:
+        (_themes[currentTheme] ? _themes[currentTheme].variants[currentVariant] : undefined) ?? Primitives.Nadir
 
-    // ── Public API ────────────────────────────────────────
     function setTheme(themeName) {
-        if (!availableThemes.includes(themeName)) return false
+        if (!_own(_themes, themeName)) return false
         currentTheme = themeName
-        _writePersistedTheme(JSON.stringify({ theme: themeName }))
+        currentVariant = _themes[themeName].defaultVariant
+        _writeValue(_nameWriter, currentTheme)
+        _writeValue(_variantWriter, currentVariant)
+        return true
+    }
+
+    function setVariant(variantId) {
+        const variants = (_themes[currentTheme] ? _themes[currentTheme].variants : undefined) ?? {}
+        if (!_own(variants, variantId)) return false
+        currentVariant = variantId
+        _writeValue(_variantWriter, currentVariant)
         return true
     }
 
     function getThemeDisplayName(themeName) {
-        const primitive = _primitivePalettes[themeName]
-        return primitive ? primitive.name : themeName
+        const theme = _themes[themeName]
+        return theme ? theme.displayName : themeName
     }
 
-    // Preview swatch colors for a given theme id — used by ThemeList to
-    // render a dot row per listed theme, not just the active one.
-    function previewColors(themeName) {
-        const primitive = _primitivePalettes[themeName] ?? Primitives.Nerita
+    function getVariantDisplayName(variantId) {
+        const primitive = _themes[currentTheme] ? _themes[currentTheme].variants[variantId] : undefined
+        return primitive ? primitive.name : variantId
+    }
+
+    // Swatch colors for any variant id, not only the active one.
+    function previewColors(variantId) {
+        const primitive = (_themes[currentTheme] ? _themes[currentTheme].variants[variantId] : undefined) ?? Primitives.Nadir
         return [primitive.neutral.bg, primitive.hue.turquoise.fill, primitive.hue.aquamarine.fill]
     }
 }
