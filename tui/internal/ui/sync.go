@@ -15,6 +15,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -32,7 +33,7 @@ type applyDoneMsg struct{ result cfgsync.ApplyResult }
 type Sync struct {
 	svc   *shell
 	flow  *flow
-	pick  *choicePick // the open Normal/Hard popup, nil when closed
+	pick  *kit.ChoicePick // the open Normal/Hard popup, nil when closed
 	dir   plan.Direction
 	scope []manifest.ResolvedEntry // the entries the open popup will plan; empty means every managed entry
 
@@ -50,7 +51,7 @@ func (s *Sync) Keys() []key.Binding {
 	case s.flow.active():
 		return s.flow.Keys()
 	case s.pick != nil:
-		return append(k.move(), k.Confirm, k.Back)
+		return append(k.Move(), k.Confirm, k.Back)
 	}
 	return []key.Binding{k.Pull, k.Push}
 }
@@ -67,7 +68,7 @@ func (s *Sync) openMode(dir plan.Direction, scope []manifest.ResolvedEntry) tea.
 		return s.startPlan(dir, scope)
 	}
 	// The popup is too narrow for direction and scope together: a partial run shows the scope alone, the flow title shows both.
-	s.pick = &choicePick{title: cmp.Or(s.scopeNames(scope), directionLabel(dir)), options: []string{normalModeText, hardModeText}}
+	s.pick = &kit.ChoicePick{Title: cmp.Or(s.scopeNames(scope), directionLabel(dir)), Options: []string{normalModeText, hardModeText}}
 	s.dir, s.scope = dir, scope
 	if s.flow != nil {
 		s.flow.reset() // cancels a plan still being computed
@@ -93,7 +94,7 @@ func (s *Sync) scopeNames(scope []manifest.ResolvedEntry) string {
 	for i, e := range scope {
 		names[i] = fmt.Sprintf("%s:%s", e.Root, e.Path)
 	}
-	return sanitizeLine(strings.Join(names, ", "))
+	return kit.SanitizeLine(strings.Join(names, ", "))
 }
 
 // scoped is the entries a run covers: the scope, or every managed entry when there is none.
@@ -106,8 +107,8 @@ func (s *Sync) scoped(scope []manifest.ResolvedEntry) []manifest.ResolvedEntry {
 
 // updatePick moves the choice, takes it on enter and closes the popup on esc.
 func (s *Sync) updatePick(msg tea.KeyPressMsg) tea.Cmd {
-	picked, closed := s.pick.update(s.svc.keys, msg)
-	hard := s.pick.cursor == 1
+	picked, closed := s.pick.Update(s.svc.keys, msg)
+	hard := s.pick.Cursor == 1
 	if closed || picked {
 		s.pick = nil
 	}
@@ -146,7 +147,7 @@ func (s *Sync) openDriftView(e manifest.ResolvedEntry, r drift.DriftResult) tea.
 	if s.svc.PlanSync == nil {
 		return nil
 	}
-	title := "drift · " + sanitizeLine(fmt.Sprintf("%s:%s", e.Root, e.Path))
+	title := "drift · " + kit.SanitizeLine(fmt.Sprintf("%s:%s", e.Root, e.Path))
 	s.pick, s.viewOnly = nil, true
 	s.flow = newFlow(s.svc, flowSource{
 		Title: title,
@@ -172,7 +173,7 @@ func (s *Sync) openDriftView(e manifest.ResolvedEntry, r drift.DriftResult) tea.
 func driftReason(r drift.DriftResult) string {
 	switch {
 	case r.State == drift.DriftError && r.Err != nil:
-		return "drift check failed: " + sanitizeLine(strings.Join(strings.Fields(r.Err.Error()), " "))
+		return "drift check failed: " + kit.SanitizeLine(strings.Join(strings.Fields(r.Err.Error()), " "))
 	case r.State == drift.DriftError:
 		return "drift check failed"
 	case r.Missing == drift.MissingInRepo:
@@ -192,7 +193,7 @@ func (v driftViewStaged) Keys() []key.Binding {
 	if v.sub != subNone {
 		return v.syncStaged.Keys()
 	}
-	return append(v.svc.keys.move(), v.svc.keys.Diff)
+	return append(v.svc.keys.Move(), v.svc.keys.Diff)
 }
 
 func (s *Sync) Update(msg tea.Msg) (screen, tea.Cmd) {
@@ -238,12 +239,12 @@ func (s *Sync) View(width, height int) string {
 	if s.flow.active() {
 		return s.flow.box(s.Title(), width, height)
 	}
-	hint := styled(s.svc.th.muted, wrap("Press p to pull or P to push.", contentWidth(width)))
+	hint := styled(s.svc.th.Muted, kit.Wrap("Press p to pull or P to push.", kit.ContentWidth(width)))
 	base := screenBox(s.svc.th, s.Title(), hint, width, height)
 	if s.pick == nil {
 		return base
 	}
-	return overlayCentered(base, s.pick.popup(s.svc.th, width), width, height)
+	return kit.OverlayCentered(base, s.pick.Popup(s.svc.th, width), width, height)
 }
 
 // syncApply is what the owner confirmed: the plan, the selection and the answer to the backup offer.
@@ -337,7 +338,7 @@ func (h hardStaged) Keys() []key.Binding {
 	if h.sub != subNone {
 		return h.syncStaged.Keys()
 	}
-	return append(h.svc.keys.move(), h.svc.keys.Diff)
+	return append(h.svc.keys.Move(), h.svc.keys.Diff)
 }
 
 func (h hardStaged) Build(bool) plan.Plan {
@@ -361,7 +362,7 @@ type syncStaged struct {
 	sides       map[cfgsync.ItemKey]*sideState
 	diffWanted  bool // the owner asked for the diff of the item under the cursor before its sides were read
 	sub         subStage
-	subScroll   scroller
+	subScroll   kit.Scroller
 	pending     *editedMsg // the edit result waiting for y or n
 	editNotices []string
 }
@@ -381,8 +382,8 @@ func (st *syncStaged) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return st.updateSub(msg)
 	}
 	switch {
-	case k.step(msg) != 0:
-		st.cursor = moveCursor(st.cursor, k.step(msg), len(st.syncPlan.Items))
+	case k.Step(msg) != 0:
+		st.cursor = kit.MoveCursor(st.cursor, k.Step(msg), len(st.syncPlan.Items))
 		st.diffWanted = false
 		return st.Load()
 	case key.Matches(msg, k.Toggle):
@@ -471,7 +472,7 @@ func (st *syncStaged) selectedCount() int {
 	return n
 }
 
-func (st *syncStaged) View(th theme, w, h int) []string {
+func (st *syncStaged) View(th kit.Theme, w, h int) []string {
 	if st.sub == subDiff {
 		return st.diffView(th, w, h)
 	}
@@ -479,20 +480,20 @@ func (st *syncStaged) View(th theme, w, h int) []string {
 	if st.readOnly {
 		header = fmt.Sprintf("%d items", len(st.syncPlan.Items))
 	}
-	lines := []string{th.title.Render(truncate(header, w))}
+	lines := []string{th.Title.Render(kit.Truncate(header, w))}
 	if len(st.syncPlan.Items) == 0 {
-		return append(lines, styled(th.muted, wrap(cmp.Or(st.emptyText, "Nothing to sync."), w))...)
+		return append(lines, styled(th.Muted, kit.Wrap(cmp.Or(st.emptyText, "Nothing to sync."), w))...)
 	}
 	var popup []string
 	if st.sub == subResult {
 		popup = st.resultView(th, w, max(h/2, minPopupLines))
 	}
-	rows := make([]listRow, len(st.syncPlan.Items))
+	rows := make([]kit.ListRow, len(st.syncPlan.Items))
 	for i, it := range st.syncPlan.Items {
 		rows[i] = st.row(it, w)
 	}
-	list, at := listLines(th, rows, st.cursor, w)
-	lines = append(lines, windowAround(list, at, max(h-len(lines)-len(popup), 1))...)
+	list, at := kit.ListLines(th, rows, st.cursor, w)
+	lines = append(lines, kit.WindowAround(list, at, max(h-len(lines)-len(popup), 1))...)
 	return append(lines, popup...)
 }
 
@@ -522,7 +523,7 @@ func (st *syncStaged) marker(it cfgsync.PlanItem) string {
 }
 
 // row is the plan item list row; narrow panels drop the repo and PC times.
-func (st *syncStaged) row(it cfgsync.PlanItem, w int) listRow {
+func (st *syncStaged) row(it cfgsync.PlanItem, w int) kit.ListRow {
 	label := strings.TrimSpace(st.marker(it) + " " + changeLabel(it.Change.Type))
 	line := fmt.Sprintf("%s %s:%s", label, it.Change.Entry.Root, it.Key().Path)
 	if s := st.sides[it.Key()]; s != nil && !s.loaded {
@@ -531,7 +532,7 @@ func (st *syncStaged) row(it cfgsync.PlanItem, w int) listRow {
 	if w >= wideRowWidth {
 		line += fmt.Sprintf("  repo %s  pc %s", timeText(it.RepoTime), timeText(it.PCTime))
 	}
-	return listRow{text: line, badges: badges(it), muted: it.Blocked}
+	return kit.ListRow{Text: line, Badges: badges(it), Muted: it.Blocked}
 }
 
 func resultLines(res cfgsync.ApplyResult) []string {
@@ -539,7 +540,7 @@ func resultLines(res cfgsync.ApplyResult) []string {
 	for _, o := range res.Outcomes {
 		switch del, isDelete := o.Step.(plan.DeleteStep); {
 		case o.Result.Detail == plan.KeptNotEmpty && isDelete:
-			lines = append(lines, sanitizeLine(fmt.Sprintf("%s: %s", del.Path, o.Result.Detail)))
+			lines = append(lines, kit.SanitizeLine(fmt.Sprintf("%s: %s", del.Path, o.Result.Detail)))
 		case o.Result.Status == plan.StepWouldApply || o.Result.Detail == plan.KeptNotEmpty:
 			lines = append(lines, o.Result.Detail)
 		}

@@ -12,6 +12,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/backup"
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 type backupsMsg struct {
@@ -25,8 +26,8 @@ type Backups struct {
 	svc         *shell
 	listBackups func(ctx context.Context) ([]backup.Backup, error)
 	planRestore func(ctx context.Context, b backup.Backup) (cfgsync.SyncPlan, error)
-	keys        keyMap
-	th          theme
+	keys        kit.KeyMap
+	th          kit.Theme
 	gen         int // drops a list that arrives after a newer load
 	backups     []backup.Backup
 	marks       map[string]bool // keyed by Backup.Dir
@@ -57,7 +58,7 @@ func (b *Backups) Keys() []key.Binding {
 	if b.flow.active() {
 		return b.flow.Keys()
 	}
-	keys := b.keys.move()
+	keys := b.keys.Move()
 	if len(b.backups) > 0 {
 		keys = append(keys, b.keys.Toggle, b.keys.All)
 		if b.svc.RunPlan != nil {
@@ -127,8 +128,8 @@ func (b *Backups) handleKey(msg tea.KeyPressMsg) (screen, tea.Cmd) {
 	if b.flow.active() {
 		return b, b.flow.Update(msg)
 	}
-	if delta := b.keys.step(msg); delta != 0 {
-		b.cursor = moveCursor(b.cursor, delta, len(b.backups))
+	if delta := b.keys.Step(msg); delta != 0 {
+		b.cursor = kit.MoveCursor(b.cursor, delta, len(b.backups))
 		return b, nil
 	}
 	sel, ok := b.selected()
@@ -211,42 +212,42 @@ func (b *Backups) startPlanFlow(title string, planFn func(context.Context) (plan
 	return b.flow.start()
 }
 
-var backupColumns = []column{
-	{title: "Date"},
-	{title: "Direction", priority: 3},
-	{title: "Files", priority: 2},
-	{title: "Flag", priority: 1},
+var backupColumns = []kit.Column{
+	{Title: "Date"},
+	{Title: "Direction", Priority: 3},
+	{Title: "Files", Priority: 2},
+	{Title: "Flag", Priority: 1},
 }
 
 func (b *Backups) View(width, height int) string {
 	if b.flow.active() {
 		return b.flow.box(b.Title(), width, height)
 	}
-	cw := contentWidth(width)
+	cw := kit.ContentWidth(width)
 	inner := innerHeight(height)
 	var lines []string
 	if b.err != nil {
-		lines = append(lines, styled(b.th.err, wrap(b.err.Error(), cw))...)
+		lines = append(lines, styled(b.th.Err, kit.Wrap(b.err.Error(), cw))...)
 	}
 	if len(b.backups) == 0 {
-		lines = append(lines, b.th.muted.Render("No backups yet."))
+		lines = append(lines, b.th.Muted.Render("No backups yet."))
 		return screenBox(b.th, "Backups", lines, width, height)
 	}
-	lines = append(lines, b.th.title.Render(fmt.Sprintf("%d backups, newest first", len(b.backups))))
-	rows := make([]tableRow, len(b.backups))
+	lines = append(lines, b.th.Title.Render(fmt.Sprintf("%d backups, newest first", len(b.backups))))
+	rows := make([]kit.TableRow, len(b.backups))
 	for i, bk := range b.backups {
-		rows[i] = tableRow{cells: []string{
+		rows[i] = kit.TableRow{Cells: []string{
 			checkbox(b.marks[bk.Dir]) + " " + bk.Created.Format(timeLayout),
 			directionLabel(bk.Direction),
 			strconv.Itoa(len(bk.Files)),
 			flag(bk),
 		}}
 	}
-	header, list, at := tableLines(b.th, backupColumns, rows, b.cursor, cw)
+	header, list, at := kit.TableLines(b.th, backupColumns, rows, b.cursor, cw)
 	lines = append(lines, header)
-	lines = append(lines, windowAround(list, at, max((inner-len(lines))/2, 1))...)
+	lines = append(lines, kit.WindowAround(list, at, max((inner-len(lines))/2, 1))...)
 	sel := b.backups[b.cursor]
-	lines = append(lines, "", b.th.title.Render(truncate(sanitizeLine(sel.Dir), cw)))
+	lines = append(lines, "", b.th.Title.Render(kit.Truncate(kit.SanitizeLine(sel.Dir), cw)))
 	room := max(inner-len(lines), 1)
 	files := make([]string, 0, min(len(sel.Files), room))
 	for _, f := range sel.Files {
@@ -254,7 +255,7 @@ func (b *Backups) View(width, height int) string {
 			files = append(files, fmt.Sprintf("... %d more", len(sel.Files)-room+1))
 			break
 		}
-		files = append(files, truncate(sanitizeLine(f), cw))
+		files = append(files, kit.Truncate(kit.SanitizeLine(f), cw))
 	}
 	return screenBox(b.th, "Backups", append(lines, files...), width, height)
 }

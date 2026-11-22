@@ -1,4 +1,4 @@
-package ui
+package kit
 
 import (
 	"strings"
@@ -8,23 +8,23 @@ import (
 )
 
 const (
-	borderCells = 2 // left + right (or top + bottom) border
+	BorderCells = 2 // left + right (or top + bottom) border
 	boxPadding  = 1 // blank cell between the left border and the content
 )
 
-// contentWidth is the width available to lines passed to renderBox for a box w cells wide.
-func contentWidth(w int) int { return max(w-borderCells-boxPadding, 0) }
+// ContentWidth is the width available to lines passed to RenderBox for a box w cells wide.
+func ContentWidth(w int) int { return max(w-BorderCells-boxPadding, 0) }
 
-// renderBox draws a rounded border w x h with the title embedded in the top border.
-// lines must already fit contentWidth(w); extra lines are cut, missing ones padded.
-func renderBox(t theme, title string, lines []string, w, h int, focused bool) string {
-	border := t.borderFor(focused)
-	innerW, innerH := w-borderCells, h-borderCells
+// RenderBox draws a rounded border w x h with the title embedded in the top border.
+// lines must already fit ContentWidth(w); extra lines are cut, missing ones padded.
+func RenderBox(t Theme, title string, lines []string, w, h int, focused bool) string {
+	border := t.BorderFor(focused)
+	innerW, innerH := w-BorderCells, h-BorderCells
 	b := lipgloss.RoundedBorder()
 
 	// head adds 2 spaces and the top row 3 corner/dash cells around the title.
 	title = lipgloss.NewStyle().MaxWidth(max(innerW-3, 0)).Render(title)
-	head := " " + t.title.Render(title) + " "
+	head := " " + t.Title.Render(title) + " "
 	fill := max(innerW-lipgloss.Width(head)-1, 0)
 	top := border.Render(b.TopLeft+b.Top) + head + border.Render(strings.Repeat(b.Top, fill)+b.TopRight)
 
@@ -41,8 +41,8 @@ func renderBox(t theme, title string, lines []string, w, h int, focused bool) st
 	return strings.Join(rows, "\n")
 }
 
-// truncate cuts plain text to width cells, ending with an ellipsis when cut.
-func truncate(text string, width int) string {
+// Truncate cuts plain text to width cells, ending with an ellipsis when cut.
+func Truncate(text string, width int) string {
 	if lipgloss.Width(text) <= width {
 		return text
 	}
@@ -68,12 +68,12 @@ func sanitize(text string) string {
 	}, text)
 }
 
-// sanitizeLine is sanitize for single-line text: newlines are dropped too.
-func sanitizeLine(text string) string {
+// SanitizeLine is sanitize for single-line text: newlines are dropped too.
+func SanitizeLine(text string) string {
 	return strings.ReplaceAll(sanitize(text), "\n", "")
 }
 
-// wrap sanitizes and wraps plain, unstyled text; every file-derived string goes through it.
-func wrap(text string, width int) []string {
+// Wrap sanitizes and wraps plain, unstyled text; every file-derived string goes through it.
+func Wrap(text string, width int) []string {
 	return strings.Split(lipgloss.NewStyle().Width(max(width, 1)).Render(sanitize(text)), "\n")
 }

@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -34,7 +35,7 @@ func (c *Config) Keys() []key.Binding {
 	case c.flow.active():
 		return c.flow.Keys()
 	case c.canUpdate():
-		return []key.Binding{described(c.svc.keys.Confirm, "update TUI")}
+		return []key.Binding{kit.Described(c.svc.keys.Confirm, "update TUI")}
 	}
 	return nil
 }
@@ -82,7 +83,7 @@ func (c *Config) View(width, height int) string {
 	if c.flow.active() {
 		return c.flow.box(c.Title(), width, height)
 	}
-	th, cw := c.svc.th, contentWidth(width)
+	th, cw := c.svc.th, kit.ContentWidth(width)
 	dryRun := offLabel
 	if c.svc.dryRun {
 		dryRun = onLabel
@@ -92,12 +93,12 @@ func (c *Config) View(width, height int) string {
 		repoPath = repoNotFoundText
 	}
 	lines := []string{
-		truncate(sanitizeLine(fmt.Sprintf("Repo path:   %s", repoPath)), cw),
-		truncate(sanitizeLine(fmt.Sprintf("Backups dir: %s", c.svc.Config.BackupsDir)), cw),
+		kit.Truncate(kit.SanitizeLine(fmt.Sprintf("Repo path:   %s", repoPath)), cw),
+		kit.Truncate(kit.SanitizeLine(fmt.Sprintf("Backups dir: %s", c.svc.Config.BackupsDir)), cw),
 		fmt.Sprintf("Dry-run:     %s", dryRun),
 	}
 	if c.canUpdate() {
-		lines = append(lines, "", th.title.Render(configUpdateLabel), th.muted.Render("enter updates nuydeck"))
+		lines = append(lines, "", th.Title.Render(configUpdateLabel), th.Muted.Render("enter updates nuydeck"))
 	}
 	return screenBox(th, c.Title(), lines, width, height)
 }

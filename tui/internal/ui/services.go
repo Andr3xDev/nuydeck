@@ -11,6 +11,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/services"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -77,8 +78,8 @@ func (s *Services) wired() bool { return s.svc.Services.Plan != nil && s.svc.Run
 func (s *Services) actions() []serviceAction {
 	k := s.svc.keys
 	return []serviceAction{
-		{described(k.Edit, "enable"), plan.ActionEnable},
-		{described(k.Delete, "disable"), plan.ActionDisable},
+		{kit.Described(k.Edit, "enable"), plan.ActionEnable},
+		{kit.Described(k.Delete, "disable"), plan.ActionDisable},
 		{k.Start, plan.ActionStart},
 		{k.Stop, plan.ActionStop},
 		{k.Restart, plan.ActionRestart},
@@ -93,7 +94,7 @@ func (s *Services) Keys() []key.Binding {
 		return s.flow.Keys()
 	}
 	k := s.svc.keys
-	keys := append(k.move(), k.Refresh)
+	keys := append(k.Move(), k.Refresh)
 	if s.wired() {
 		for _, a := range s.actions() {
 			keys = append(keys, a.binding)
@@ -170,8 +171,8 @@ func (s *Services) Update(msg tea.Msg) (screen, tea.Cmd) {
 
 func (s *Services) listKey(msg tea.KeyPressMsg) tea.Cmd {
 	k := s.svc.keys
-	if delta := k.step(msg); delta != 0 {
-		s.cursor = moveCursor(s.cursor, delta, len(s.rows))
+	if delta := k.Step(msg); delta != 0 {
+		s.cursor = kit.MoveCursor(s.cursor, delta, len(s.rows))
 		return nil
 	}
 	if key.Matches(msg, k.Refresh) {
@@ -246,47 +247,47 @@ func (s *Services) View(width, height int) string {
 	if s.flow.active() {
 		return s.flow.box(s.Title(), width, height)
 	}
-	th, cw := s.svc.th, contentWidth(width)
+	th, cw := s.svc.th, kit.ContentWidth(width)
 	var lines []string
 	for _, scope := range []plan.Scope{plan.ScopeSystem, plan.ScopeUser} {
 		if read := s.reads[scope]; read.err != nil {
-			lines = append(lines, styled(th.err, wrap(read.err.Error(), cw))...)
+			lines = append(lines, styled(th.Err, kit.Wrap(read.err.Error(), cw))...)
 		}
 	}
 	if s.err != nil {
-		lines = append(lines, styled(th.err, wrap(s.err.Error(), cw))...)
+		lines = append(lines, styled(th.Err, kit.Wrap(s.err.Error(), cw))...)
 	}
 	if s.notice != "" {
-		lines = append(lines, styled(th.warning, wrap(s.notice, cw))...)
+		lines = append(lines, styled(th.Warning, kit.Wrap(s.notice, cw))...)
 	}
 	if len(s.rows) == 0 {
-		return screenBox(th, s.Title(), append(lines, th.muted.Render("No managed services.")), width, height)
+		return screenBox(th, s.Title(), append(lines, th.Muted.Render("No managed services.")), width, height)
 	}
-	lines = append(lines, th.title.Render(fmt.Sprintf("%d managed services", len(s.rows))))
-	rows := make([]tableRow, len(s.rows))
+	lines = append(lines, th.Title.Render(fmt.Sprintf("%d managed services", len(s.rows))))
+	rows := make([]kit.TableRow, len(s.rows))
 	for i, e := range s.rows {
 		rows[i] = s.row(e)
 	}
-	header, list, at := tableLines(th, serviceColumns, rows, s.cursor, cw)
+	header, list, at := kit.TableLines(th, serviceColumns, rows, s.cursor, cw)
 	lines = append(lines, header)
 	room := max(innerHeight(height)-len(lines)-2, 1)
-	lines = append(lines, windowAround(list, at, room)...)
+	lines = append(lines, kit.WindowAround(list, at, room)...)
 	if desc := s.rows[s.cursor].Description; desc != "" {
-		lines = append(lines, "", th.muted.Render(truncate(sanitizeLine(desc), cw)))
+		lines = append(lines, "", th.Muted.Render(kit.Truncate(kit.SanitizeLine(desc), cw)))
 	}
 	return screenBox(th, s.Title(), lines, width, height)
 }
 
-var serviceColumns = []column{
-	{title: "Unit"},
-	{title: "Scope", priority: 3},
-	{title: "Enabled", priority: 2},
-	{title: "Active", priority: 2},
-	{title: "Flags", priority: 1},
+var serviceColumns = []kit.Column{
+	{Title: "Unit"},
+	{Title: "Scope", Priority: 3},
+	{Title: "Enabled", Priority: 2},
+	{Title: "Active", Priority: 2},
+	{Title: "Flags", Priority: 1},
 }
 
 // row shows the unit, its scope, the enabled and active state and the flags that need attention.
-func (s *Services) row(e services.Entry) tableRow {
+func (s *Services) row(e services.Entry) kit.TableRow {
 	scope := string(e.Scope)
 	if e.Scope == plan.ScopeUser {
 		scope = userScopeLabel
@@ -311,5 +312,5 @@ func (s *Services) row(e services.Entry) tableRow {
 			flags = append(flags, "failed")
 		}
 	}
-	return tableRow{cells: []string{e.Unit, scope, enabled, active, strings.Join(flags, ", ")}}
+	return kit.TableRow{Cells: []string{e.Unit, scope, enabled, active, strings.Join(flags, ", ")}}
 }

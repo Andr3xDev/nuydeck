@@ -1,4 +1,4 @@
-package ui
+package kit
 
 import (
 	"strings"
@@ -8,12 +8,12 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-var packageColumns = []column{{title: "package"}, {title: "group", priority: 1}, {title: "status", priority: 2}}
+var packageColumns = []Column{{Title: "package"}, {Title: "group", Priority: 1}, {Title: "status", Priority: 2}}
 
-func packageRows(cells ...[3]string) []tableRow {
-	rows := make([]tableRow, len(cells))
+func packageRows(cells ...[3]string) []TableRow {
+	rows := make([]TableRow, len(cells))
 	for i, c := range cells {
-		rows[i] = tableRow{cells: c[:]}
+		rows[i] = TableRow{Cells: c[:]}
 	}
 	return rows
 }
@@ -35,7 +35,7 @@ func TestTableLines_ColumnsStartAtTheSamePositionInHeaderAndRows(t *testing.T) {
 		[3]string{"日本語", "wide", "drift"},
 	)
 
-	header, lines, _ := tableLines(theme{}, packageColumns, rows, 1, 80)
+	header, lines, _ := TableLines(Theme{}, packageColumns, rows, 1, 80)
 
 	all := append([]string{ansi.Strip(header)}, stripAll(lines)...)
 	wantGroup := startOf(t, all[0], "group")
@@ -54,7 +54,7 @@ func TestTableLines_ColumnsStartAtTheSamePositionInHeaderAndRows(t *testing.T) {
 func TestTableLines_WideRunesAreMeasuredByDisplayWidth(t *testing.T) {
 	rows := packageRows([3]string{"日本語日本", "G1", "x"}, [3]string{"ab", "G2", "y"})
 
-	_, lines, _ := tableLines(theme{}, packageColumns, rows, 0, 80)
+	_, lines, _ := TableLines(Theme{}, packageColumns, rows, 0, 80)
 
 	lines = stripAll(lines)
 	if a, b := startOf(t, lines[0], "G1"), startOf(t, lines[1], "G2"); a != b {
@@ -76,7 +76,7 @@ func TestTableLines_NarrowPanelDropsHighestPriorityColumnsFirstAndKeepsTheFirst(
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			header, lines, _ := tableLines(theme{}, packageColumns, rows, 0, tt.width)
+			header, lines, _ := TableLines(Theme{}, packageColumns, rows, 0, tt.width)
 
 			shown := ansi.Strip(header) + "\n" + strings.Join(stripAll(lines), "\n")
 			for _, want := range tt.wantTitles {
@@ -98,11 +98,11 @@ func TestTableLines_NarrowPanelDropsHighestPriorityColumnsFirstAndKeepsTheFirst(
 
 func TestTableLines_LastColumnIsElasticAndTruncatedWithAMarker(t *testing.T) {
 	const long = "a-very-long-description-that-cannot-fit-in-the-panel"
-	cols := []column{{title: "name"}, {title: "description"}}
-	rows := []tableRow{{cells: []string{"x", long}}, {cells: []string{"y", "short"}}}
+	cols := []Column{{Title: "name"}, {Title: "description"}}
+	rows := []TableRow{{Cells: []string{"x", long}}, {Cells: []string{"y", "short"}}}
 
-	_, wide, _ := tableLines(theme{}, cols, rows, 1, 100)
-	_, narrow, _ := tableLines(theme{}, cols, rows, 1, 30)
+	_, wide, _ := TableLines(Theme{}, cols, rows, 1, 100)
+	_, narrow, _ := TableLines(Theme{}, cols, rows, 1, 30)
 
 	if got := ansi.Strip(wide[0]); !strings.Contains(got, long) {
 		t.Errorf("wide panel line = %q, want the whole description", got)
@@ -119,7 +119,7 @@ func TestTableLines_NoLineIsWiderThanThePanel(t *testing.T) {
 		[3]string{"日本語日本語", "グループ", "missing"},
 	)
 	for width := 1; width <= 70; width++ {
-		header, lines, _ := tableLines(theme{}, packageColumns, rows, 0, width)
+		header, lines, _ := TableLines(Theme{}, packageColumns, rows, 0, width)
 		for _, l := range append([]string{header}, lines...) {
 			if got := lipgloss.Width(l); got > width {
 				t.Fatalf("width %d: line %q is %d wide", width, ansi.Strip(l), got)
@@ -134,7 +134,7 @@ func TestTableLines_CellsCannotCarryEscapesOrBreakTheRow(t *testing.T) {
 		[3]string{"two\nlines", "g", "s"},
 	)
 
-	header, lines, _ := tableLines(theme{}, packageColumns, rows, 0, 80)
+	header, lines, _ := TableLines(Theme{}, packageColumns, rows, 0, 80)
 
 	if len(lines) != 2 {
 		t.Fatalf("lines = %d, want one per row", len(lines))
@@ -154,7 +154,7 @@ func TestTableLines_HeaderIsOutsideTheRowsAndTheCursorStaysOnData(t *testing.T) 
 	rows := packageRows(cells...)
 
 	for _, cursor := range []int{0, 15, 29} {
-		header, lines, cursorAt := tableLines(theme{}, packageColumns, rows, cursor, 80)
+		header, lines, cursorAt := TableLines(Theme{}, packageColumns, rows, cursor, 80)
 
 		if len(lines) != len(rows) {
 			t.Fatalf("lines = %d, want one per data row (%d): the header must not be among them", len(lines), len(rows))
@@ -165,7 +165,7 @@ func TestTableLines_HeaderIsOutsideTheRowsAndTheCursorStaysOnData(t *testing.T) 
 		if !strings.HasPrefix(ansi.Strip(lines[cursorAt]), "> ") {
 			t.Errorf("cursor %d: line %q is not the selected one", cursor, ansi.Strip(lines[cursorAt]))
 		}
-		window := windowAround(lines, cursorAt, 5)
+		window := WindowAround(lines, cursorAt, 5)
 		if len(window) != 5 || !slicesContain(window, lines[cursorAt]) {
 			t.Errorf("cursor %d: window of 5 = %d lines, cursor row visible = %v", cursor, len(window), slicesContain(window, lines[cursorAt]))
 		}

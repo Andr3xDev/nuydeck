@@ -3,6 +3,8 @@ package ui
 import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const manifestFile = "manifest/paths.toml"
@@ -10,7 +12,7 @@ const manifestFile = "manifest/paths.toml"
 // errorScreen replaces the sections that depend on an invalid manifest: no operation is offered.
 type errorScreen struct {
 	err error
-	th  theme
+	th  kit.Theme
 	// fix names the file to repair; empty means manifest/paths.toml.
 	fix string
 }
@@ -29,8 +31,8 @@ func (m errorScreen) View(width, height int) string {
 	if fix == "" {
 		fix = manifestFile
 	}
-	lines := styled(m.th.err, wrap(m.err.Error(), contentWidth(width)))
+	lines := styled(m.th.Err, kit.Wrap(m.err.Error(), kit.ContentWidth(width)))
 	lines = append(lines, "")
-	lines = append(lines, wrap("Fix "+fix+" and restart.", contentWidth(width))...)
+	lines = append(lines, kit.Wrap("Fix "+fix+" and restart.", kit.ContentWidth(width))...)
 	return screenBox(m.th, m.Title(), lines, width, height)
 }

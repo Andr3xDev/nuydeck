@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -25,7 +26,7 @@ func (f *flow) View(w, h int) string {
 	case stageOffer, stageConfirm, stageExtra:
 		return f.dialogView(w, h)
 	case stagePlanning:
-		return f.svc.th.muted.Render(planningText)
+		return f.svc.th.Muted.Render(planningText)
 	case stagePreview:
 		return strings.Join(f.previewLines(w, h), "\n")
 	}
@@ -34,22 +35,22 @@ func (f *flow) View(w, h int) string {
 
 // box draws the flow inside a screen's box of w x h cells.
 func (f *flow) box(title string, w, h int) string {
-	body := f.View(contentWidth(w), innerHeight(h))
+	body := f.View(kit.ContentWidth(w), innerHeight(h))
 	return screenBox(f.svc.th, title, strings.Split(body, "\n"), w, h)
 }
 
 func (f *flow) header(w int) []string {
-	return styled(f.svc.th.section, wrap(f.src.Title, w))
+	return styled(f.svc.th.Section, kit.Wrap(f.src.Title, w))
 }
 
 func (f *flow) previewLines(w, h int) []string {
 	th := f.svc.th
 	if f.err != nil {
-		lines := styled(th.section, wrap(f.src.Title+": cannot continue", w))
-		return append(lines, styled(th.err, wrap(f.err.Error(), w))...)
+		lines := styled(th.Section, kit.Wrap(f.src.Title+": cannot continue", w))
+		return append(lines, styled(th.Err, kit.Wrap(f.err.Error(), w))...)
 	}
 	header := f.header(w)
-	return append(header, f.body.window(f.st.View(th, w, h-len(header)), h-len(header))...)
+	return append(header, f.body.Window(f.st.View(th, w, h-len(header)), h-len(header))...)
 }
 
 // dialogText is the question the current stage asks.
@@ -67,22 +68,22 @@ func (f *flow) dialogText() string {
 // dialogView draws the question as a compact box centered in the w x h panel.
 func (f *flow) dialogView(w, h int) string {
 	boxW := min(confirmBoxWidth, w)
-	inner := contentWidth(boxW)
+	inner := kit.ContentWidth(boxW)
 	header := f.header(inner)
-	body := styled(f.svc.th.warning, wrap(f.dialogText(), inner))
-	room := max(h-borderCells-len(header), 0)
+	body := styled(f.svc.th.Warning, kit.Wrap(f.dialogText(), inner))
+	room := max(h-kit.BorderCells-len(header), 0)
 	var tail []string
 	if len(body) > room && room > 1 {
 		room--
 		tail = []string{""}
 	}
-	shown := f.body.window(body, room)
+	shown := f.body.Window(body, room)
 	if tail != nil {
-		tail[0] = f.svc.th.muted.Render(fmt.Sprintf("%d-%d/%d  j/k scroll", f.body.offset+1, f.body.offset+len(shown), len(body)))
+		tail[0] = f.svc.th.Muted.Render(fmt.Sprintf("%d-%d/%d  j/k scroll", f.body.Offset+1, f.body.Offset+len(shown), len(body)))
 	}
 	lines := append(append(header, shown...), tail...)
-	lines = lines[:min(len(lines), max(h-borderCells, 0))]
-	box := renderBox(f.svc.th, confirmTitle, lines, boxW, len(lines)+borderCells, true)
+	lines = lines[:min(len(lines), max(h-kit.BorderCells, 0))]
+	box := kit.RenderBox(f.svc.th, confirmTitle, lines, boxW, len(lines)+kit.BorderCells, true)
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 }
 
@@ -91,14 +92,14 @@ type planStaged struct{ p plan.Plan }
 
 func newPlanStaged(p plan.Plan) staged { return planStaged{p} }
 
-func (s planStaged) View(th theme, w, _ int) []string {
+func (s planStaged) View(th kit.Theme, w, _ int) []string {
 	if s.p.Empty() {
-		return styled(th.muted, wrap(emptyPlanText, w))
+		return styled(th.Muted, kit.Wrap(emptyPlanText, w))
 	}
 	var lines []string
 	for _, step := range s.p.Steps {
 		label, kind := plan.Describe(step)
-		lines = append(lines, wrap(kind+"  "+label, w)...)
+		lines = append(lines, kit.Wrap(kind+"  "+label, w)...)
 	}
 	return lines
 }

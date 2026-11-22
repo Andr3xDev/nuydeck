@@ -11,6 +11,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/services"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 // openServices builds the Services screen as the shell does and loads its state through Enter.
@@ -99,7 +100,7 @@ func TestServicesJumpKeysMoveFiveRowsAndClamp(t *testing.T) {
 	}
 	send(s, keyPress('J'))
 	send(s, keyPress('K'), keyPress('K'))
-	if s.cursor != 0 || !claims(s.Keys(), "J") || !claims(s.Keys(), "K") {
+	if s.cursor != 0 || !kit.Claims(s.Keys(), "J") || !kit.Claims(s.Keys(), "K") {
 		t.Errorf("cursor = %d, want clamped at 0 with J and K listed", s.cursor)
 	}
 }
@@ -163,7 +164,7 @@ func TestServicesRefreshKeyRereadsEveryScope(t *testing.T) {
 
 	send(s, keyPress('r'))
 
-	if !claims(s.Keys(), "r") {
+	if !kit.Claims(s.Keys(), "r") {
 		t.Error("r is not listed in the Services keys")
 	}
 	if got := len(f.reads) - before; got != 2 {
@@ -261,10 +262,10 @@ func TestServicesActionKeysPlanTheirAction(t *testing.T) {
 			if got.Unit != unitBluetooth || got.Scope != plan.ScopeSystem || got.Action != want {
 				t.Errorf("request = %+v, want %s %s on %s", got, want, plan.ScopeSystem, unitBluetooth)
 			}
-			if claims(s.Keys(), string(k)) {
+			if kit.Claims(s.Keys(), string(k)) {
 				t.Errorf("%q is still listed while the flow is open", k)
 			}
-			if !claims(s.Keys(), "esc") {
+			if !kit.Claims(s.Keys(), "esc") {
 				t.Error("the flow's esc is not listed")
 			}
 		})
@@ -442,7 +443,7 @@ func TestServicesLowercaseLOpensNoPager(t *testing.T) {
 	if len(term.cmds) != 0 {
 		t.Errorf("l opened a pager: %v", term.cmds)
 	}
-	if claims(s.Keys(), "l") || !claims(s.Keys(), "L") {
-		t.Errorf("keys claim l = %v, L = %v, want only L", claims(s.Keys(), "l"), claims(s.Keys(), "L"))
+	if kit.Claims(s.Keys(), "l") || !kit.Claims(s.Keys(), "L") {
+		t.Errorf("keys claim l = %v, L = %v, want only L", kit.Claims(s.Keys(), "l"), kit.Claims(s.Keys(), "L"))
 	}
 }

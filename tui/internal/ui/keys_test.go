@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 // keyedStages returns every screen stage worth checking: each default section plus the stages that change Keys().
@@ -50,7 +51,7 @@ func TestEveryScreenBindingHasHelpText(t *testing.T) {
 }
 
 func TestNoScreenBindingCollidesWithAGlobalKey(t *testing.T) {
-	k := newKeyMap()
+	k := kit.NewKeyMap()
 	global := slices.Concat(k.Quit.Keys(), k.Help.Keys(), k.Focus.Keys())
 
 	for name, s := range keyedStages(t) {
@@ -84,9 +85,9 @@ func TestKeyListsOfListStagesIncludeMove(t *testing.T) {
 	h := newTestFlow(t, withExtra("", ""))
 	planned(h.f)
 	keyLists["flow body"] = h.f.Keys()
-	keyLists["run pane"] = newRun(runRequest{}, func() {}).keys(newKeyMap())
+	keyLists["run pane"] = newRun(runRequest{}, func() {}).keys(kit.NewKeyMap())
 
-	move := newKeyMap().move()
+	move := kit.NewKeyMap().Move()
 	for name, keys := range keyLists {
 		if _, ok := skipped[name]; ok {
 			continue
@@ -96,104 +97,6 @@ func TestKeyListsOfListStagesIncludeMove(t *testing.T) {
 				t.Errorf("%s: Keys() lacks %v", name, want.Keys())
 			}
 		}
-	}
-}
-
-func TestKeyMapStep(t *testing.T) {
-	k := newKeyMap()
-	cases := []struct {
-		name string
-		msg  tea.KeyPressMsg
-		want int
-	}{
-		{"up arrow", keyUp, -1},
-		{"k", keyPress('k'), -1},
-		{"down arrow", keyDown, 1},
-		{"j", keyPress('j'), 1},
-		{"K jumps up", keyPress('K'), -jumpRows},
-		{"shift+k jumps up", tea.KeyPressMsg{Code: 'k', Mod: tea.ModShift}, -jumpRows},
-		{"J jumps down", keyPress('J'), jumpRows},
-		{"shift+j jumps down", tea.KeyPressMsg{Code: 'j', Mod: tea.ModShift}, jumpRows},
-		{"other key", keyPress('x'), 0},
-	}
-	for _, c := range cases {
-		if got := k.step(c.msg); got != c.want {
-			t.Errorf("%s: step = %d, want %d", c.name, got, c.want)
-		}
-		wantArrow := c.want
-		if wantArrow != 1 && wantArrow != -1 {
-			wantArrow = 0
-		}
-		if got := k.arrow(c.msg); got != wantArrow {
-			t.Errorf("%s: arrow = %d, want %d", c.name, got, wantArrow)
-		}
-	}
-	if got, want := k.move(), []key.Binding{k.Up, k.Down, k.JumpUp, k.JumpDown}; len(got) != len(want) {
-		t.Errorf("move() = %d bindings, want %d", len(got), len(want))
-	} else {
-		for i := range want {
-			if !slices.Equal(got[i].Keys(), want[i].Keys()) {
-				t.Errorf("move()[%d] keys = %v, want %v", i, got[i].Keys(), want[i].Keys())
-			}
-		}
-	}
-	if jumpRows != 5 {
-		t.Errorf("jumpRows = %d, want 5", jumpRows)
-	}
-}
-
-func TestMoveCursor(t *testing.T) {
-	cases := []struct {
-		name          string
-		cursor, delta int
-		n, want       int
-	}{
-		{"one down", 2, 1, 10, 3},
-		{"one up", 2, -1, 10, 1},
-		{"jump down", 0, 5, 10, 5},
-		{"jump up", 7, -5, 10, 2},
-		{"clamped at the end", 8, 5, 10, 9},
-		{"clamped at the start", 2, -5, 10, 0},
-		{"already at the end", 9, 1, 10, 9},
-		{"already at the start", 0, -1, 10, 0},
-		{"empty list down", 0, 5, 0, 0},
-		{"empty list up", 0, -5, 0, 0},
-	}
-	for _, c := range cases {
-		if got := moveCursor(c.cursor, c.delta, c.n); got != c.want {
-			t.Errorf("%s: moveCursor(%d, %d, %d) = %d, want %d", c.name, c.cursor, c.delta, c.n, got, c.want)
-		}
-	}
-}
-
-func TestPanelKeysFollowTheClaimRules(t *testing.T) {
-	k := newKeyMap()
-	restore := described(key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "restore")), "restore")
-	other := key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "other"))
-	closeFlow := key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "close"))
-
-	plain := k.panelKeys([]key.Binding{other})
-	if claims(plain, "r") || !claims(plain, "esc") {
-		t.Errorf("a screen with no claim must get back on esc and no refresh on r")
-	}
-	if claimed := k.panelKeys([]key.Binding{restore}); !claims(claimed, "r") {
-		t.Error("a screen claiming r keeps it")
-	}
-	if claimed := k.panelKeys([]key.Binding{closeFlow}); slices.ContainsFunc(claimed, func(b key.Binding) bool { return b.Help().Desc == "back" }) {
-		t.Error("a screen claiming esc must not also get the global back")
-	}
-	if got := k.panelKeys([]key.Binding{other}); !slices.Equal(got[0].Keys(), other.Keys()) {
-		t.Errorf("the screen's own keys must come first, got %v", got[0].Keys())
-	}
-}
-
-func TestDescribedKeepsTheKeysAndChangesTheText(t *testing.T) {
-	original := newKeyMap().Refresh
-
-	got := described(original, "restore")
-
-	if !slices.Equal(got.Keys(), original.Keys()) || got.Help().Key != original.Help().Key || got.Help().Desc != "restore" {
-		t.Errorf("described = keys %v help %+v, want same keys and key text with desc restore", got.Keys(), got.Help())
 	}
 }
 
@@ -226,7 +129,7 @@ func TestSecretsSkipKeyIsABindingAndVisible(t *testing.T) {
 	root.focus = focusPanel
 	root.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
 
-	if !claims(in.Keys(), "ctrl+s") {
+	if !kit.Claims(in.Keys(), "ctrl+s") {
 		t.Error("ctrl+s is not a binding of the secrets page")
 	}
 	if !strings.Contains(ansi.Strip(root.View().Content), "ctrl+s") {

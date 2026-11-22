@@ -5,6 +5,8 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 // screen is one sidebar section's panel.
@@ -38,8 +40,8 @@ type shell struct {
 	Deps
 	ctx    context.Context
 	dryRun bool
-	th     theme
-	keys   keyMap
+	th     kit.Theme
+	keys   kit.KeyMap
 	// running reports whether Root's output pane is open; nil means never (screens under test).
 	running func() bool
 }

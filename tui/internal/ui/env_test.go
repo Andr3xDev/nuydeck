@@ -10,6 +10,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/envvars"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -229,7 +230,7 @@ func TestEnvRendersATableWithOnAndOffRowsAndDuplicates(t *testing.T) {
 	if len(s.vars) != 3 || s.cursor != 2 || s.vars[1].Line != 1 || !s.vars[1].Off {
 		t.Errorf("vars = %+v cursor = %d, want the duplicate kept by line with J clamped to the last row", s.vars, s.cursor)
 	}
-	if !claims(s.Keys(), "J") {
+	if !kit.Claims(s.Keys(), "J") {
 		t.Error("J is not listed in the Env keys")
 	}
 }
@@ -271,7 +272,7 @@ func TestEnvDismissedPopupLeavesAnEmptyListAndNoEdit(t *testing.T) {
 	if !containsAny(viewOf(s), "choose a source") {
 		t.Errorf("no message asking for a source:\n%s", viewOf(s))
 	}
-	if !claims(s.Keys(), "s") {
+	if !kit.Claims(s.Keys(), "s") {
 		t.Error("s is not available to reopen the popup")
 	}
 }
@@ -302,7 +303,7 @@ func TestEnvRefreshRereadsTheChosenCopy(t *testing.T) {
 	if want := []string{loc.DestPath, loc.DestPath}; !slices.Equal(f.reads, want) {
 		t.Errorf("reads = %v, want %v", f.reads, want)
 	}
-	if !claims(s.Keys(), "r") {
+	if !kit.Claims(s.Keys(), "r") {
 		t.Error("r is not listed in the Env keys")
 	}
 }
@@ -401,7 +402,7 @@ func TestEnvWithoutAHyprEntryOffersNoSourceKey(t *testing.T) {
 	s, _, _ := sectionOf[*Env](root)
 	feed(s, s.Enter())
 
-	if claims(s.Keys(), "s") {
+	if kit.Claims(s.Keys(), "s") {
 		t.Error("s is listed although there is no source to choose")
 	}
 }

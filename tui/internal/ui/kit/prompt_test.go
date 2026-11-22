@@ -1,4 +1,4 @@
-package ui
+package kit
 
 import (
 	"strings"
@@ -11,24 +11,24 @@ import (
 const popupTestWidth = 60
 
 func TestKeyMapAnswerMapsYNAndEscAndTheOtherKeysByPolicy(t *testing.T) {
-	keys := newKeyMap()
+	keys := NewKeyMap()
 	cases := []struct {
 		name                       string
 		msg                        tea.KeyPressMsg
-		wantIgnoring, wantDeclines answer
+		wantIgnoring, wantDeclines Answer
 	}{
-		{"y", keyPress('y'), answerYes, answerYes},
-		{"n", keyPress('n'), answerNo, answerNo},
-		{"esc", keyEsc, answerNo, answerNo},
-		{"other key", keyPress('x'), answerNone, answerNo},
-		{"enter", keyEnter, answerNone, answerNo},
+		{"y", keyPress('y'), AnswerYes, AnswerYes},
+		{"n", keyPress('n'), AnswerNo, AnswerNo},
+		{"esc", keyEsc, AnswerNo, AnswerNo},
+		{"other key", keyPress('x'), AnswerNone, AnswerNo},
+		{"enter", keyEnter, AnswerNone, AnswerNo},
 	}
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := keys.answer(tt.msg, false); got != tt.wantIgnoring {
+			if got := keys.Answer(tt.msg, false); got != tt.wantIgnoring {
 				t.Errorf("answer(otherDeclines=false) = %v, want %v", got, tt.wantIgnoring)
 			}
-			if got := keys.answer(tt.msg, true); got != tt.wantDeclines {
+			if got := keys.Answer(tt.msg, true); got != tt.wantDeclines {
 				t.Errorf("answer(otherDeclines=true) = %v, want %v", got, tt.wantDeclines)
 			}
 		})
@@ -36,9 +36,9 @@ func TestKeyMapAnswerMapsYNAndEscAndTheOtherKeysByPolicy(t *testing.T) {
 }
 
 func TestChoicePickMovesWithoutWrappingPicksOnEnterAndClosesOnEsc(t *testing.T) {
-	keys := newKeyMap()
-	newPick := func() *choicePick {
-		return &choicePick{title: "Mode", options: []string{"Normal", "Hard", "Other"}}
+	keys := NewKeyMap()
+	newPick := func() *ChoicePick {
+		return &ChoicePick{Title: "Mode", Options: []string{"Normal", "Hard", "Other"}}
 	}
 	cases := []struct {
 		name       string
@@ -60,19 +60,19 @@ func TestChoicePickMovesWithoutWrappingPicksOnEnterAndClosesOnEsc(t *testing.T) 
 			pick := newPick()
 			var picked, closed bool
 			for _, k := range tt.presses {
-				picked, closed = pick.update(keys, k)
+				picked, closed = pick.Update(keys, k)
 			}
-			if pick.cursor != tt.wantCursor || picked != tt.picked || closed != tt.closed {
-				t.Errorf("cursor=%d picked=%v closed=%v, want cursor=%d picked=%v closed=%v", pick.cursor, picked, closed, tt.wantCursor, tt.picked, tt.closed)
+			if pick.Cursor != tt.wantCursor || picked != tt.picked || closed != tt.closed {
+				t.Errorf("cursor=%d picked=%v closed=%v, want cursor=%d picked=%v closed=%v", pick.Cursor, picked, closed, tt.wantCursor, tt.picked, tt.closed)
 			}
 		})
 	}
 }
 
 func TestChoicePickPopupShowsTheTitleAndEveryOption(t *testing.T) {
-	pick := &choicePick{title: "Mode", options: []string{"Normal", "Hard"}}
+	pick := &ChoicePick{Title: "Mode", Options: []string{"Normal", "Hard"}}
 
-	box := ansi.Strip(pick.popup(ForVariant(""), popupTestWidth).box)
+	box := ansi.Strip(pick.Popup(ForVariant(""), popupTestWidth).box)
 
 	for _, want := range []string{"Mode", "Normal", "Hard"} {
 		if !strings.Contains(box, want) {

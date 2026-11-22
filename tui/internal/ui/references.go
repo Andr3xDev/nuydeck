@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/references"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 type linkOpenedMsg struct{ err error }
@@ -40,7 +41,7 @@ func (r *References) Enter() tea.Cmd {
 
 func (r *References) Keys() []key.Binding {
 	k := r.svc.keys
-	return append(k.move(), k.Link)
+	return append(k.Move(), k.Link)
 }
 
 func (r *References) Update(msg tea.Msg) (screen, tea.Cmd) {
@@ -59,8 +60,8 @@ func (r *References) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	k := r.svc.keys
 	catalog := r.svc.References.Catalog
 	switch {
-	case k.step(msg) != 0:
-		r.cursor = moveCursor(r.cursor, k.step(msg), len(catalog))
+	case k.Step(msg) != 0:
+		r.cursor = kit.MoveCursor(r.cursor, k.Step(msg), len(catalog))
 	case key.Matches(msg, k.Link) && r.cursor < len(catalog):
 		open, ctx, url := r.svc.References.Open, r.svc.ctx, catalog[r.cursor].URL
 		r.err = nil
@@ -80,20 +81,20 @@ func statusText(s references.Status) string {
 }
 
 func (r *References) View(width, height int) string {
-	th, cw := r.svc.th, contentWidth(width)
+	th, cw := r.svc.th, kit.ContentWidth(width)
 	catalog := r.svc.References.Catalog
 	var lines []string
 	if r.err != nil {
-		lines = styled(th.err, wrap(r.err.Error(), cw))
+		lines = styled(th.Err, kit.Wrap(r.err.Error(), cw))
 	}
 	if len(catalog) == 0 {
-		return screenBox(th, r.Title(), append(lines, th.muted.Render("No references.")), width, height)
+		return screenBox(th, r.Title(), append(lines, th.Muted.Render("No references.")), width, height)
 	}
-	rows := make([]listRow, len(catalog))
+	rows := make([]kit.ListRow, len(catalog))
 	for i, ref := range catalog {
-		rows[i] = listRow{text: fmt.Sprintf("%-7s %s  %s", statusText(r.statuses[i]), ref.Name, ref.Description)}
+		rows[i] = kit.ListRow{Text: fmt.Sprintf("%-7s %s  %s", statusText(r.statuses[i]), ref.Name, ref.Description)}
 	}
-	list, at := listLines(th, rows, r.cursor, cw)
-	lines = append(lines, windowAround(list, at, max(innerHeight(height)-len(lines), 1))...)
+	list, at := kit.ListLines(th, rows, r.cursor, cw)
+	lines = append(lines, kit.WindowAround(list, at, max(innerHeight(height)-len(lines), 1))...)
 	return screenBox(th, r.Title(), lines, width, height)
 }

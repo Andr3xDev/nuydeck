@@ -14,6 +14,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/packages"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 type packagesMsg struct {
@@ -59,8 +60,8 @@ var packageFilters = []packages.Status{"", packages.StatusMissing, packages.Stat
 type Packages struct {
 	svc  *shell
 	deps PackagesDeps
-	keys keyMap
-	th   theme
+	keys kit.KeyMap
+	th   kit.Theme
 
 	rows   []packages.Row
 	marks  map[string]bool // keyed by package name
@@ -92,7 +93,7 @@ func (p *Packages) Keys() []key.Binding {
 	if p.form != nil {
 		return []key.Binding{p.keys.Up, p.keys.Down, p.keys.Toggle, p.keys.Confirm, p.keys.Back}
 	}
-	keys := append(p.keys.move(), p.keys.Toggle, p.keys.All, p.keys.Filter, p.keys.Refresh)
+	keys := append(p.keys.Move(), p.keys.Toggle, p.keys.All, p.keys.Filter, p.keys.Refresh)
 	if p.canRun() {
 		keys = append(keys, p.keys.Install, p.keys.Uninstall)
 	}
@@ -193,8 +194,8 @@ func (p *Packages) receive(msg packagesMsg) {
 }
 
 func (p *Packages) listKey(msg tea.KeyPressMsg) tea.Cmd {
-	if delta := p.keys.step(msg); delta != 0 {
-		p.cursor = moveCursor(p.cursor, delta, len(p.visible()))
+	if delta := p.keys.Step(msg); delta != 0 {
+		p.cursor = kit.MoveCursor(p.cursor, delta, len(p.visible()))
 		return nil
 	}
 	sel, ok := p.selected()
@@ -370,18 +371,18 @@ func (p *Packages) View(width, height int) string {
 	if p.flow.active() {
 		return p.flow.box(p.Title(), width, height)
 	}
-	cw := contentWidth(width)
+	cw := kit.ContentWidth(width)
 	if p.form != nil {
 		return screenBox(p.th, "Packages", p.formView(cw), width, height)
 	}
 	var lines []string
 	if p.err != nil {
-		lines = append(lines, styled(p.th.err, wrap(p.err.Error(), cw))...)
+		lines = append(lines, styled(p.th.Err, kit.Wrap(p.err.Error(), cw))...)
 	}
 	if p.notice != "" {
-		lines = append(lines, styled(p.th.warning, wrap(p.notice, cw))...)
+		lines = append(lines, styled(p.th.Warning, kit.Wrap(p.notice, cw))...)
 	}
-	muted := func(text string) []string { return styled(p.th.muted, wrap(text, cw)) }
+	muted := func(text string) []string { return styled(p.th.Muted, kit.Wrap(text, cw)) }
 	var msg string
 	switch {
 	case !p.wired():
@@ -396,25 +397,25 @@ func (p *Packages) View(width, height int) string {
 	if msg != "" {
 		return screenBox(p.th, "Packages", append(lines, muted(msg)...), width, height)
 	}
-	lines = append(lines, p.th.title.Render(p.header()))
+	lines = append(lines, p.th.Title.Render(p.header()))
 	visible := p.visible()
 	if len(visible) == 0 {
 		return screenBox(p.th, "Packages", append(lines, muted("No packages match the filter, f changes it.")...), width, height)
 	}
-	rows := make([]tableRow, len(visible))
+	rows := make([]kit.TableRow, len(visible))
 	for i, r := range visible {
-		rows[i] = tableRow{cells: []string{checkbox(p.marks[r.Name]) + " " + r.Name, r.Group, string(r.Status)}}
+		rows[i] = kit.TableRow{Cells: []string{checkbox(p.marks[r.Name]) + " " + r.Name, r.Group, string(r.Status)}}
 	}
-	header, list, at := tableLines(p.th, packagesTableColumns, rows, p.cursor, cw)
+	header, list, at := kit.TableLines(p.th, packagesTableColumns, rows, p.cursor, cw)
 	lines = append(lines, header)
-	lines = append(lines, windowAround(list, at, max(innerHeight(height)-len(lines), 1))...)
+	lines = append(lines, kit.WindowAround(list, at, max(innerHeight(height)-len(lines), 1))...)
 	return screenBox(p.th, "Packages", lines, width, height)
 }
 
-var packagesTableColumns = []column{
-	{title: "Package"},
-	{title: "Group", priority: 2},
-	{title: "Status", priority: 1},
+var packagesTableColumns = []kit.Column{
+	{Title: "Package"},
+	{Title: "Group", Priority: 2},
+	{Title: "Status", Priority: 1},
 }
 
 // header counts every row by status and names the active filter.
@@ -438,7 +439,7 @@ func (p *Packages) formView(cw int) []string {
 		source = "(not chosen, space cycles pacman and aur)"
 	}
 	lines := []string{
-		p.th.title.Render(truncate(sanitizeLine("Add "+f.name+" to the catalog"), cw)),
+		p.th.Title.Render(kit.Truncate(kit.SanitizeLine("Add "+f.name+" to the catalog"), cw)),
 		cursorMark(f.row == formRowSource) + "source: " + source,
 		cursorMark(f.row == formRowMinimal) + checkbox(f.minimal) + " minimal profile",
 		cursorMark(f.row == formRowFull) + checkbox(f.full) + " full profile",
@@ -447,8 +448,8 @@ func (p *Packages) formView(cw int) []string {
 	lines = clip(lines, cw)
 	if f.err != "" {
 		lines = append(lines, "")
-		lines = append(lines, styled(p.th.err, wrap(f.err, cw))...)
+		lines = append(lines, styled(p.th.Err, kit.Wrap(f.err, cw))...)
 	}
 	lines = append(lines, "")
-	return append(lines, styled(p.th.muted, wrap("up/down move, space toggles, enter adds, esc cancels", cw))...)
+	return append(lines, styled(p.th.Muted, kit.Wrap("up/down move, space toggles, enter adds, esc cancels", cw))...)
 }

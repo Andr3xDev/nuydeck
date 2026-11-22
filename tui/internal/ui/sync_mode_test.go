@@ -14,6 +14,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -147,7 +148,7 @@ func TestSyncModePopupOpensOnPushAndPullWithTheDirectionLabel(t *testing.T) {
 					t.Errorf("popup view lacks %q:\n%s", want, view)
 				}
 			}
-			if !claims(s.Keys(), "enter") || !claims(s.Keys(), "esc") {
+			if !kit.Claims(s.Keys(), "enter") || !kit.Claims(s.Keys(), "esc") {
 				t.Error("the open popup must claim enter and esc in the keybar")
 			}
 			d.settle()

@@ -11,6 +11,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/envvars"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -29,10 +30,10 @@ const (
 	offLabel = "off"
 )
 
-var envColumns = []column{
-	{title: "Name"},
-	{title: "Value"},
-	{title: "State", priority: 1},
+var envColumns = []kit.Column{
+	{Title: "Name"},
+	{Title: "Value"},
+	{Title: "State", Priority: 1},
 }
 
 // envSourceOptions follow the order of envvars.SourceRepo and envvars.SourceLive.
@@ -55,7 +56,7 @@ type Env struct {
 	svc    *shell
 	loc    envvars.Locations
 	locErr error
-	pick   *choicePick // the open source popup, nil when closed
+	pick   *kit.ChoicePick // the open source popup, nil when closed
 	source envvars.Source
 	chosen bool
 	vars   []envvars.Var
@@ -91,7 +92,7 @@ func (e *Env) openPopup() {
 	if e.locErr != nil {
 		return
 	}
-	e.pick = &choicePick{title: envPopupTitle, options: envSourceOptions}
+	e.pick = &kit.ChoicePick{Title: envPopupTitle, Options: envSourceOptions}
 }
 
 // Keys claims esc while the popup is open, so esc closes it instead of leaving the panel.
@@ -101,15 +102,15 @@ func (e *Env) Keys() []key.Binding {
 	case e.flow.active():
 		return e.flow.Keys()
 	case e.pick != nil:
-		return append(k.move(), k.Confirm, k.Back)
+		return append(k.Move(), k.Confirm, k.Back)
 	case e.locErr != nil:
 		return nil
 	case !e.chosen:
-		return []key.Binding{described(k.Start, "source")}
+		return []key.Binding{kit.Described(k.Start, "source")}
 	}
-	keys := append(k.move(), described(k.Start, "source"), k.Edit, k.Refresh)
+	keys := append(k.Move(), kit.Described(k.Start, "source"), k.Edit, k.Refresh)
 	if e.svc.RunPlan != nil {
-		keys = append(keys, described(k.Toggle, "toggle on/off"))
+		keys = append(keys, kit.Described(k.Toggle, "toggle on/off"))
 	}
 	return keys
 }
@@ -175,10 +176,10 @@ func (e *Env) Update(msg tea.Msg) (screen, tea.Cmd) {
 func (e *Env) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	k := e.svc.keys
 	if e.pick != nil {
-		picked, closed := e.pick.update(k, msg)
+		picked, closed := e.pick.Update(k, msg)
 		var cmd tea.Cmd
 		if picked {
-			e.source, e.chosen, e.cursor = envvars.Source(e.pick.cursor), true, 0
+			e.source, e.chosen, e.cursor = envvars.Source(e.pick.Cursor), true, 0
 			cmd = e.reload()
 		}
 		if picked || closed {
@@ -186,14 +187,14 @@ func (e *Env) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return cmd
 	}
-	switch delta := k.step(msg); {
+	switch delta := k.Step(msg); {
 	case key.Matches(msg, k.Start):
 		e.openPopup()
 	case !e.chosen:
 	case key.Matches(msg, k.Refresh):
 		return e.reload()
 	case delta != 0:
-		e.cursor = moveCursor(e.cursor, delta, len(e.vars))
+		e.cursor = kit.MoveCursor(e.cursor, delta, len(e.vars))
 	case key.Matches(msg, k.Edit):
 		return e.edit()
 	case key.Matches(msg, k.Toggle) && e.svc.RunPlan != nil && e.cursor < len(e.vars):
@@ -264,9 +265,9 @@ type toggleStaged struct {
 	change envvars.ToggleChange
 }
 
-func (s toggleStaged) View(th theme, w, h int) []string {
-	lines := wrap("before: "+sanitizeLine(s.change.Before), w)
-	lines = append(lines, wrap("after:  "+sanitizeLine(s.change.After), w)...)
+func (s toggleStaged) View(th kit.Theme, w, h int) []string {
+	lines := kit.Wrap("before: "+kit.SanitizeLine(s.change.Before), w)
+	lines = append(lines, kit.Wrap("after:  "+kit.SanitizeLine(s.change.After), w)...)
 	return append(append(lines, ""), s.planStaged.View(th, w, h)...)
 }
 
@@ -283,42 +284,42 @@ func (e *Env) View(width, height int) string {
 	if e.flow.active() {
 		return e.flow.box(e.Title(), width, height)
 	}
-	th, cw := e.svc.th, contentWidth(width)
+	th, cw := e.svc.th, kit.ContentWidth(width)
 	var lines []string
 	switch {
 	case e.locErr != nil:
-		lines = styled(th.err, wrap(e.locErr.Error(), cw))
+		lines = styled(th.Err, kit.Wrap(e.locErr.Error(), cw))
 	case e.chosen:
-		lines = append(lines, th.title.Render(truncate(sanitizeLine(fmt.Sprintf("%s: %s", envSourceOptions[e.source], e.loc.Path(e.source))), cw)))
+		lines = append(lines, th.Title.Render(kit.Truncate(kit.SanitizeLine(fmt.Sprintf("%s: %s", envSourceOptions[e.source], e.loc.Path(e.source))), cw)))
 	}
 	if e.err != nil {
-		lines = append(lines, styled(th.err, wrap(e.err.Error(), cw))...)
+		lines = append(lines, styled(th.Err, kit.Wrap(e.err.Error(), cw))...)
 	}
 	if e.preview != "" {
-		lines = append(lines, styled(th.warning, wrap(e.preview, cw))...)
+		lines = append(lines, styled(th.Warning, kit.Wrap(e.preview, cw))...)
 	}
 	if e.loading {
-		lines = append(lines, th.muted.Render(envLoadingText))
+		lines = append(lines, th.Muted.Render(envLoadingText))
 	}
 	if e.msg != "" && e.locErr == nil {
-		lines = append(lines, styled(th.muted, wrap(e.msg, cw))...)
+		lines = append(lines, styled(th.Muted, kit.Wrap(e.msg, cw))...)
 	}
 	if len(e.vars) > 0 {
-		rows := make([]tableRow, len(e.vars))
+		rows := make([]kit.TableRow, len(e.vars))
 		for i, v := range e.vars {
 			state := onLabel
 			if v.Off {
 				state = offLabel
 			}
-			rows[i] = tableRow{cells: []string{v.Name, v.Value, state}, muted: v.Off}
+			rows[i] = kit.TableRow{Cells: []string{v.Name, v.Value, state}, Muted: v.Off}
 		}
-		header, list, at := tableLines(th, envColumns, rows, e.cursor, cw)
+		header, list, at := kit.TableLines(th, envColumns, rows, e.cursor, cw)
 		lines = append(lines, header)
-		lines = append(lines, windowAround(list, at, max(innerHeight(height)-len(lines), 1))...)
+		lines = append(lines, kit.WindowAround(list, at, max(innerHeight(height)-len(lines), 1))...)
 	}
 	base := screenBox(th, e.Title(), lines, width, height)
 	if e.pick == nil {
 		return base
 	}
-	return overlayCentered(base, e.pick.popup(th, width), width, height)
+	return kit.OverlayCentered(base, e.pick.Popup(th, width), width, height)
 }

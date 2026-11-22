@@ -16,6 +16,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
 	"github.com/Andr3xDev/nuydeck/tui/internal/state"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const timeLayout = "2006-01-02 15:04"
@@ -48,8 +49,8 @@ type Dashboard struct {
 	drift      func(ctx context.Context, entries []manifest.ResolvedEntry) <-chan drift.DriftResult
 	entries    []manifest.ResolvedEntry
 	state      dashboardInfo
-	keys       keyMap
-	th         theme
+	keys       kit.KeyMap
+	th         kit.Theme
 	spinner    spinner.Model
 	results    map[manifest.Entry]drift.DriftResult
 	lastBackup *backup.Backup
@@ -66,7 +67,7 @@ type dashboardInfo struct {
 }
 
 func newDashboard(svc *shell) *Dashboard {
-	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(svc.th.accent))
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(svc.th.Accent))
 	return &Dashboard{
 		ctx:     svc.ctx,
 		drift:   svc.Drift,
@@ -83,7 +84,7 @@ func (d *Dashboard) Title() string  { return "Dashboard" }
 func (d *Dashboard) Enter() tea.Cmd { return nil }
 
 func (d *Dashboard) Keys() []key.Binding {
-	return append(d.keys.move(), d.keys.Refresh, described(d.keys.Diff, "view drift"), d.keys.Pull, d.keys.Push)
+	return append(d.keys.Move(), d.keys.Refresh, kit.Described(d.keys.Diff, "view drift"), d.keys.Pull, d.keys.Push)
 }
 
 func (d *Dashboard) Notices() []string {
@@ -158,8 +159,8 @@ func (d *Dashboard) Update(msg tea.Msg) (screen, tea.Cmd) {
 			return d, d.start()
 		case key.Matches(msg, d.keys.Diff):
 			return d, d.requestDriftView()
-		case d.keys.step(msg) != 0:
-			d.cursor = moveCursor(d.cursor, d.keys.step(msg), len(d.entries))
+		case d.keys.Step(msg) != 0:
+			d.cursor = kit.MoveCursor(d.cursor, d.keys.Step(msg), len(d.entries))
 		case key.Matches(msg, d.keys.Pull):
 			return d, d.requestSync(plan.Pull)
 		case key.Matches(msg, d.keys.Push):
@@ -213,7 +214,7 @@ func (d *Dashboard) requestDriftView() tea.Cmd {
 }
 
 func (d *Dashboard) View(width, height int) string {
-	cw := contentWidth(width)
+	cw := kit.ContentWidth(width)
 	lines := append(d.statusLines(), "")
 	if len(d.entries) == 0 {
 		lines = append(lines, d.muted("No managed entries."))
@@ -231,7 +232,7 @@ func (d *Dashboard) View(width, height int) string {
 	for i, e := range d.entries {
 		rows[i] = d.row(i, e, width)
 	}
-	lines = append(lines, windowAround(rows, d.cursor, visible)...)
+	lines = append(lines, kit.WindowAround(rows, d.cursor, visible)...)
 	return screenBox(d.th, d.Title(), clip(lines, cw), width, height)
 }
 
@@ -241,14 +242,14 @@ func (d *Dashboard) row(i int, e manifest.ResolvedEntry, width int) string {
 	if i == d.cursor {
 		cursor = "> "
 	}
-	cw := contentWidth(width)
-	path := sanitizeLine(fmt.Sprintf("%s:%s", e.Root, e.Path))
+	cw := kit.ContentWidth(width)
+	path := kit.SanitizeLine(fmt.Sprintf("%s:%s", e.Root, e.Path))
 	if width < wideRowWidth {
-		return cursor + truncate(path, cw-len(cursor))
+		return cursor + kit.Truncate(path, cw-len(cursor))
 	}
 	status := d.entryStatus(e.Entry)
 	pathWidth := max(cw-len(cursor)-1-lipgloss.Width(status), 1)
-	path = truncate(path, pathWidth)
+	path = kit.Truncate(path, pathWidth)
 	return cursor + path + strings.Repeat(" ", max(pathWidth-lipgloss.Width(path), 0)) + " " + status
 }
 
@@ -261,7 +262,7 @@ func (d *Dashboard) errorDetail(cw int) string {
 	if !ok || r.State != drift.DriftError || r.Err == nil {
 		return ""
 	}
-	return d.th.err.Render(truncate(sanitizeLine(strings.Join(strings.Fields(r.Err.Error()), " ")), cw))
+	return d.th.Err.Render(kit.Truncate(kit.SanitizeLine(strings.Join(strings.Fields(r.Err.Error()), " ")), cw))
 }
 
 func (d *Dashboard) statusLines() []string {
@@ -272,7 +273,7 @@ func (d *Dashboard) lastSyncText() string {
 	if d.state.lastSync == nil {
 		return "never"
 	}
-	return sanitizeLine(fmt.Sprintf("%s (%s)", d.state.lastSync.Time.Format(timeLayout), d.state.lastSync.Direction))
+	return kit.SanitizeLine(fmt.Sprintf("%s (%s)", d.state.lastSync.Time.Format(timeLayout), d.state.lastSync.Direction))
 }
 
 func (d *Dashboard) lastBackupText() string {
@@ -295,17 +296,17 @@ func (d *Dashboard) entryStatus(e manifest.Entry) string {
 	}
 	switch r.State {
 	case drift.DriftError:
-		return d.th.err.Render("error")
+		return d.th.Err.Render("error")
 	case drift.DriftDrifted:
 		switch r.Missing {
 		case drift.MissingInRepo:
-			return d.th.warning.Render("only in live")
+			return d.th.Warning.Render("only in live")
 		case drift.MissingOnPC:
-			return d.th.warning.Render("not on PC")
+			return d.th.Warning.Render("not on PC")
 		}
-		return d.th.warning.Render(fmt.Sprintf("drifted (%d changes)", r.Changes))
+		return d.th.Warning.Render(fmt.Sprintf("drifted (%d changes)", r.Changes))
 	}
-	return d.th.ok.Render("in sync")
+	return d.th.OK.Render("in sync")
 }
 
-func (d *Dashboard) muted(s string) string { return d.th.muted.Render(s) }
+func (d *Dashboard) muted(s string) string { return d.th.Muted.Render(s) }

@@ -11,6 +11,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const dryRunBadge = "DRY-RUN"
@@ -25,13 +27,13 @@ const (
 // wideRowWidth is the panel width below which list rows drop their secondary columns.
 const wideRowWidth = 60
 
-// screenBox draws a screen's box; lines must fit contentWidth(width).
-func screenBox(th theme, title string, lines []string, width, height int) string {
-	return renderBox(th, title, lines, width, height, th.panelFocused())
+// screenBox draws a screen's box; lines must fit kit.ContentWidth(width).
+func screenBox(th kit.Theme, title string, lines []string, width, height int) string {
+	return kit.RenderBox(th, title, lines, width, height, th.PanelFocused())
 }
 
 // innerHeight is the number of lines a screen can fill inside its box.
-func innerHeight(height int) int { return max(height-borderCells, 1) }
+func innerHeight(height int) int { return max(height-kit.BorderCells, 1) }
 
 // clip cuts already-styled lines to width cells.
 func clip(lines []string, width int) []string {
@@ -84,14 +86,14 @@ type Root struct {
 // the caller; unknown values fall back to Nadir. A manifest error leaves only
 // the error screen, so no sync, backup or restore action exists.
 func NewRoot(variant string, dryRun bool, deps Deps) *Root {
-	th := ForVariant(variant)
+	th := kit.ForVariant(variant)
 	h := help.New()
 	h.Styles = help.DefaultStyles(th.Dark)
 	ctx, cancel := context.WithCancel(context.Background())
-	svc := &shell{Deps: deps, ctx: ctx, dryRun: dryRun, th: th, keys: newKeyMap()}
+	svc := &shell{Deps: deps, ctx: ctx, dryRun: dryRun, th: th, keys: kit.NewKeyMap()}
 	r := &Root{dryRun: dryRun, svc: svc, help: h, cancel: cancel}
 	svc.running = func() bool { return r.run != nil }
-	svc.th.panelHasFocus = r.panelFocused
+	svc.th.PanelHasFocus = r.panelFocused
 	for _, spec := range sectionSpecs {
 		if spec.enabled(deps) {
 			r.sections = append(r.sections, section{title: spec.title, screen: spec.build(svc), pinned: spec.pinned})
@@ -243,8 +245,8 @@ func (r *Root) routeRun(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	ctrlC := msg.String() == "ctrl+c"
 	run.notice = false
 	switch {
-	case keys.step(msg) != 0:
-		run.scrollBy(keys.step(msg))
+	case keys.Step(msg) != 0:
+		run.scrollBy(keys.Step(msg))
 	case run.done && key.Matches(msg, keys.Quit), ctrlC && run.awaitAck && run.question == "":
 		return r.quit()
 	case run.done && key.Matches(msg, keys.Back):
@@ -255,8 +257,8 @@ func (r *Root) routeRun(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		run.cancel()
 	case run.awaitAck && run.question == "" && key.Matches(msg, keys.Confirm):
 		run.sendAnswer(true)
-	case run.awaitAck && run.question != "" && keys.answer(msg, false) != answerNone:
-		run.sendAnswer(keys.answer(msg, false) == answerYes)
+	case run.awaitAck && run.question != "" && keys.Answer(msg, false) != kit.AnswerNone:
+		run.sendAnswer(keys.Answer(msg, false) == kit.AnswerYes)
 	default:
 		run.notice = true
 	}
@@ -278,7 +280,7 @@ func (r *Root) routeSidebar(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	keys := r.svc.keys
 	if key.Matches(msg, keys.Open) {
 		r.focus = focusPanel
-	} else if delta := keys.arrow(msg); delta != 0 {
+	} else if delta := keys.Arrow(msg); delta != 0 {
 		r.selectSection(max(min(r.selected+delta, len(r.sections)-1), 0))
 		return r, r.active().Enter()
 	}
@@ -355,7 +357,7 @@ func (r *Root) render() string {
 	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, renderSidebar(r.svc.th, titles, r.selected, pinned, r.panelFocused(), sidebarCells, bodyHeight), panel)
 	if r.showHelp {
-		body = overlayCentered(body, helpPopup(r.svc.th, r.help, r.helpGroups(), r.width, bodyHeight), r.width, bodyHeight)
+		body = kit.OverlayCentered(body, kit.HelpPopup(r.svc.th, r.help, r.helpGroups(), r.width, bodyHeight), r.width, bodyHeight)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, slices.Concat([]string{body}, band, []string{r.renderKeybar()})...)
 }
@@ -369,13 +371,13 @@ func (r *Root) renderNoticeBand() []string {
 	var lines []string
 	for _, text := range texts {
 		if text != "" {
-			lines = append(lines, wrap(text, r.width)...)
+			lines = append(lines, kit.Wrap(text, r.width)...)
 		}
 	}
 	if len(lines) > noticeMaxLines {
 		lines = append(lines[:noticeMaxLines-1], fmt.Sprintf("+%d more", len(lines)-noticeMaxLines+1))
 	}
-	return styled(r.svc.th.warning, lines)
+	return styled(r.svc.th.Warning, lines)
 }
 
 // focusedKeys are the bindings valid in the current focus; the keybar and help derive from them.
@@ -384,23 +386,31 @@ func (r *Root) focusedKeys() []key.Binding {
 		return r.run.keys(r.svc.keys)
 	}
 	if r.focus == focusSidebar {
-		return r.svc.keys.sidebarKeys()
+		return sidebarKeys(r.svc.keys)
 	}
-	return r.svc.keys.panelKeys(r.active().Keys())
+	return r.svc.keys.PanelKeys(r.active().Keys())
 }
 
 // helpGroups lists the focused keys, then the shell keys valid everywhere.
 func (r *Root) helpGroups() [][]key.Binding {
-	return [][]key.Binding{r.focusedKeys(), slices.Concat([]key.Binding{r.svc.keys.Focus}, r.svc.keys.pinnedKeys())}
+	return [][]key.Binding{r.focusedKeys(), slices.Concat([]key.Binding{r.svc.keys.Focus}, pinnedKeys(r.svc.keys))}
 }
+
+// sidebarKeys are the keys valid at sidebar focus.
+func sidebarKeys(k kit.KeyMap) []key.Binding {
+	return []key.Binding{k.Up, k.Down, k.Open, k.Focus}
+}
+
+// pinnedKeys stay visible at the right of the keybar however many keys the focus has.
+func pinnedKeys(k kit.KeyMap) []key.Binding { return []key.Binding{k.Help, k.Quit} }
 
 // pinnedKeys are the right-hand keys: a live run answers neither ? nor q, a finished one only q.
 func (r *Root) pinnedKeys() []key.Binding {
 	switch {
 	case r.run == nil && r.focus == focusPanel && r.panelCapturesText():
-		return []key.Binding{described(r.svc.keys.CancelRun, "quit")}
+		return []key.Binding{kit.Described(r.svc.keys.CancelRun, "quit")}
 	case r.run == nil:
-		return r.svc.keys.pinnedKeys()
+		return pinnedKeys(r.svc.keys)
 	case r.run.done:
 		return []key.Binding{r.svc.keys.Quit}
 	}

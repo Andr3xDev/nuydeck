@@ -1,4 +1,4 @@
-package ui
+package kit
 
 import (
 	"slices"
@@ -7,8 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// keyMap holds the bindings shared by the shell and the screens; each screen's Keys() picks the ones its stage answers to.
-type keyMap struct {
+// KeyMap holds the bindings shared by the shell and the screens; each screen's Keys() picks the ones its stage answers to.
+type KeyMap struct {
 	Up, Down                 key.Binding
 	Focus, Open, Back        key.Binding
 	Refresh, Help, Quit      key.Binding
@@ -29,8 +29,9 @@ type keyMap struct {
 // jumpRows is how many rows K and J move the cursor at once.
 const jumpRows = 5
 
-func newKeyMap() keyMap {
-	return keyMap{
+// NewKeyMap returns the default key bindings.
+func NewKeyMap() KeyMap {
+	return KeyMap{
 		Up:          key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
 		Down:        key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
 		Focus:       key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
@@ -70,8 +71,8 @@ func newKeyMap() keyMap {
 	}
 }
 
-// arrow is the one-row cursor delta of an up/down key, or 0 for any other key (J and K included).
-func (k keyMap) arrow(msg tea.KeyPressMsg) int {
+// Arrow is the one-row cursor delta of an up/down key, or 0 for any other key (J and K included).
+func (k KeyMap) Arrow(msg tea.KeyPressMsg) int {
 	switch {
 	case key.Matches(msg, k.Up):
 		return -1
@@ -81,14 +82,14 @@ func (k keyMap) arrow(msg tea.KeyPressMsg) int {
 	return 0
 }
 
-// move lists the cursor-movement bindings for a screen's Keys().
-func (k keyMap) move() []key.Binding {
+// Move lists the cursor-movement bindings for a screen's Keys().
+func (k KeyMap) Move() []key.Binding {
 	return []key.Binding{k.Up, k.Down, k.JumpUp, k.JumpDown}
 }
 
-// step is the cursor delta a movement key asks for, or 0 for any other key.
-func (k keyMap) step(msg tea.KeyPressMsg) int {
-	if delta := k.arrow(msg); delta != 0 {
+// Step is the cursor delta a movement key asks for, or 0 for any other key.
+func (k KeyMap) Step(msg tea.KeyPressMsg) int {
+	if delta := k.Arrow(msg); delta != 0 {
 		return delta
 	}
 	switch {
@@ -100,34 +101,26 @@ func (k keyMap) step(msg tea.KeyPressMsg) int {
 	return 0
 }
 
-// moveCursor applies a step to a cursor over n rows, staying inside the list.
-func moveCursor(cursor, delta, n int) int {
+// MoveCursor applies a step to a cursor over n rows, staying inside the list.
+func MoveCursor(cursor, delta, n int) int {
 	return max(min(cursor+delta, n-1), 0)
 }
 
-// described returns b with another help text, for keys whose meaning depends on the stage.
-func described(b key.Binding, desc string) key.Binding {
+// Described returns b with another help text, for keys whose meaning depends on the stage.
+func Described(b key.Binding, desc string) key.Binding {
 	b.SetHelp(b.Help().Key, desc)
 	return b
 }
 
-// claims reports whether one of the bindings answers to the key.
-func claims(bindings []key.Binding, k string) bool {
+// Claims reports whether one of the bindings answers to the key.
+func Claims(bindings []key.Binding, k string) bool {
 	return slices.ContainsFunc(bindings, func(b key.Binding) bool { return slices.Contains(b.Keys(), k) })
 }
 
-// pinnedKeys stay visible at the right of the keybar however many keys the focus has.
-func (k keyMap) pinnedKeys() []key.Binding { return []key.Binding{k.Help, k.Quit} }
-
-// sidebarKeys are the keys valid at sidebar focus.
-func (k keyMap) sidebarKeys() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Open, k.Focus}
-}
-
-// panelKeys puts the screen's keys first; esc goes back to the sidebar unless the screen claims it (a dialog or a later wizard page).
-func (k keyMap) panelKeys(screenKeys []key.Binding) []key.Binding {
+// PanelKeys puts the screen's keys first; esc goes back to the sidebar unless the screen claims it (a dialog or a later wizard page).
+func (k KeyMap) PanelKeys(screenKeys []key.Binding) []key.Binding {
 	keys := slices.Clone(screenKeys)
-	if !claims(screenKeys, "esc") {
+	if !Claims(screenKeys, "esc") {
 		keys = append(keys, k.Back)
 	}
 	return keys

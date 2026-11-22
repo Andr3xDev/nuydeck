@@ -115,11 +115,11 @@ func TestBordersFollowFocus(t *testing.T) {
 	// First row: the sidebar's right border directly followed by the panel's top-left corner.
 	seam := func(sidebar, panel lipgloss.Style) string { return sidebar.Render("│") + panel.Render("╭─") }
 
-	if top := strings.Split(r.View().Content, "\n")[0]; !strings.Contains(top, seam(th.borderFocus, th.border)) {
+	if top := strings.Split(r.View().Content, "\n")[0]; !strings.Contains(top, seam(th.BorderFocus, th.Border)) {
 		t.Errorf("sidebar focus: want accent sidebar border and muted panel border, got %q", top)
 	}
 	r.focus = focusPanel
-	if top := strings.Split(r.View().Content, "\n")[0]; !strings.Contains(top, seam(th.border, th.borderFocus)) {
+	if top := strings.Split(r.View().Content, "\n")[0]; !strings.Contains(top, seam(th.Border, th.BorderFocus)) {
 		t.Errorf("panel focus: want muted sidebar border and accent panel border, got %q", top)
 	}
 	r.focus = focusSidebar

@@ -1,4 +1,4 @@
-package ui
+package kit
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 
 func TestRenderBox_LongTitleKeepsEveryLineAtWidth(t *testing.T) {
 	const w = 20
-	out := renderBox(theme{}, strings.Repeat("T", 100), []string{"x"}, w, 5, true)
+	out := RenderBox(Theme{}, strings.Repeat("T", 100), []string{"x"}, w, 5, true)
 
 	lines := strings.Split(out, "\n")
 	if len(lines) != 5 {
@@ -26,7 +26,7 @@ func TestRenderBox_LongTitleKeepsEveryLineAtWidth(t *testing.T) {
 
 func TestContentWidth_ClampsAtZero(t *testing.T) {
 	for _, tc := range []struct{ w, want int }{{20, 17}, {3, 0}, {0, 0}, {-5, 0}} {
-		if got := contentWidth(tc.w); got != tc.want {
+		if got := ContentWidth(tc.w); got != tc.want {
 			t.Errorf("contentWidth(%d) = %d, want %d", tc.w, got, tc.want)
 		}
 	}
@@ -46,7 +46,7 @@ func TestTruncate_CutsToWidthWithEllipsis(t *testing.T) {
 		{"zero width is empty", "abc", 0, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := truncate(tc.in, tc.width)
+			got := Truncate(tc.in, tc.width)
 			if got != tc.want {
 				t.Fatalf("truncate(%q, %d) = %q, want %q", tc.in, tc.width, got, tc.want)
 			}
@@ -59,7 +59,7 @@ func TestTruncate_CutsToWidthWithEllipsis(t *testing.T) {
 
 func TestWrap_StripsTerminalSequences(t *testing.T) {
 	in := "a\x1b]8;;http://x\x1b\\link\x1b]8;;\x1b\\ b\x1bPq data\x1b\\ \u009b31m c‮ d"
-	for _, line := range wrap(in, 80) {
+	for _, line := range Wrap(in, 80) {
 		if strings.ContainsAny(line, "\x1b\u009b‮") {
 			t.Errorf("control character survived: %q", line)
 		}
@@ -68,7 +68,7 @@ func TestWrap_StripsTerminalSequences(t *testing.T) {
 
 func TestWrap_LinesFitWidth(t *testing.T) {
 	const w = 10
-	for _, line := range wrap(strings.Repeat("word ", 20), w) {
+	for _, line := range Wrap(strings.Repeat("word ", 20), w) {
 		if got := lipgloss.Width(line); got > w {
 			t.Errorf("wrapped line width = %d, want <= %d: %q", got, w, line)
 		}
@@ -98,7 +98,7 @@ func TestSanitizeLine_AlsoDropsNewline(t *testing.T) {
 	for _, tc := range sanitizeCases {
 		t.Run(tc.name, func(t *testing.T) {
 			want := strings.ReplaceAll(tc.wantKeepNewline, "\n", "")
-			if got := sanitizeLine(tc.in); got != want {
+			if got := SanitizeLine(tc.in); got != want {
 				t.Fatalf("sanitizeLine(%q) = %q, want %q", tc.in, got, want)
 			}
 		})
@@ -117,7 +117,7 @@ func TestWindowAround_KeepsLineVisible(t *testing.T) {
 	lines := numberedLines(20)
 	for _, h := range []int{1, 3, 5, 20, 30} {
 		for at := range lines {
-			win := windowAround(lines, at, h)
+			win := WindowAround(lines, at, h)
 			if len(win) > h {
 				t.Errorf("h=%d at=%d: window has %d lines", h, at, len(win))
 			}
@@ -129,46 +129,46 @@ func TestWindowAround_KeepsLineVisible(t *testing.T) {
 }
 
 func TestWindowAround_ZeroHeightIsEmpty(t *testing.T) {
-	if win := windowAround(numberedLines(5), 2, 0); len(win) != 0 {
+	if win := WindowAround(numberedLines(5), 2, 0); len(win) != 0 {
 		t.Fatalf("window = %v, want empty", win)
 	}
 }
 
 func TestScroller_WindowClampsOffsetToContent(t *testing.T) {
 	lines := numberedLines(10)
-	s := scroller{}
+	s := Scroller{}
 
-	s.by(100)
-	if win := s.window(lines, 4); !slices.Equal(win, lines[6:]) {
+	s.By(100)
+	if win := s.Window(lines, 4); !slices.Equal(win, lines[6:]) {
 		t.Errorf("window after overscroll = %v, want last 4 lines", win)
 	}
 
-	s.by(-100)
-	if win := s.window(lines, 4); !slices.Equal(win, lines[:4]) {
+	s.By(-100)
+	if win := s.Window(lines, 4); !slices.Equal(win, lines[:4]) {
 		t.Errorf("window after underscroll = %v, want first 4 lines", win)
 	}
 }
 
 func TestScroller_ResetReturnsToTop(t *testing.T) {
 	lines := numberedLines(10)
-	s := scroller{}
-	s.by(5)
-	s.reset()
+	s := Scroller{}
+	s.By(5)
+	s.Reset()
 
-	if win := s.window(lines, 3); !slices.Equal(win, lines[:3]) {
+	if win := s.Window(lines, 3); !slices.Equal(win, lines[:3]) {
 		t.Fatalf("window after reset = %v, want first 3 lines", win)
 	}
 }
 
 func TestListLines_ReturnsLineWhereCursorRowStarts(t *testing.T) {
 	const w = 12
-	rows := []listRow{
-		{text: strings.Repeat("long ", 6)},
-		{text: "cursor"},
-		{text: "after", muted: true},
+	rows := []ListRow{
+		{Text: strings.Repeat("long ", 6)},
+		{Text: "cursor"},
+		{Text: "after", Muted: true},
 	}
 
-	lines, cursorAt := listLines(theme{}, rows, 1, w)
+	lines, cursorAt := ListLines(Theme{}, rows, 1, w)
 
 	if cursorAt <= 0 || cursorAt >= len(lines) {
 		t.Fatalf("cursorAt = %d of %d lines; the wrapped first row must precede it", cursorAt, len(lines))
@@ -184,7 +184,7 @@ func TestListLines_ReturnsLineWhereCursorRowStarts(t *testing.T) {
 }
 
 func TestListLines_StripsControlsFromRowText(t *testing.T) {
-	lines, _ := listLines(theme{}, []listRow{{text: "a\x1b]8;;x\x1b\\b‮c"}}, 0, 40)
+	lines, _ := ListLines(Theme{}, []ListRow{{Text: "a\x1b]8;;x\x1b\\b‮c"}}, 0, 40)
 
 	for _, line := range lines {
 		if strings.ContainsAny(line, "\x1b‮") {

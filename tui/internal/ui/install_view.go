@@ -9,6 +9,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -27,11 +28,11 @@ func (s *Install) View(width, height int) string {
 
 // hint wraps muted help text to the content width.
 func (s *Install) hint(text string, cw int) []string {
-	return styled(s.th.muted, wrap(text, cw))
+	return styled(s.th.Muted, kit.Wrap(text, cw))
 }
 
 func (s *Install) body(width, height int) []string {
-	cw := contentWidth(width)
+	cw := kit.ContentWidth(width)
 	switch s.page {
 	case pageProfile:
 		return s.profileView(width)
@@ -46,70 +47,70 @@ func (s *Install) body(width, height int) []string {
 }
 
 func (s *Install) profileView(width int) []string {
-	cw := contentWidth(width)
+	cw := kit.ContentWidth(width)
 	descriptions := map[string]string{
 		manifest.ProfileMinimal: "the essential packages",
 		manifest.ProfileFull:    "every packaged tool",
 		install.ProfileCustom:   "mark packages one by one",
 	}
-	rows := make([]listRow, len(profileChoices))
+	rows := make([]kit.ListRow, len(profileChoices))
 	for i, p := range profileChoices {
-		rows[i] = listRow{text: p}
+		rows[i] = kit.ListRow{Text: p}
 		if width >= wideRowWidth {
-			rows[i].text += "  " + descriptions[p]
+			rows[i].Text += "  " + descriptions[p]
 		}
 	}
-	list, _ := listLines(s.th, rows, s.cursor, cw)
-	lines := append([]string{s.th.title.Render("Choose a profile")}, list...)
+	list, _ := kit.ListLines(s.th, rows, s.cursor, cw)
+	lines := append([]string{s.th.Title.Render("Choose a profile")}, list...)
 	return append(append(lines, ""), s.hint("up/down move, enter next", cw)...)
 }
 
 func (s *Install) hardwareView(width int) []string {
-	cw := contentWidth(width)
-	lines := []string{s.th.title.Render("Hardware drivers")}
+	cw := kit.ContentWidth(width)
+	lines := []string{s.th.Title.Render("Hardware drivers")}
 	switch {
 	case s.hwLoading:
 		return append(lines, s.hint("Detecting GPUs...", cw)...)
 	case !s.detected:
-		lines = append(lines, styled(s.th.warning, wrap(gpuFallback, cw))...)
+		lines = append(lines, styled(s.th.Warning, kit.Wrap(gpuFallback, cw))...)
 	}
-	rows := make([]listRow, 0, len(s.deps.Drivers)+1)
+	rows := make([]kit.ListRow, 0, len(s.deps.Drivers)+1)
 	for _, d := range s.deps.Drivers {
-		rows = append(rows, listRow{text: fmt.Sprintf("%s %s (%s)", checkbox(slices.Contains(s.draft.Drivers, d.ID)), d.ID, d.VendorID)})
+		rows = append(rows, kit.ListRow{Text: fmt.Sprintf("%s %s (%s)", checkbox(slices.Contains(s.draft.Drivers, d.ID)), d.ID, d.VendorID)})
 	}
-	rows = append(rows, listRow{text: checkbox(s.draft.SkipGPUEnvLink) + " skip the GPU env link (gpu_env.lua)"})
-	list, _ := listLines(s.th, rows, s.cursor, cw)
+	rows = append(rows, kit.ListRow{Text: checkbox(s.draft.SkipGPUEnvLink) + " skip the GPU env link (gpu_env.lua)"})
+	list, _ := kit.ListLines(s.th, rows, s.cursor, cw)
 	lines = append(lines, list...)
 	return append(append(lines, ""), s.hint("up/down move, space toggles, enter next, esc back", cw)...)
 }
 
 func (s *Install) selectionView(cw, height int) []string {
-	lines := []string{s.th.title.Render("Packages to install")}
+	lines := []string{s.th.Title.Render("Packages to install")}
 	hint := s.hint("space toggles a package or a whole group, enter next, esc back", cw)
-	rows := make([]listRow, len(s.rows))
+	rows := make([]kit.ListRow, len(s.rows))
 	for i, row := range s.rows {
 		switch {
 		case row.name != "":
-			rows[i] = listRow{text: "  " + checkbox(s.selected[row.name]) + " " + row.name}
+			rows[i] = kit.ListRow{Text: "  " + checkbox(s.selected[row.name]) + " " + row.name}
 		case row.group == "":
-			rows[i] = listRow{text: "other", header: true}
+			rows[i] = kit.ListRow{Text: "other", Header: true}
 		default:
-			rows[i] = listRow{text: row.group, header: true}
+			rows[i] = kit.ListRow{Text: row.group, Header: true}
 		}
 	}
-	list, at := listLines(s.th, rows, s.cursor, cw)
-	lines = append(lines, windowAround(list, at, max(height-len(lines)-len(hint), 1))...)
+	list, at := kit.ListLines(s.th, rows, s.cursor, cw)
+	lines = append(lines, kit.WindowAround(list, at, max(height-len(lines)-len(hint), 1))...)
 	return append(lines, hint...)
 }
 
 func (s *Install) secretsView(cw int) []string {
-	lines := []string{s.th.title.Render("Secrets")}
+	lines := []string{s.th.Title.Render("Secrets")}
 	switch {
 	case s.secretsExist:
-		lines = append(lines, wrap(s.deps.SecretsPath+" already exists and is left as is.", cw)...)
+		lines = append(lines, kit.Wrap(s.deps.SecretsPath+" already exists and is left as is.", cw)...)
 		lines = append(append(lines, ""), s.hint("enter next, esc back", cw)...)
 	case s.secretPrompting():
-		lines = append(lines, wrap(fmt.Sprintf("Value for %s (%d of %d). Nothing is shown while you type.", s.deps.SecretNames[s.secretIdx], s.secretIdx+1, len(s.deps.SecretNames)), cw)...)
+		lines = append(lines, kit.Wrap(fmt.Sprintf("Value for %s (%d of %d). Nothing is shown while you type.", s.deps.SecretNames[s.secretIdx], s.secretIdx+1, len(s.deps.SecretNames)), cw)...)
 		lines = append(lines, clip([]string{"> " + s.secretInput.View()}, cw)[0], "")
 		lines = append(lines, s.hint("enter submits (empty omits), ctrl+s skips the file, esc back", cw)...)
 	}
@@ -122,7 +123,7 @@ func (s *Install) showSummary() {
 	for i, ps := range s.plan.Steps {
 		label := stepLabel(ps.Step)
 		if ps.Skip != "" {
-			lines = append(lines, sanitizeLine(fmt.Sprintf("%2d. [skipped: %s] %s", i+1, ps.Skip, label)))
+			lines = append(lines, kit.SanitizeLine(fmt.Sprintf("%2d. [skipped: %s] %s", i+1, ps.Skip, label)))
 			continue
 		}
 		detail := label
@@ -131,10 +132,10 @@ func (s *Install) showSummary() {
 				detail = res.Detail
 			}
 		}
-		lines = append(lines, sanitizeLine(fmt.Sprintf("%2d. %s", i+1, detail)))
+		lines = append(lines, kit.SanitizeLine(fmt.Sprintf("%2d. %s", i+1, detail)))
 	}
 	for _, err := range s.plan.Blocking {
-		lines = append(lines, "", s.th.err.Render(sanitizeLine("blocking: "+err.Error())))
+		lines = append(lines, "", s.th.Err.Render(kit.SanitizeLine("blocking: "+err.Error())))
 	}
 	lines = append(lines, "", finalNotices)
 	s.summary.SetContentLines(lines)
@@ -146,16 +147,16 @@ func (s *Install) summaryView(cw, height int) []string {
 	case s.planning:
 		return s.hint("Planning...", cw)
 	case s.planErr != nil:
-		lines := styled(s.th.err, wrap("Plan failed: "+s.planErr.Error(), cw))
+		lines := styled(s.th.Err, kit.Wrap("Plan failed: "+s.planErr.Error(), cw))
 		return append(append(lines, ""), s.hint("esc back", cw)...)
 	}
 	s.summary.SetWidth(max(cw, 1))
 	s.summary.SetHeight(max(height-summaryChrome, 1))
 	footer := s.hint("up/down scroll, enter starts the install, esc back", cw)
 	if !s.canConfirm() {
-		footer = []string{s.th.err.Render("The plan cannot run.") + " " + s.th.muted.Render("esc back")}
+		footer = []string{s.th.Err.Render("The plan cannot run.") + " " + s.th.Muted.Render("esc back")}
 	}
-	lines := append([]string{s.th.title.Render("Summary")}, strings.Split(s.summary.View(), "\n")...)
+	lines := append([]string{s.th.Title.Render("Summary")}, strings.Split(s.summary.View(), "\n")...)
 	return append(append(lines, ""), footer...)
 }
 
@@ -171,15 +172,15 @@ func stepLabel(step plan.Step) string {
 
 // installFooter is the run pane's text under the output at the reboot prompt and once the install ended;
 // while it runs the pane's own hint applies.
-func installFooter(th theme, cw int, r *run) []string {
+func installFooter(th kit.Theme, cw int, r *run) []string {
 	switch {
 	case r.awaitAck && r.question == "":
-		return append(styled(th.warning, wrap("Install complete. Press Enter to reboot, ctrl+c to quit without rebooting.", cw)), wrap(finalNotices, cw)...)
+		return append(styled(th.Warning, kit.Wrap("Install complete. Press Enter to reboot, ctrl+c to quit without rebooting.", cw)), kit.Wrap(finalNotices, cw)...)
 	case r.done && r.err != nil:
-		return append(styled(th.err, wrap("Install stopped: "+r.err.Error(), cw)), styled(th.muted, wrap(runCloseText, cw))...)
+		return append(styled(th.Err, kit.Wrap("Install stopped: "+r.err.Error(), cw)), styled(th.Muted, kit.Wrap(runCloseText, cw))...)
 	case r.done:
-		lines := append([]string{"Done. Nothing was rebooted."}, wrap(finalNotices, cw)...)
-		return append(lines, styled(th.muted, wrap(runCloseText, cw))...)
+		lines := append([]string{"Done. Nothing was rebooted."}, kit.Wrap(finalNotices, cw)...)
+		return append(lines, styled(th.Muted, kit.Wrap(runCloseText, cw))...)
 	}
 	return nil
 }

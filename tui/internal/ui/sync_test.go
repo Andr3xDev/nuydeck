@@ -12,6 +12,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 // runCmds feeds every command result back into the screen until no command is left.
@@ -88,7 +89,7 @@ func TestSyncEnterDialogsDeclineBackup(t *testing.T) {
 	s := newPreview(&fakeSyncDeps{plan: plan, needsBackup: true}, false)
 
 	s.Update(keyPress(tea.KeyEnter))
-	if s.flow.stage != stageOffer || !claims(s.Keys(), "esc") {
+	if s.flow.stage != stageOffer || !kit.Claims(s.Keys(), "esc") {
 		t.Fatalf("stage = %v, want the backup offer", s.flow.stage)
 	}
 	if prompt, _ := stagedOf(s).Offer(); prompt != backupOfferText {
@@ -160,7 +161,7 @@ func TestSyncNothingSelectedDoesNotApply(t *testing.T) {
 	s := newPreview(f, false)
 
 	_, cmd := s.Update(keyPress(tea.KeyEnter))
-	if cmd != nil || s.flow.stage != stagePreview || claims(s.Keys(), "enter") || f.applyCalls.Load() != 0 {
+	if cmd != nil || s.flow.stage != stagePreview || kit.Claims(s.Keys(), "enter") || f.applyCalls.Load() != 0 {
 		t.Errorf("cmd=%v stage=%v applyCalls=%d, want the preview with no apply key", cmd != nil, s.flow.stage, f.applyCalls.Load())
 	}
 }

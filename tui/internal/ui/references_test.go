@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 func openReferences(t *testing.T, f *fakeReferences, dryRun bool) *References {
@@ -75,7 +77,7 @@ func TestReferencesOpenFailureShowsAnErrorLine(t *testing.T) {
 func TestReferencesClaimOpenButNotRefresh(t *testing.T) {
 	s := openReferences(t, newFakeReferences(), false)
 
-	if !claims(s.Keys(), "o") || claims(s.Keys(), "r") {
-		t.Errorf("claims o = %v, r = %v, want o and no r", claims(s.Keys(), "o"), claims(s.Keys(), "r"))
+	if !kit.Claims(s.Keys(), "o") || kit.Claims(s.Keys(), "r") {
+		t.Errorf("claims o = %v, r = %v, want o and no r", kit.Claims(s.Keys(), "o"), kit.Claims(s.Keys(), "r"))
 	}
 }

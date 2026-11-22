@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -34,7 +35,7 @@ type runRequest struct {
 	work   func(ctx context.Context, emit func(plan.Event)) runEnd
 	ack    chan bool
 	steps  []string
-	footer func(th theme, cw int, r *run) []string
+	footer func(th kit.Theme, cw int, r *run) []string
 }
 
 // planRunRequest runs a confirmed plan through Deps.RunPlan in the run pane.
@@ -89,11 +90,11 @@ type run struct {
 	question string // the y/n question being asked, empty at a plain acknowledgement
 	notice   bool
 	follow   bool
-	scroll   scroller
+	scroll   kit.Scroller
 	steps    []string
 	statuses []stepStatus
 	current  int
-	footer   func(th theme, cw int, r *run) []string
+	footer   func(th kit.Theme, cw int, r *run) []string
 	err      error // how the work ended, set when done
 	// started and finished let WaitInstall tell a run whose command never executed from one still winding down.
 	started  atomic.Bool
@@ -193,7 +194,7 @@ func (r *run) scrollBy(delta int) {
 	if delta < 0 {
 		r.follow = false
 	}
-	r.scroll.by(delta)
+	r.scroll.By(delta)
 }
 
 // hint is the one line under the output: what the keys do now.
@@ -212,20 +213,20 @@ func (r *run) hint() string {
 }
 
 // keys are the bindings the pane answers to now, for the keybar.
-func (r *run) keys(k keyMap) []key.Binding {
-	scroll := k.move()
+func (r *run) keys(k kit.KeyMap) []key.Binding {
+	scroll := k.Move()
 	switch {
 	case r.done:
-		return append(scroll, described(k.Back, "close"))
+		return append(scroll, kit.Described(k.Back, "close"))
 	case r.awaitAck && r.question != "":
 		return append(scroll, k.Yes, k.No, k.CancelRun)
 	case r.awaitAck:
-		return append(scroll, described(k.Confirm, "continue"), described(k.CancelRun, "quit"))
+		return append(scroll, kit.Described(k.Confirm, "continue"), kit.Described(k.CancelRun, "quit"))
 	}
 	return append(scroll, k.CancelRun)
 }
 
-func statusMark(th theme, st stepStatus) string {
+func statusMark(th kit.Theme, st stepStatus) string {
 	switch st {
 	case statusRunning:
 		return "[>]"
@@ -234,51 +235,51 @@ func statusMark(th theme, st stepStatus) string {
 	case statusSkipped:
 		return "[-]"
 	case statusFailed:
-		return th.err.Render("[!]")
+		return th.Err.Render("[!]")
 	}
 	return "[ ]"
 }
 
 // stepList is the status list, windowed around the current step, followed by a blank line.
-func (r *run) stepList(th theme, cw, inner int) []string {
+func (r *run) stepList(th kit.Theme, cw, inner int) []string {
 	if len(r.steps) == 0 {
 		return nil
 	}
 	rows := make([]string, len(r.steps))
 	for i, label := range r.steps {
-		rows[i] = statusMark(th, r.statuses[i]) + " " + truncate(sanitizeLine(label), max(cw-markWidth-1, 0))
+		rows[i] = statusMark(th, r.statuses[i]) + " " + kit.Truncate(kit.SanitizeLine(label), max(cw-markWidth-1, 0))
 	}
-	return append(windowAround(rows, r.current, min(len(rows), max(inner/stepListShare, minStepListRows))), "")
+	return append(kit.WindowAround(rows, r.current, min(len(rows), max(inner/stepListShare, minStepListRows))), "")
 }
 
 // footerLines is the hook's text, or the default hint while the owner has a notice to read or the hook has nothing to say.
-func (r *run) footerLines(th theme, cw int) []string {
+func (r *run) footerLines(th kit.Theme, cw int) []string {
 	if r.footer != nil && !r.notice {
 		if lines := r.footer(th, cw, r); lines != nil {
 			return lines
 		}
 	}
-	return styled(th.muted, wrap(r.hint(), cw))
+	return styled(th.Muted, kit.Wrap(r.hint(), cw))
 }
 
 // view re-wraps every line each frame; shortcut: fine at 2000 lines, cache wrapped lines if it shows in profiling.
-func (r *run) view(th theme, w, h int) string {
-	cw := contentWidth(w)
+func (r *run) view(th kit.Theme, w, h int) string {
+	cw := kit.ContentWidth(w)
 	var lines []string
 	for _, l := range r.lines {
-		lines = append(lines, styled(th.plain, wrap(l.text, cw))...)
+		lines = append(lines, styled(th.Plain, kit.Wrap(l.text, cw))...)
 	}
 	if r.follow {
-		r.scroll.offset = len(lines)
+		r.scroll.Offset = len(lines)
 	}
 	inner := innerHeight(h)
 	head, foot := r.stepList(th, cw, inner), r.footerLines(th, cw)
 	room := max(inner-len(head)-len(foot), 1)
 	total := len(lines)
-	lines = r.scroll.window(lines, room)
-	r.follow = r.follow || r.scroll.offset+room >= total
+	lines = r.scroll.Window(lines, room)
+	r.follow = r.follow || r.scroll.Offset+room >= total
 	for len(lines) < room {
 		lines = append(lines, "")
 	}
-	return screenBox(th, runTitlePrefix+sanitizeLine(r.title), slices.Concat(head, lines, foot), w, h)
+	return screenBox(th, runTitlePrefix+kit.SanitizeLine(r.title), slices.Concat(head, lines, foot), w, h)
 }

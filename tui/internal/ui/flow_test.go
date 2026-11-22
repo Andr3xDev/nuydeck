@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 // fakeStaged is a preview whose offer and built plan the test controls; offers records what Build received.
@@ -19,12 +20,12 @@ type fakeStaged struct {
 	offers      []bool
 }
 
-func (s *fakeStaged) View(theme, int, int) []string   { return []string{"fake preview"} }
-func (s *fakeStaged) Keys() []key.Binding             { return nil }
-func (s *fakeStaged) Update(tea.KeyPressMsg) tea.Cmd  { return nil }
-func (s *fakeStaged) CanApply() bool                  { return !s.cannotApply }
-func (s *fakeStaged) Offer() (prompt string, ok bool) { return s.offer, s.offer != "" }
-func (s *fakeStaged) Build(offer bool) plan.Plan      { s.offers = append(s.offers, offer); return s.built }
+func (s *fakeStaged) View(kit.Theme, int, int) []string { return []string{"fake preview"} }
+func (s *fakeStaged) Keys() []key.Binding               { return nil }
+func (s *fakeStaged) Update(tea.KeyPressMsg) tea.Cmd    { return nil }
+func (s *fakeStaged) CanApply() bool                    { return !s.cannotApply }
+func (s *fakeStaged) Offer() (prompt string, ok bool)   { return s.offer, s.offer != "" }
+func (s *fakeStaged) Build(offer bool) plan.Plan        { s.offers = append(s.offers, offer); return s.built }
 
 // flowHarness owns the flow under test and the plans its Run hook received.
 type flowHarness struct {
@@ -277,7 +278,7 @@ func TestPlanStagedListsStepsAndKeepsBothConfirms(t *testing.T) {
 	}
 	st := newPlanStaged(p)
 
-	view := strings.Join(st.View(ForVariant(""), 80, 20), "\n")
+	view := strings.Join(st.View(kit.ForVariant(""), 80, 20), "\n")
 	label, _ := plan.Describe(p.Steps[0])
 	if !strings.Contains(view, label) {
 		t.Errorf("view %q lacks the described step %q", view, label)

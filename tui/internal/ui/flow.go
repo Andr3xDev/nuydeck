@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 type flowStage int
@@ -23,7 +24,7 @@ const (
 
 // staged is the preview a flow plans: what it shows, what it offers and the plan it builds.
 type staged interface {
-	View(th theme, w, h int) []string
+	View(th kit.Theme, w, h int) []string
 	Keys() []key.Binding
 	Update(tea.KeyPressMsg) tea.Cmd
 	CanApply() bool
@@ -68,7 +69,7 @@ type flow struct {
 	err   error
 	built plan.Plan
 	asked bool // the offer stage was shown, so esc at the confirm returns to it
-	body  scroller
+	body  kit.Scroller
 }
 
 func newFlow(svc *shell, src flowSource) *flow { return &flow{svc: svc, src: src} }
@@ -88,7 +89,7 @@ func (f *flow) start() tea.Cmd {
 func (f *flow) reset() {
 	f.gen++
 	f.st, f.err, f.built, f.asked = nil, nil, plan.Plan{}, false
-	f.body.reset()
+	f.body.Reset()
 	f.stage = stageIdle
 }
 
@@ -133,7 +134,7 @@ func (f *flow) receive(msg plannedMsg) tea.Cmd {
 		return nil
 	}
 	f.st, f.err = msg.st, msg.err
-	f.body.reset()
+	f.body.Reset()
 	f.stage = stagePreview
 	if l, ok := f.st.(loader); ok && f.err == nil {
 		return l.Load()
@@ -161,8 +162,8 @@ func (f *flow) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		switch {
 		case f.st != nil && key.Matches(msg, f.st.Keys()...):
 			return f.st.Update(msg)
-		case k.step(msg) != 0:
-			f.body.by(k.step(msg))
+		case k.Step(msg) != 0:
+			f.body.By(k.Step(msg))
 		case key.Matches(msg, k.Confirm):
 			f.accept()
 		}
@@ -174,11 +175,11 @@ func (f *flow) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			f.openConfirm(false)
 		}
 	case stageConfirm, stageExtra:
-		if f.src.HardConfirm && k.step(msg) != 0 {
-			f.body.by(k.step(msg))
+		if f.src.HardConfirm && k.Step(msg) != 0 {
+			f.body.By(k.Step(msg))
 			return nil
 		}
-		return f.answer(k.answer(msg, true) == answerYes)
+		return f.answer(k.Answer(msg, true) == kit.AnswerYes)
 	}
 	return nil
 }
@@ -195,7 +196,7 @@ func (f *flow) back() {
 	default:
 		f.reset()
 	}
-	f.body.reset()
+	f.body.Reset()
 }
 
 // accept leaves the preview for the offer, or the confirm when nothing is offered.
@@ -213,7 +214,7 @@ func (f *flow) accept() {
 func (f *flow) openConfirm(offer bool) {
 	f.built = f.st.Build(offer)
 	f.stage = stageConfirm
-	f.body.reset()
+	f.body.Reset()
 }
 
 // answer proceeds on yes; any other key declines and runs nothing.
@@ -223,7 +224,7 @@ func (f *flow) answer(yes bool) tea.Cmd {
 		f.reset()
 	case f.stage == stageConfirm && f.built.ExtraConfirm != "":
 		f.stage = stageExtra
-		f.body.reset()
+		f.body.Reset()
 	default:
 		req := f.src.Run(f.built)
 		f.reset()
@@ -243,23 +244,23 @@ func (f *flow) Keys() []key.Binding {
 	case stagePreview:
 		var keys []key.Binding
 		if f.canApply() {
-			keys = append(keys, described(k.Confirm, "apply"))
+			keys = append(keys, kit.Described(k.Confirm, "apply"))
 		}
 		var stagedKeys []key.Binding
 		if f.st != nil {
 			stagedKeys = f.st.Keys()
 		}
 		if len(stagedKeys) == 0 {
-			keys = append(keys, k.move()...) // the body scrolls when the staged claims no keys
+			keys = append(keys, k.Move()...) // the body scrolls when the staged claims no keys
 		}
 		return append(append(keys, stagedKeys...), k.Back)
 	case stageOffer:
-		return []key.Binding{k.Yes, described(k.Confirm, "yes"), k.No, k.Back}
+		return []key.Binding{k.Yes, kit.Described(k.Confirm, "yes"), k.No, k.Back}
 	case stageConfirm, stageExtra:
 		if f.src.HardConfirm {
-			return append(k.move(), k.Yes, described(k.Back, "back"))
+			return append(k.Move(), k.Yes, kit.Described(k.Back, "back"))
 		}
-		return []key.Binding{k.Yes, described(k.Back, "back")}
+		return []key.Binding{k.Yes, kit.Described(k.Back, "back")}
 	}
 	return nil
 }

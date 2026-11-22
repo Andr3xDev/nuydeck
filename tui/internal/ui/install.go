@@ -13,6 +13,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 var errInstallUnavailable = errors.New("install is not available")
@@ -55,8 +56,8 @@ type selectionRow struct {
 type Install struct {
 	ctx  context.Context
 	deps InstallDeps
-	keys keyMap
-	th   theme
+	keys kit.KeyMap
+	th   kit.Theme
 
 	page   installPage
 	draft  install.Draft
@@ -116,11 +117,11 @@ func (s *Install) Enter() tea.Cmd { return nil }
 func (s *Install) Keys() []key.Binding {
 	switch s.page {
 	case pageProfile:
-		return append(s.keys.move(), s.keys.Confirm)
+		return append(s.keys.Move(), s.keys.Confirm)
 	case pageHardware:
-		return append(s.keys.move(), s.keys.Toggle, s.keys.Confirm, s.keys.Back)
+		return append(s.keys.Move(), s.keys.Toggle, s.keys.Confirm, s.keys.Back)
 	case pageSelection:
-		return append(s.keys.move(), s.keys.Toggle, s.keys.All, s.keys.Confirm, s.keys.Back)
+		return append(s.keys.Move(), s.keys.Toggle, s.keys.All, s.keys.Confirm, s.keys.Back)
 	case pageSecrets:
 		keys := []key.Binding{s.keys.Confirm, s.keys.Back}
 		if s.secretPrompting() {
@@ -128,7 +129,7 @@ func (s *Install) Keys() []key.Binding {
 		}
 		return keys
 	}
-	return append(s.keys.move(), s.keys.Confirm, s.keys.Back)
+	return append(s.keys.Move(), s.keys.Confirm, s.keys.Back)
 }
 
 // CapturesText reports whether printable keys belong to the hidden input, so the shell must not act on them.
@@ -207,8 +208,8 @@ func (s *Install) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // moveBy applies up and down over n rows and reports whether the key was a move.
 func (s *Install) moveBy(msg tea.KeyPressMsg, n int) bool {
-	delta := s.keys.step(msg)
-	s.cursor = moveCursor(s.cursor, delta, n)
+	delta := s.keys.Step(msg)
+	s.cursor = kit.MoveCursor(s.cursor, delta, n)
 	return delta != 0
 }
 

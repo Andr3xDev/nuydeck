@@ -14,6 +14,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/install"
 	"github.com/Andr3xDev/nuydeck/tui/internal/packages"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 // gatedRun starts a run whose work waits for proceed, then does after.
@@ -72,17 +73,17 @@ func TestRunNoticeClearsOnTheNextAcceptedKey(t *testing.T) {
 }
 
 func TestRunFinishedFooterReplacesTheNotice(t *testing.T) {
-	r := newRun(runRequest{footer: func(theme, int, *run) []string { return []string{"hook footer"} }}, nil)
+	r := newRun(runRequest{footer: func(kit.Theme, int, *run) []string { return []string{"hook footer"} }}, nil)
 	r.notice = true
 	r.finish(runEnd{})
 
-	if got := r.footerLines(ForVariant(""), 40); !strings.Contains(strings.Join(got, "\n"), "hook footer") {
+	if got := r.footerLines(kit.ForVariant(""), 40); !strings.Contains(strings.Join(got, "\n"), "hook footer") {
 		t.Errorf("footer = %q, want the hook's text after the run finished", got)
 	}
 }
 
 func TestRunFollowResumesWhenScrolledBackToTheBottom(t *testing.T) {
-	th := ForVariant("")
+	th := kit.ForVariant("")
 	r := newRun(runRequest{title: "t"}, nil)
 	for i := range 50 {
 		r.push(outLine{fmt.Sprintf("row-%02d", i)})
@@ -142,7 +143,7 @@ func TestRefreshIsListedOnlyForScreensThatRefresh(t *testing.T) {
 			continue
 		}
 		root.selected, root.focus = i, focusPanel
-		if got := claims(root.focusedKeys(), "r"); got != want {
+		if got := kit.Claims(root.focusedKeys(), "r"); got != want {
 			t.Errorf("%s: r listed = %v, want %v", s.title, got, want)
 		}
 	}
@@ -160,9 +161,9 @@ func TestPackagesFormTitleKeepsTheSpaceBeforeThePackageName(t *testing.T) {
 }
 
 func TestListRowsStayOneLine(t *testing.T) {
-	rows := []listRow{{text: "home:a\nb"}, {text: strings.Repeat("long ", 20), badges: []string{"incomplete"}}}
+	rows := []kit.ListRow{{Text: "home:a\nb"}, {Text: strings.Repeat("long ", 20), Badges: []string{"incomplete"}}}
 
-	lines, _ := listLines(ForVariant(""), rows, 0, 20)
+	lines, _ := kit.ListLines(kit.ForVariant(""), rows, 0, 20)
 
 	if len(lines) != len(rows) {
 		t.Fatalf("%d lines for %d rows: %q", len(lines), len(rows), lines)
@@ -243,7 +244,7 @@ func TestPinnedKeysShowOnlyCtrlCQuitWhileThePanelCapturesText(t *testing.T) {
 	root.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 
 	pinned := root.pinnedKeys()
-	if len(pinned) != 1 || !claims(pinned, "ctrl+c") || claims(pinned, "q") {
+	if len(pinned) != 1 || !kit.Claims(pinned, "ctrl+c") || kit.Claims(pinned, "q") {
 		t.Fatalf("pinned keys = %v, want only ctrl+c quit", pinned)
 	}
 	if view := ansi.Strip(root.View().Content); !strings.Contains(view, "ctrl+c quit") || strings.Contains(view, "? help") {
@@ -274,7 +275,7 @@ func TestSyncOffersNoApplyWithoutApplySync(t *testing.T) {
 	s := newSync(testServices(Deps{PlanSync: f.PlanSync}))
 	runCmds(s, s.startPlan(plan.Push, nil))
 
-	if s.flow.canApply() || claims(s.Keys(), "enter") {
+	if s.flow.canApply() || kit.Claims(s.Keys(), "enter") {
 		t.Error("apply is offered although no ApplySync is wired")
 	}
 }
@@ -285,11 +286,11 @@ func TestBackupsKeysOmitRestoreAndDeleteWithoutASelectionOrWiring(t *testing.T) 
 	unwired := newBackups(testServices(Deps{ListBackups: f.ListBackups}))
 	unwired.Update(unwired.load()())
 	for name, b := range map[string]*Backups{"empty": empty, "unwired": unwired} {
-		if claims(b.Keys(), "d") || claims(b.Keys(), "enter") {
+		if kit.Claims(b.Keys(), "d") || kit.Claims(b.Keys(), "enter") {
 			t.Errorf("%s: keys %v list delete or restore", name, b.Keys())
 		}
 	}
-	if keys := loadedBackups(f).Keys(); !claims(keys, "d") || !claims(keys, "enter") {
+	if keys := loadedBackups(f).Keys(); !kit.Claims(keys, "d") || !kit.Claims(keys, "enter") {
 		t.Errorf("wired list with a selection must list delete and restore: %v", keys)
 	}
 }

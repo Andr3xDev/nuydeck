@@ -6,14 +6,16 @@ import (
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/lipgloss/v2"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 // keybar renders the bindings valid in the current focus on the left, cut to fit, and the pinned
 // bindings with the dry-run badge on the right, which never get cut.
-func keybar(t theme, h help.Model, bindings, pinned []key.Binding, dryRun bool, width int) string {
+func keybar(t kit.Theme, h help.Model, bindings, pinned []key.Binding, dryRun bool, width int) string {
 	right := h.ShortHelpView(pinned)
 	if dryRun {
-		right += " " + t.badge.Render(dryRunBadge)
+		right += " " + t.Badge.Render(dryRunBadge)
 	}
 	left := fitBindings(h, bindings, width-lipgloss.Width(right)-1)
 	gap := max(width-lipgloss.Width(left)-lipgloss.Width(right), 0)

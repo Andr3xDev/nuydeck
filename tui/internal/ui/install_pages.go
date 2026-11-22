@@ -268,10 +268,10 @@ func (s *Install) summaryKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, s.keys.Back):
 		s.Cancel()
 		return s.step(-1)
-	case s.keys.step(msg) < 0:
-		s.summary.ScrollUp(-s.keys.step(msg))
-	case s.keys.step(msg) > 0:
-		s.summary.ScrollDown(s.keys.step(msg))
+	case s.keys.Step(msg) < 0:
+		s.summary.ScrollUp(-s.keys.Step(msg))
+	case s.keys.Step(msg) > 0:
+		s.summary.ScrollDown(s.keys.Step(msg))
 	case key.Matches(msg, s.keys.Confirm) && s.canConfirm() && !s.started:
 		return s.startRun()
 	}

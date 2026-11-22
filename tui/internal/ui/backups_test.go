@@ -14,6 +14,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 type fakeBackups struct {
@@ -144,11 +145,11 @@ func TestBackupsDeleteDeclineRunsNothing(t *testing.T) {
 	b := loadedBackups(f)
 
 	send(b, keyPress('d'))
-	if !claims(b.Keys(), "esc") {
+	if !kit.Claims(b.Keys(), "esc") {
 		t.Fatal("d must open the delete flow")
 	}
 	runs := send(b, keyEnter, keyPress('n'))
-	if len(runs) != 0 || b.flow.active() || claims(b.Keys(), "esc") || len(f.ran) != 0 {
+	if len(runs) != 0 || b.flow.active() || kit.Claims(b.Keys(), "esc") || len(f.ran) != 0 {
 		t.Errorf("decline must not delete: runs=%d active=%v ran=%d", len(runs), b.flow.active(), len(f.ran))
 	}
 }
@@ -266,7 +267,7 @@ func TestBackupsKeysListJumpAndNoRefresh(t *testing.T) {
 
 	keys := b.Keys()
 
-	if !claims(keys, "J") || !claims(keys, "K") || !claims(keys, "b") || !claims(keys, "space") || !claims(keys, "a") {
+	if !kit.Claims(keys, "J") || !kit.Claims(keys, "K") || !kit.Claims(keys, "b") || !kit.Claims(keys, "space") || !kit.Claims(keys, "a") {
 		t.Errorf("keys %v must list jump, snapshot, toggle and all", keys)
 	}
 	for _, binding := range keys {
@@ -302,11 +303,11 @@ func TestBackupsRestoreIsAFlowOwnedByTheScreen(t *testing.T) {
 	if r.selected != at || b.flow.stage != stagePreview || !ok || st.syncPlan.Direction != plan.Restore {
 		t.Errorf("selected=%d stage=%v preview=%v, want the restore preview on the Backups screen", r.selected, b.flow.stage, ok)
 	}
-	if !claims(b.Keys(), "esc") {
+	if !kit.Claims(b.Keys(), "esc") {
 		t.Error("the restore flow must claim esc")
 	}
 	b.Update(keyEsc)
-	if b.flow.active() || claims(b.Keys(), "esc") {
+	if b.flow.active() || kit.Claims(b.Keys(), "esc") {
 		t.Error("esc at the preview must leave the flow")
 	}
 }
@@ -373,7 +374,7 @@ func TestBackupsIncompleteListedFlaggedAndDeletable(t *testing.T) {
 		t.Error("incomplete backup must be flagged")
 	}
 	send(b, keyPress('d'))
-	if !claims(b.Keys(), "esc") {
+	if !kit.Claims(b.Keys(), "esc") {
 		t.Error("incomplete backup must be deletable")
 	}
 }

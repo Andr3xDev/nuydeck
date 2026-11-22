@@ -9,6 +9,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 func press(t *testing.T, r *Root, k tea.KeyPressMsg) (*Root, tea.Cmd) {
@@ -19,7 +21,7 @@ func press(t *testing.T, r *Root, k tea.KeyPressMsg) (*Root, tea.Cmd) {
 
 // testServices wires a screen under test the way NewRoot does.
 func testServices(deps Deps) *shell {
-	return &shell{Deps: deps, ctx: context.Background(), th: ForVariant(""), keys: newKeyMap()}
+	return &shell{Deps: deps, ctx: context.Background(), th: kit.ForVariant(""), keys: kit.NewKeyMap()}
 }
 
 func TestRootQuitKeys(t *testing.T) {
@@ -199,7 +201,7 @@ func TestRefreshIsListedForServicesAndEnvButNotReferences(t *testing.T) {
 			continue
 		}
 		root.selected, root.focus = i, focusPanel
-		if got := claims(root.focusedKeys(), "r"); got != wantR {
+		if got := kit.Claims(root.focusedKeys(), "r"); got != wantR {
 			t.Errorf("%s: r listed = %v, want %v", s.title, got, wantR)
 		}
 	}

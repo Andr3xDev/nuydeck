@@ -13,6 +13,7 @@ import (
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/cfgsync"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const minPopupLines = 4
@@ -54,11 +55,11 @@ func (st *syncStaged) Keys() []key.Binding {
 	k := st.svc.keys
 	switch st.sub {
 	case subDiff:
-		return append(k.move(), k.Back)
+		return append(k.Move(), k.Back)
 	case subResult:
-		return append(k.move(), described(k.Yes, "use edit"), described(k.No, "discard"), k.Back)
+		return append(k.Move(), kit.Described(k.Yes, "use edit"), kit.Described(k.No, "discard"), k.Back)
 	}
-	return append(k.move(), k.Toggle, k.All, k.Edit, k.Diff)
+	return append(k.Move(), k.Toggle, k.All, k.Edit, k.Diff)
 }
 
 // Load reads both ends of the item under the cursor, once.
@@ -85,7 +86,7 @@ func (st *syncStaged) Handle(msg tea.Msg) tea.Cmd {
 			if it, ok := st.current(); ok && st.diffWanted && it.Key() == msg.key {
 				st.diffWanted = false
 				st.sub = subDiff
-				st.subScroll.reset()
+				st.subScroll.Reset()
 			}
 		}
 	case editedMsg:
@@ -128,15 +129,15 @@ func (st *syncStaged) receiveEdit(msg editedMsg) {
 	default:
 		st.pending = &msg
 		st.sub = subResult
-		st.subScroll.reset()
+		st.subScroll.Reset()
 	}
 }
 
 func (st *syncStaged) updateSub(msg tea.KeyPressMsg) tea.Cmd {
 	k := st.svc.keys
 	switch {
-	case k.step(msg) != 0:
-		st.subScroll.by(k.step(msg))
+	case k.Step(msg) != 0:
+		st.subScroll.By(k.Step(msg))
 	case st.sub == subResult && key.Matches(msg, k.Yes):
 		st.res[st.pending.key] = cfgsync.Edited{Content: st.pending.res.Content, Mode: st.pending.res.Mode}
 		st.sel[st.pending.key] = true
@@ -149,7 +150,7 @@ func (st *syncStaged) updateSub(msg tea.KeyPressMsg) tea.Cmd {
 
 func (st *syncStaged) closeSub() {
 	st.sub, st.pending = subNone, nil
-	st.subScroll.reset()
+	st.subScroll.Reset()
 }
 
 // openDiff opens the diff of the item under the cursor; when its sides are not read yet it waits for them.
@@ -160,7 +161,7 @@ func (st *syncStaged) openDiff() tea.Cmd {
 	}
 	if s := st.sides[it.Key()]; s != nil && s.loaded {
 		st.sub = subDiff
-		st.subScroll.reset()
+		st.subScroll.Reset()
 		return nil
 	}
 	st.diffWanted = true
@@ -168,43 +169,43 @@ func (st *syncStaged) openDiff() tea.Cmd {
 }
 
 // diffView shows both ends of the item under the cursor; the direction is in the flow header.
-func (st *syncStaged) diffView(th theme, w, h int) []string {
+func (st *syncStaged) diffView(th kit.Theme, w, h int) []string {
 	it, _ := st.current()
 	s := st.sides[it.Key()]
 	if s.err != nil {
-		return styled(th.err, wrap(s.err.Error(), w))
+		return styled(th.Err, kit.Wrap(s.err.Error(), w))
 	}
-	lines := wrap("- destination: "+it.DstPath(), w)
-	lines = append(lines, wrap("+ source: "+it.SrcPath(), w)...)
+	lines := kit.Wrap("- destination: "+it.DstPath(), w)
+	lines = append(lines, kit.Wrap("+ source: "+it.SrcPath(), w)...)
 	if opaque(s.dst) || opaque(s.src) {
-		lines = append(lines, wrap("destination: "+describeSide(s.dst), w)...)
-		lines = append(lines, wrap("source: "+describeSide(s.src), w)...)
+		lines = append(lines, kit.Wrap("destination: "+describeSide(s.dst), w)...)
+		lines = append(lines, kit.Wrap("source: "+describeSide(s.src), w)...)
 		lines = append(lines, opaqueSummary(th, w, s.dst, s.src)...)
 	} else {
 		lines = append(lines, diffBody(th, w, cfgsync.DiffLines(textLines(s.dst.Content), textLines(s.src.Content)))...)
 	}
-	return st.subScroll.window(lines, h)
+	return st.subScroll.Window(lines, h)
 }
 
 // resultView is the popup under the list: the edit against the destination it would replace.
-func (st *syncStaged) resultView(th theme, w, h int) []string {
+func (st *syncStaged) resultView(th kit.Theme, w, h int) []string {
 	dst := st.sides[st.pending.key].dst
 	diff := cfgsync.DiffLines(textLines(dst.Content), textLines(st.pending.res.Content))
-	title := th.title.Render(truncate("Edited result against the destination: y use it, n discard", w))
-	return append([]string{title}, st.subScroll.window(diffBody(th, w, diff), h-1)...)
+	title := th.Title.Render(kit.Truncate("Edited result against the destination: y use it, n discard", w))
+	return append([]string{title}, st.subScroll.Window(diffBody(th, w, diff), h-1)...)
 }
 
-func diffBody(th theme, w int, diff []cfgsync.DiffLine) []string {
+func diffBody(th kit.Theme, w int, diff []cfgsync.DiffLine) []string {
 	var lines []string
 	for _, d := range diff {
-		style := th.plain
+		style := th.Plain
 		switch d.Op {
 		case '-':
-			style = th.err
+			style = th.Err
 		case '+':
-			style = th.ok
+			style = th.OK
 		}
-		lines = append(lines, styled(style, wrap(string(d.Op)+" "+d.Text, w))...)
+		lines = append(lines, styled(style, kit.Wrap(string(d.Op)+" "+d.Text, w))...)
 	}
 	return lines
 }
@@ -226,19 +227,19 @@ func opaque(s cfgsync.Side) bool {
 const maxDirChildLines = 50
 
 // opaqueSummary says how two sides that cannot be diffed as text differ.
-func opaqueSummary(th theme, w int, dst, src cfgsync.Side) []string {
+func opaqueSummary(th kit.Theme, w int, dst, src cfgsync.Side) []string {
 	switch {
 	case dst.Kind == plan.KindLink && src.Kind == plan.KindLink && dst.LinkTarget == src.LinkTarget:
-		return styled(th.muted, wrap("same link target", w))
+		return styled(th.Muted, kit.Wrap("same link target", w))
 	case dst.Kind == plan.KindDir || src.Kind == plan.KindDir:
 		return dirDiffLines(th, w, dst, src)
 	}
-	return styled(th.warning, wrap("differs", w))
+	return styled(th.Warning, kit.Wrap("differs", w))
 }
 
 // dirDiffLines lists the children that differ, as making the destination equal the source would change them.
 // A child counts as changed when its kind or, for a file, its size differs; same-size edits and links with a changed target are not seen.
-func dirDiffLines(th theme, w int, dst, src cfgsync.Side) []string {
+func dirDiffLines(th kit.Theme, w int, dst, src cfgsync.Side) []string {
 	dstChildren := map[string]cfgsync.Child{}
 	for _, c := range dst.Children {
 		dstChildren[c.Name] = c
@@ -247,7 +248,7 @@ func dirDiffLines(th theme, w int, dst, src cfgsync.Side) []string {
 	count := 0
 	note := func(style lipgloss.Style, mark, name string) {
 		if count++; count <= maxDirChildLines {
-			lines = append(lines, styled(style, wrap(mark+" "+name, w))...)
+			lines = append(lines, styled(style, kit.Wrap(mark+" "+name, w))...)
 		}
 	}
 	for _, c := range src.Children {
@@ -255,21 +256,21 @@ func dirDiffLines(th theme, w int, dst, src cfgsync.Side) []string {
 		delete(dstChildren, c.Name)
 		switch {
 		case !both:
-			note(th.ok, "+", c.Name)
+			note(th.OK, "+", c.Name)
 		case d.Kind != c.Kind || d.Kind == plan.KindFile && d.Size != c.Size:
-			note(th.warning, "~", c.Name)
+			note(th.Warning, "~", c.Name)
 		}
 	}
 	for _, c := range dst.Children {
 		if _, left := dstChildren[c.Name]; left {
-			note(th.err, "-", c.Name)
+			note(th.Err, "-", c.Name)
 		}
 	}
 	switch {
 	case count == 0:
-		return styled(th.muted, wrap("no child differs; only the directory itself does", w))
+		return styled(th.Muted, kit.Wrap("no child differs; only the directory itself does", w))
 	case count > maxDirChildLines:
-		lines = append(lines, styled(th.muted, wrap(fmt.Sprintf("... and %d more", count-maxDirChildLines), w))...)
+		lines = append(lines, styled(th.Muted, kit.Wrap(fmt.Sprintf("... and %d more", count-maxDirChildLines), w))...)
 	}
 	return lines
 }

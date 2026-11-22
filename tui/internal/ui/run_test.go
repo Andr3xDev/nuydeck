@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 const (
@@ -382,14 +383,14 @@ func TestRunCtrlCAtAConfirmPromptCancelsTheRunWithoutQuitting(t *testing.T) {
 func TestRunKeybarAtAConfirmPromptListsYesNoAndCancelButNotEnter(t *testing.T) {
 	d, _, _ := awaitingConfirm(t)
 
-	bindings := d.root.run.keys(newKeyMap())
+	bindings := d.root.run.keys(kit.NewKeyMap())
 
 	for _, k := range []string{"y", "n", "ctrl+c"} {
-		if !claims(bindings, k) {
+		if !kit.Claims(bindings, k) {
 			t.Errorf("keybar lacks %q", k)
 		}
 	}
-	if claims(bindings, "enter") {
+	if kit.Claims(bindings, "enter") {
 		t.Error("keybar offers enter at a y/n question")
 	}
 }

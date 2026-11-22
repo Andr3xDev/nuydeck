@@ -15,6 +15,7 @@ import (
 	"github.com/Andr3xDev/nuydeck/tui/internal/drift"
 	"github.com/Andr3xDev/nuydeck/tui/internal/manifest"
 	"github.com/Andr3xDev/nuydeck/tui/internal/plan"
+	"github.com/Andr3xDev/nuydeck/tui/internal/ui/kit"
 )
 
 func otherEntry() manifest.ResolvedEntry {
@@ -313,7 +314,7 @@ func TestDirDiffLinesCapsAndCountsTheRest(t *testing.T) {
 		src = append(src, cfgsync.Child{Name: fmt.Sprintf("n%03d", i), Kind: plan.KindFile})
 	}
 
-	lines := dirDiffLines(ForVariant("nadir"), 80, cfgsync.Side{Exists: true, Kind: plan.KindDir}, cfgsync.Side{Exists: true, Kind: plan.KindDir, Children: src})
+	lines := dirDiffLines(kit.ForVariant("nadir"), 80, cfgsync.Side{Exists: true, Kind: plan.KindDir}, cfgsync.Side{Exists: true, Kind: plan.KindDir, Children: src})
 
 	if len(lines) != maxDirChildLines+1 || !strings.Contains(lines[len(lines)-1], "and 5 more") {
 		t.Errorf("got %d lines ending %q, want %d with a count of the 5 hidden", len(lines), lines[len(lines)-1], maxDirChildLines+1)
