@@ -22,25 +22,41 @@ const (
 	spotifyOpenedID      = "spotify-opened"
 	spotifyLaunchID      = "spotify-launch"
 
+	libvirtNetworkNotice = "after reboot run: sudo virsh net-autostart default && sudo virsh net-start default"
+
 	skipPresent      = "already present"
 	skipFirstRunDone = "already launched once"
 )
 
 var gtkThemeNames = []string{"Abysal-Obsidian", "Abysal-Marble"}
 
-func (i *Installer) planDockerGroup(ctx context.Context, b *planBuilder, d Draft) error {
-	if !i.selected(d, "docker") {
+// planUserGroup adds the user to the group a selected package creates; PhaseSystem runs after the package phases.
+func (i *Installer) planUserGroup(ctx context.Context, b *planBuilder, d Draft, pkg, group string) error {
+	if !i.selected(d, pkg) {
 		return nil
 	}
-	member, err := i.Probe.InGroup(ctx, "docker")
+	member, err := i.Probe.InGroup(ctx, group)
 	if err != nil {
-		return fmt.Errorf("docker group: %w", err)
+		return fmt.Errorf("%s group: %w", group, err)
 	}
 	skip := ""
 	if member {
-		skip = "already a docker group member"
+		skip = "already a " + group + " group member"
 	}
-	b.add(PhaseSystem, plan.CommandStep{Label: "add " + i.User + " to the docker group", Argv: []string{"usermod", "-aG", "docker", i.User}, Sudo: true}, skip)
+	b.add(PhaseSystem, plan.CommandStep{Label: "add " + i.User + " to the " + group + " group", Argv: []string{"usermod", "-aG", group, i.User}, Sudo: true}, skip)
+	return nil
+}
+
+func (i *Installer) planUserGroups(ctx context.Context, b *planBuilder, d Draft) error {
+	if err := i.planUserGroup(ctx, b, d, "docker", "docker"); err != nil {
+		return err
+	}
+	if err := i.planUserGroup(ctx, b, d, "libvirt", "libvirt"); err != nil {
+		return err
+	}
+	if i.selected(d, "libvirt") {
+		b.plan.Notices = append(b.plan.Notices, libvirtNetworkNotice)
+	}
 	return nil
 }
 

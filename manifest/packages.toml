@@ -694,6 +694,19 @@ profiles = ["full"]
 group = "virtualization"
 
 [[package]]
+name = "libvirt"
+source = "pacman"
+profiles = ["full"]
+group = "virtualization"
+service = "libvirtd.service"
+
+[[package]]
+name = "edk2-ovmf"
+source = "pacman"
+profiles = ["full"]
+group = "virtualization"
+
+[[package]]
 name = "dnsmasq"
 source = "pacman"
 profiles = ["full"]

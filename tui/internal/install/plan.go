@@ -40,7 +40,7 @@ func (i *Installer) Plan(ctx context.Context, d Draft) (InstallPlan, error) {
 		return InstallPlan{}, err
 	}
 	i.planLogind(b)
-	if err := i.planDockerGroup(ctx, b, d); err != nil {
+	if err := i.planUserGroups(ctx, b, d); err != nil {
 		return InstallPlan{}, err
 	}
 	if err := i.planSync(ctx, b); err != nil {
