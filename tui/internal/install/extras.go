@@ -28,20 +28,45 @@ const (
 
 var gtkThemeNames = []string{"Abysal-Obsidian", "Abysal-Marble"}
 
-func (i *Installer) planDockerGroup(ctx context.Context, b *planBuilder, d Draft) error {
-	if !i.selected(d, "docker") {
+// planUserGroup adds the user to the group a selected package creates; PhaseSystem runs after the package phases.
+func (i *Installer) planUserGroup(ctx context.Context, b *planBuilder, d Draft, pkg, group string) error {
+	if !i.selected(d, pkg) {
 		return nil
 	}
-	member, err := i.Probe.InGroup(ctx, "docker")
+	member, err := i.Probe.InGroup(ctx, group)
 	if err != nil {
-		return fmt.Errorf("docker group: %w", err)
+		return fmt.Errorf("%s group: %w", group, err)
 	}
 	skip := ""
 	if member {
-		skip = "already a docker group member"
+		skip = "already a " + group + " group member"
 	}
-	b.add(PhaseSystem, plan.CommandStep{Label: "add " + i.User + " to the docker group", Argv: []string{"usermod", "-aG", "docker", i.User}, Sudo: true}, skip)
+	b.add(PhaseSystem, plan.CommandStep{Label: "add " + i.User + " to the " + group + " group", Argv: []string{"usermod", "-aG", group, i.User}, Sudo: true}, skip)
 	return nil
+}
+
+func (i *Installer) planUserGroups(ctx context.Context, b *planBuilder, d Draft) error {
+	if err := i.planUserGroup(ctx, b, d, "docker", "docker"); err != nil {
+		return err
+	}
+	if err := i.planUserGroup(ctx, b, d, "libvirt", "libvirt"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// planLibvirtNetwork must run after planServices so the unit is enabled first. It does not run net-start:
+// the final reboot brings the autostarted network up.
+func (i *Installer) planLibvirtNetwork(b *planBuilder, d Draft) {
+	if !i.selected(d, "libvirt") {
+		return
+	}
+	for _, c := range []plan.CommandStep{
+		{Label: "start libvirtd", Argv: []string{"systemctl", "start", "libvirtd.service"}, Sudo: true},
+		{Label: "autostart libvirt default network", Argv: []string{"virsh", "net-autostart", "default"}, Sudo: true},
+	} {
+		b.plan.Steps = append(b.plan.Steps, PlannedStep{Phase: PhaseServices, Step: c, Optional: true})
+	}
 }
 
 func (i *Installer) planExtras(b *planBuilder, d Draft) error {

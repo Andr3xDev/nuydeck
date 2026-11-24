@@ -72,52 +72,74 @@ func hasCommandNamed(p InstallPlan, names ...string) bool {
 	return false
 }
 
-func TestPlan_DockerGroupStep(t *testing.T) {
+func TestPlan_UserGroupSteps(t *testing.T) {
 	cases := []struct {
-		name       string
-		draft      Draft
-		member     bool
-		wantStep   bool
-		wantSkip   string
-		extraNames []string
+		name        string
+		draft       Draft
+		members     map[string]bool
+		wantSkips   map[string]string // group -> expected skip reason; a key means the step must exist
+		extraNames  []string
+		wantNetwork bool
 	}{
-		{name: "docker selected, not a member", draft: Draft{Profile: manifest.ProfileFull}, wantStep: true},
-		{name: "already a member", draft: Draft{Profile: manifest.ProfileFull}, member: true, wantStep: true, wantSkip: skipDockerMember},
+		{name: "docker selected, not a member", draft: Draft{Profile: manifest.ProfileFull}, wantSkips: map[string]string{"docker": ""}},
+		{name: "already a member", draft: Draft{Profile: manifest.ProfileFull}, members: map[string]bool{"docker": true}, wantSkips: map[string]string{"docker": skipDockerMember}},
 		{name: "docker not selected", draft: Draft{Profile: manifest.ProfileMinimal}},
-		{name: "virtualization adds no libvirt group", draft: Draft{Profile: manifest.ProfileFull}, wantStep: true, extraNames: []string{"libvirt", "qemu-full", "virt-manager"}},
+		{name: "libvirt selected adds libvirt group and network steps", draft: Draft{Profile: manifest.ProfileFull}, extraNames: []string{"libvirt"}, wantNetwork: true,
+			wantSkips: map[string]string{"docker": "", "libvirt": ""}},
+		{name: "already a libvirt member", draft: Draft{Profile: manifest.ProfileFull}, members: map[string]bool{"libvirt": true}, extraNames: []string{"libvirt"}, wantNetwork: true,
+			wantSkips: map[string]string{"docker": "", "libvirt": "already a libvirt group member"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newExtrasFixture(t)
 			f.draft = tc.draft
-			f.probe.groups = map[string]bool{"docker": tc.member}
+			f.probe.groups = tc.members
 			for _, name := range tc.extraNames {
-				f.inst.Catalog = append(f.inst.Catalog, manifest.Package{Name: name, Source: manifest.SourcePacman, Profiles: []string{"full"}})
+				f.inst.Catalog = append(f.inst.Catalog, manifest.Package{Name: name, Source: manifest.SourcePacman, Profiles: []string{"full"}, Service: name + "d.service"})
 			}
 			installPlan := f.plan(t)
 
-			var groupSteps []PlannedStep
+			groupSteps := map[string]PlannedStep{}
 			for _, ps := range installPlan.Steps {
 				if c, ok := ps.Step.(plan.CommandStep); ok && slices.Contains([]string{"usermod", "gpasswd", "adduser"}, c.Argv[0]) {
-					groupSteps = append(groupSteps, ps)
+					groupSteps[c.Argv[2]] = ps
 				}
 			}
-			if !tc.wantStep {
-				if len(groupSteps) != 0 {
-					t.Fatalf("group steps = %+v, want none", groupSteps)
+			if len(groupSteps) != len(tc.wantSkips) {
+				t.Fatalf("group steps = %+v, want groups %v", groupSteps, tc.wantSkips)
+			}
+			for group, wantSkip := range tc.wantSkips {
+				got, ok := groupSteps[group]
+				if !ok {
+					t.Fatalf("no %s group step in %+v", group, groupSteps)
 				}
+				c := got.Step.(plan.CommandStep)
+				if !slices.Equal(c.Argv, []string{"usermod", "-aG", group, "u"}) || !c.Sudo || c.Interactive {
+					t.Errorf("group step = %+v, want unattended sudo usermod -aG %s u", c, group)
+				}
+				if got.Phase != PhaseSystem || got.Skip != wantSkip {
+					t.Errorf("%s step phase %d skip %q, want phase %d skip %q", group, got.Phase, got.Skip, PhaseSystem, wantSkip)
+				}
+			}
+			start, startIdx, started := findStep(installPlan, "systemctl", "start", "libvirtd.service")
+			autostart, autostartIdx, autostarted := findStep(installPlan, "virsh", "net-autostart", "default")
+			if started != tc.wantNetwork || autostarted != tc.wantNetwork {
+				t.Fatalf("libvirt network steps present = %v/%v, want %v", started, autostarted, tc.wantNetwork)
+			}
+			if !tc.wantNetwork {
 				return
 			}
-			if len(groupSteps) != 1 {
-				t.Fatalf("group steps = %+v, want exactly the docker one", groupSteps)
+			enableIdx := slices.IndexFunc(installPlan.Steps, func(ps PlannedStep) bool {
+				c, ok := ps.Step.(plan.CommandStep)
+				return ok && slices.Contains(c.Argv, "enable") && slices.Contains(c.Argv, "libvirtd.service")
+			})
+			if !(enableIdx < startIdx && startIdx < autostartIdx) {
+				t.Errorf("order enable=%d start=%d autostart=%d, want enable < start < autostart", enableIdx, startIdx, autostartIdx)
 			}
-			got := groupSteps[0]
-			c := got.Step.(plan.CommandStep)
-			if !slices.Equal(c.Argv, []string{"usermod", "-aG", "docker", "u"}) || !c.Sudo || c.Interactive {
-				t.Errorf("group step = %+v, want unattended sudo usermod -aG docker u", c)
-			}
-			if got.Phase != PhaseSystem || got.Skip != tc.wantSkip {
-				t.Errorf("group step phase %d skip %q, want phase %d skip %q", got.Phase, got.Skip, PhaseSystem, tc.wantSkip)
+			for _, ps := range []PlannedStep{start, autostart} {
+				if c := ps.Step.(plan.CommandStep); !c.Sudo || c.Interactive || !ps.Optional || ps.Phase != PhaseServices {
+					t.Errorf("network step %+v optional=%v phase=%d, want unattended optional sudo in PhaseServices", c, ps.Optional, ps.Phase)
+				}
 			}
 		})
 	}

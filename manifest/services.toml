@@ -27,6 +27,12 @@ source = "package"
 description = "docker daemon"
 
 [[service]]
+unit = "libvirtd.service"
+scope = "system"
+source = "package"
+description = "libvirt daemon"
+
+[[service]]
 unit = "nvidia-suspend.service"
 scope = "system"
 source = "package"
