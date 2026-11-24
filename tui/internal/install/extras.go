@@ -22,8 +22,6 @@ const (
 	spotifyOpenedID      = "spotify-opened"
 	spotifyLaunchID      = "spotify-launch"
 
-	libvirtNetworkNotice = "after reboot run: sudo virsh net-autostart default && sudo virsh net-start default"
-
 	skipPresent      = "already present"
 	skipFirstRunDone = "already launched once"
 )
@@ -54,10 +52,21 @@ func (i *Installer) planUserGroups(ctx context.Context, b *planBuilder, d Draft)
 	if err := i.planUserGroup(ctx, b, d, "libvirt", "libvirt"); err != nil {
 		return err
 	}
-	if i.selected(d, "libvirt") {
-		b.plan.Notices = append(b.plan.Notices, libvirtNetworkNotice)
-	}
 	return nil
+}
+
+// planLibvirtNetwork must run after planServices so the unit is enabled first. It does not run net-start:
+// the final reboot brings the autostarted network up.
+func (i *Installer) planLibvirtNetwork(b *planBuilder, d Draft) {
+	if !i.selected(d, "libvirt") {
+		return
+	}
+	for _, c := range []plan.CommandStep{
+		{Label: "start libvirtd", Argv: []string{"systemctl", "start", "libvirtd.service"}, Sudo: true},
+		{Label: "autostart libvirt default network", Argv: []string{"virsh", "net-autostart", "default"}, Sudo: true},
+	} {
+		b.plan.Steps = append(b.plan.Steps, PlannedStep{Phase: PhaseServices, Step: c, Optional: true})
+	}
 }
 
 func (i *Installer) planExtras(b *planBuilder, d Draft) error {

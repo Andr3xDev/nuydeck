@@ -56,6 +56,7 @@ func (i *Installer) Plan(ctx context.Context, d Draft) (InstallPlan, error) {
 		return InstallPlan{}, err
 	}
 	i.planServices(b, d)
+	i.planLibvirtNetwork(b, d)
 	i.planTheme(b, d)
 
 	b.add(PhaseRecord, plan.AppendLogStep{Entry: state.LogEntry{Op: "install"}}, "")
