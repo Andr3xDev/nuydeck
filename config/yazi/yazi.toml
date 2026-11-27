@@ -50,105 +50,60 @@ ueberzug_offset = [0, 0, 0, 0]
 edit = [
   { run = '${EDITOR:-nvim} %s', desc = "$EDITOR", for = "unix", block = true },
 ]
-open_browser = [{ run = '$BROWSER %s', desc = "Browser", for = "linux" }]
+open_browser = [
+  { run = '${BROWSER:-zen-browser} %s', orphan = true, desc = "Zen", for = "linux" },
+]
+open_firefox = [{ run = 'firefox %s', orphan = true, desc = "Firefox", for = "linux" }]
+open_draw = [
+  { run = 'libreoffice --draw %s', orphan = true, desc = "LibreOffice Draw", for = "linux" },
+]
 office = [
   { run = 'libreoffice %s', orphan = true, desc = "LibreOffice", for = "linux" },
 ]
-play = [{ run = 'mpv $@', orphan = true, desc = "mpv", for = "unix" }]
-reveal = [
-  { run = 'thunar %s', desc = "Thunar", for = "linux" },
-  { run = 'clear; exiftool %s; echo "Press enter to exit"; read _', desc = "Show EXIF", for = "unix", block = true },
-]
+play = [{ run = 'mpv %s', orphan = true, desc = "mpv", for = "unix" }]
+reveal = [{ run = 'nautilus %d1', orphan = true, desc = "Nautilus", for = "linux" }]
+open = [{ run = 'xdg-open %s1', orphan = true, desc = "xdg-open", for = "linux" }]
 extract = [{ run = 'ya pub extract --list %s', desc = "Extract here" }]
+extract_7z = [{ run = '7z x %s1', block = true, desc = "7z x", for = "unix" }]
 compress_zip = [
-  { run = '~/.config/yazi/helpers/compress-zip.sh $@', desc = "Compress to .zip", for = "unix" },
+  { run = '~/.config/yazi/helpers/compress-zip.sh %s', desc = "Compress to .zip", for = "unix" },
 ]
 compress_tar = [
-  { run = '~/.config/yazi/helpers/compress-tar.sh $@', desc = "Compress to .tar.gz", for = "unix" },
+  { run = '~/.config/yazi/helpers/compress-tar.sh %s', desc = "Compress to .tar.gz", for = "unix" },
 ]
 
 [open]
 rules = [
   # Folder
-  { url = "*/", use = [
-    "edit",
-    "compress_zip",
-    "compress_tar",
-    "reveal",
-  ] },
-  # HTML — browser first
-  { mime = "text/html", use = [
-    "open_browser",
-    "edit",
-    "reveal",
-  ] },
+  { url = "*/", use = ["edit", "reveal", "compress_zip", "compress_tar"] },
+  # HTML
+  { mime = "text/html", use = ["open_browser", "edit"] },
   # Text
-  { mime = "text/*", use = [
-    "edit",
-    "reveal",
-  ] },
-  # Image — browser first
-  { mime = "image/*", use = [
-    "open_browser",
-    "reveal",
-  ] },
+  { mime = "text/*", use = ["edit", "open_browser"] },
+  # Image
+  { mime = "image/*", use = ["open_browser", "open_firefox"] },
   # Media
-  { mime = "{audio,video}/*", use = [
-    "play",
-    "reveal",
-  ] },
-  # PDF — browser first
-  { mime = "application/pdf", use = [
-    "open_browser",
-    "reveal",
-  ] },
-  # Archive — extract only
-  { mime = "application/{zip,rar,7z*,tar,gzip,xz,zstd,bzip*,lzma,compress,archive,cpio,arj,xar,ms-cab*}", use = [
-    "extract",
-    "reveal",
-  ] },
-  # Office — LibreOffice first
-  { mime = "application/vnd.oasis.opendocument.*", use = [
-    "office",
-    "reveal",
-  ] },
-  { mime = "application/vnd.openxmlformats-officedocument.*", use = [
-    "office",
-    "reveal",
-  ] },
-  { mime = "application/msword", use = [
-    "office",
-    "reveal",
-  ] },
-  { mime = "application/{vnd.ms-excel,vnd.ms-powerpoint}", use = [
-    "office",
-    "reveal",
-  ] },
+  { mime = "{audio,video}/*", use = ["play"] },
+  # PDF
+  { mime = "application/pdf", use = ["open_browser", "open_draw"] },
+  # Office by extension: some OOXML files sniff as application/zip
+  { url = "*.{docx,xlsx,pptx,odt,ods,odp}", use = ["office"] },
+  # Archive
+  { mime = "application/{zip,rar,7z*,tar,gzip,xz,zstd,bzip*,lzma,compress,archive,cpio,arj,xar,ms-cab*}", use = ["extract", "extract_7z"] },
+  # Office
+  { mime = "application/vnd.oasis.opendocument.*", use = ["office"] },
+  { mime = "application/vnd.openxmlformats-officedocument.*", use = ["office"] },
+  { mime = "application/msword", use = ["office"] },
+  { mime = "application/{vnd.ms-excel,vnd.ms-powerpoint}", use = ["office"] },
   # JSON
-  { mime = "application/{json,ndjson}", use = [
-    "edit",
-    "reveal",
-  ] },
-  { mime = "*/javascript", use = [
-    "edit",
-    "reveal",
-  ] },
+  { mime = "application/{json,ndjson}", use = ["edit", "open_browser"] },
+  { mime = "*/javascript", use = ["edit", "open_browser"] },
   # Empty file
-  { mime = "inode/empty", use = [
-    "edit",
-    "reveal",
-  ] },
+  { mime = "inode/empty", use = ["edit"] },
   # Virtual file system
-  { mime = "vfs/{absent,stale}", use = [
-    "open_browser",
-    "reveal",
-  ] },
+  { mime = "vfs/{absent,stale}", use = ["open_browser"] },
   # Fallback
-  { url = "*", use = [
-    "compress_zip",
-    "compress_tar",
-    "reveal",
-  ] },
+  { url = "*", use = ["open", "reveal", "compress_zip", "compress_tar"] },
 ]
 
 [tasks]
