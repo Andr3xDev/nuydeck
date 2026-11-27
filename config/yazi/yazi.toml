@@ -62,7 +62,8 @@ office = [
 ]
 play = [{ run = 'mpv %s', orphan = true, desc = "mpv", for = "unix" }]
 reveal = [{ run = 'nautilus %d1', orphan = true, desc = "Nautilus", for = "linux" }]
-open = [{ run = 'xdg-open %s1', orphan = true, desc = "xdg-open", for = "linux" }]
+open_dir = [{ run = 'nautilus %s1', orphan = true, desc = "Nautilus", for = "linux" }]
+open =[{ run = 'xdg-open %s1', orphan = true, desc = "xdg-open", for = "linux" }]
 extract = [{ run = 'ya pub extract --list %s', desc = "Extract here" }]
 extract_7z = [{ run = '7z x %s1', block = true, desc = "7z x", for = "unix" }]
 compress_zip = [
@@ -75,7 +76,7 @@ compress_tar = [
 [open]
 rules = [
   # Folder
-  { url = "*/", use = ["edit", "reveal", "compress_zip", "compress_tar"] },
+  { url = "*/", use = ["edit", "open_dir", "compress_zip", "compress_tar"] },
   # HTML
   { mime = "text/html", use = ["open_browser", "edit"] },
   # Text
@@ -98,6 +99,7 @@ rules = [
   # JSON
   { mime = "application/{json,ndjson}", use = ["edit", "open_browser"] },
   { mime = "*/javascript", use = ["edit", "open_browser"] },
+  { mime = "application/{xml,toml,yaml,x-yaml,sql,x-shellscript}", use = ["edit"] },
   # Empty file
   { mime = "inode/empty", use = ["edit"] },
   # Virtual file system
