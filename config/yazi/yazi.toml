@@ -63,7 +63,7 @@ office = [
 play = [{ run = 'mpv %s', orphan = true, desc = "mpv", for = "unix" }]
 reveal = [{ run = 'nautilus %d1', orphan = true, desc = "Nautilus", for = "linux" }]
 open_dir = [{ run = 'nautilus %s1', orphan = true, desc = "Nautilus", for = "linux" }]
-open =[{ run = 'xdg-open %s1', orphan = true, desc = "xdg-open", for = "linux" }]
+open = [{ run = 'xdg-open %s1', orphan = true, desc = "xdg-open", for = "linux" }]
 extract = [{ run = 'ya pub extract --list %s', desc = "Extract here" }]
 extract_7z = [{ run = '7z x %s1', block = true, desc = "7z x", for = "unix" }]
 compress_zip = [
