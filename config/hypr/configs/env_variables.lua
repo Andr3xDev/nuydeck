@@ -39,6 +39,13 @@ hl.env("XDG_SESSION_TYPE",    "wayland")
 hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 hl.env("XDG_SESSION_DESKTOP", "Hyprland")
 
+----------------------------------------------------------------------------------
+--- Default Apps
+----------------------------------------------------------------------------------
+hl.env("EDITOR",  "nvim")
+hl.env("VISUAL",  "nvim")
+hl.env("BROWSER", "zen-browser")
+
 
 ----------------------------------------------------------------------------------
 --- Scaling Fixes
